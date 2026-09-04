@@ -1,3 +1,9 @@
+// Build release binaries as a Windows GUI app rather than a console app, so
+// launching the tracker doesn't pop an empty black console window alongside
+// it. Debug builds keep the console — that's where panics and the GSI log
+// lines show up while developing.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 //! Dota Tracker — native desktop match tracker built on Valve's official
 //! Game State Integration (GSI) feed. No memory reading, no third-party
 //! game data, nothing that touches Dota 2's process — just the same
