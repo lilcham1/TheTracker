@@ -15,6 +15,7 @@ use convex::{ConvexClient, FunctionResult, Value};
 use serde::Serialize;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
+use crate::auth::SharedAuth;
 use crate::model::{MatchSummary, Profile};
 use crate::storage;
 
@@ -37,6 +38,10 @@ pub struct SyncStatus {
     pub last_error: Option<String>,
     #[serde(rename = "lastSync")]
     pub last_sync: Option<String>,
+    /// True when uploads are being held back purely because nobody is
+    /// signed in — distinct from a network failure, and worth saying so.
+    #[serde(rename = "needsSignIn")]
+    pub needs_sign_in: bool,
 }
 
 pub enum SyncJob {
@@ -70,16 +75,38 @@ impl Syncer {
 
 /// Starts the background sync worker on Tauri's async runtime and returns a
 /// handle for queueing work.
-pub fn spawn(device_id: String) -> Syncer {
+pub fn spawn(device_id: String, auth: SharedAuth) -> Syncer {
     let (tx, mut rx) = unbounded_channel::<SyncJob>();
     let status = Arc::new(Mutex::new(SyncStatus::default()));
 
     let worker_status = status.clone();
     let worker_device = device_id.clone();
+    let worker_auth = auth.clone();
     tauri::async_runtime::spawn(async move {
         let mut client: Option<ConvexClient> = None;
+        let mut applied_token: Option<String> = None;
 
         while let Some(job) = rx.recv().await {
+            // How many queued items this job accounts for. Every exit path
+            // below settles exactly this many, or the "Syncing N" indicator
+            // drifts and eventually sticks at a number that never clears.
+            let queued = match &job {
+                SyncJob::Matches(v) => v.len(),
+                _ => 1,
+            };
+
+            // Publishing requires an account. Rather than burning the job
+            // against a server that will reject it, hold it back and say so
+            // — the local files already have everything, and "Sync
+            // Everything" replays it once they're signed in.
+            if !signed_in(&worker_auth) {
+                set_status(&worker_status, |s| {
+                    s.pending = s.pending.saturating_sub(queued);
+                    s.needs_sign_in = true;
+                });
+                continue;
+            }
+
             // Connect lazily, and reconnect if a previous attempt failed —
             // so the app starting up offline isn't a permanent condition.
             if client.is_none() {
@@ -96,51 +123,59 @@ pub fn spawn(device_id: String) -> Syncer {
                         set_status(&worker_status, |s| {
                             s.connected = false;
                             s.last_error = Some(msg.clone());
-                            s.pending = s.pending.saturating_sub(1);
+                            s.pending = s.pending.saturating_sub(queued);
                         });
                         continue;
                     }
                 }
             }
             let c = client.as_mut().unwrap();
+
+            // Hand the current JWT to the client whenever it has changed
+            // (first job, or after a refresh).
+            let current_token = worker_auth.lock().ok().and_then(|a| a.token.clone());
+            if current_token != applied_token {
+                c.set_auth(current_token.clone()).await;
+                applied_token = current_token;
+            }
+
             let username = storage::load_profile().username;
 
-            let result = match job {
-                SyncJob::Match(m) => push_match(c, &worker_device, &username, &m).await.map(|_| 1),
-                SyncJob::Matches(list) => {
-                    let mut ok = 0usize;
-                    let mut err = None;
-                    for m in &list {
-                        match push_match(c, &worker_device, &username, m).await {
-                            Ok(()) => ok += 1,
-                            Err(e) => {
-                                err = Some(e);
-                                break;
-                            }
-                        }
-                    }
-                    match err {
-                        Some(e) => Err(e),
-                        None => Ok(ok),
-                    }
-                }
-                SyncJob::Profile(p) => push_profile(c, &worker_device, &p).await.map(|_| 0),
-            };
+            // `pushed` counts matches that actually landed, which is what
+            // the "synced this session" figure reports — a profile upsert
+            // isn't a match, and a partial batch only counts what got through.
+            let (mut pushed, mut error) = run_job(c, &worker_device, &username, &job).await;
 
-            match result {
-                Ok(n) => set_status(&worker_status, |s| {
+            // A JWT that lapsed mid-session shouldn't cost a match. Refresh
+            // once and replay the job before reporting failure.
+            if error.as_deref().is_some_and(is_auth_error) {
+                if crate::auth::refresh(worker_auth.clone()).await.is_ok() {
+                    let fresh = worker_auth.lock().ok().and_then(|a| a.token.clone());
+                    c.set_auth(fresh.clone()).await;
+                    applied_token = fresh;
+                    let (p2, e2) = run_job(c, &worker_device, &username, &job).await;
+                    pushed = p2;
+                    error = e2;
+                } else {
+                    set_status(&worker_status, |s| s.needs_sign_in = true);
+                }
+            }
+
+            match error {
+                None => set_status(&worker_status, |s| {
                     s.connected = true;
-                    s.synced += n;
-                    s.pending = s.pending.saturating_sub(n.max(1));
+                    s.synced += pushed;
+                    s.pending = s.pending.saturating_sub(queued);
                     s.last_error = None;
                     s.last_sync = Some(chrono::Local::now().format("%H:%M:%S").to_string());
                 }),
-                Err(e) => {
+                Some(e) => {
                     // Drop the client so the next job reconnects from scratch.
                     client = None;
                     set_status(&worker_status, |s| {
                         s.connected = false;
-                        s.pending = s.pending.saturating_sub(1);
+                        s.synced += pushed;
+                        s.pending = s.pending.saturating_sub(queued);
                         s.last_error = Some(e);
                     });
                 }
@@ -154,6 +189,52 @@ pub fn spawn(device_id: String) -> Syncer {
 fn set_status(status: &Arc<Mutex<SyncStatus>>, f: impl FnOnce(&mut SyncStatus)) {
     if let Ok(mut s) = status.lock() {
         f(&mut s);
+    }
+}
+
+fn signed_in(auth: &SharedAuth) -> bool {
+    auth.lock().map(|a| a.signed_in && a.token.is_some()).unwrap_or(false)
+}
+
+/// Convex reports a rejected identity as a plain server error string, so
+/// this is a text match — used only to decide whether refreshing the token
+/// and retrying is worth a try.
+fn is_auth_error(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    m.contains("sign in") || m.contains("unauthenticated") || m.contains("unauthorized")
+}
+
+/// Runs one queued job, returning how many matches landed and the first
+/// error if one stopped it.
+async fn run_job(
+    client: &mut ConvexClient,
+    device_id: &str,
+    username: &str,
+    job: &SyncJob,
+) -> (usize, Option<String>) {
+    match job {
+        SyncJob::Match(m) => match push_match(client, device_id, username, m).await {
+            Ok(()) => (1, None),
+            Err(e) => (0, Some(e)),
+        },
+        SyncJob::Matches(list) => {
+            let mut ok = 0usize;
+            let mut err = None;
+            for m in list {
+                match push_match(client, device_id, username, m).await {
+                    Ok(()) => ok += 1,
+                    Err(e) => {
+                        err = Some(e);
+                        break;
+                    }
+                }
+            }
+            (ok, err)
+        }
+        SyncJob::Profile(p) => match push_profile(client, device_id, p).await {
+            Ok(()) => (0, None),
+            Err(e) => (0, Some(e)),
+        },
     }
 }
 
@@ -203,15 +284,40 @@ pub async fn global_leaderboard(
     }
 }
 
-/// Everything this install has previously synced — used to restore history
-/// onto a fresh machine.
-pub async fn cloud_history(device_id: &str) -> Result<serde_json::Value, String> {
+/// Everything this account has published — used to restore history onto a
+/// fresh machine. Requires being signed in.
+pub async fn cloud_history(auth: &SharedAuth) -> Result<serde_json::Value, String> {
+    let token = auth.lock().ok().and_then(|a| a.token.clone());
+    if token.is_none() {
+        return Err("Sign in to load your cloud history".to_string());
+    }
     let mut client = ConvexClient::new(&convex_url())
         .await
         .map_err(|e| format!("Couldn't reach Convex: {e}"))?;
+    client.set_auth(token).await;
+    match client.query("matches:listMine", BTreeMap::new()).await {
+        Ok(FunctionResult::Value(v)) => Ok(serde_json::Value::from(v)),
+        Ok(FunctionResult::ErrorMessage(e)) => Err(e),
+        Ok(FunctionResult::ConvexError(e)) => Err(format!("{e:?}")),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Attaches matches this install synced before accounts existed to the
+/// signed-in account.
+pub async fn claim_device(auth: &SharedAuth, device_id: &str) -> Result<serde_json::Value, String> {
+    let token = auth.lock().ok().and_then(|a| a.token.clone());
+    if token.is_none() {
+        return Err("Sign in first".to_string());
+    }
+    let mut client = ConvexClient::new(&convex_url())
+        .await
+        .map_err(|e| format!("Couldn't reach Convex: {e}"))?;
+    client.set_auth(token).await;
+
     let mut args = BTreeMap::new();
     args.insert("deviceId".to_string(), Value::String(device_id.to_string()));
-    match client.query("matches:listForDevice", args).await {
+    match client.mutation("matches:claimDevice", args).await {
         Ok(FunctionResult::Value(v)) => Ok(serde_json::Value::from(v)),
         Ok(FunctionResult::ErrorMessage(e)) => Err(e),
         Ok(FunctionResult::ConvexError(e)) => Err(format!("{e:?}")),

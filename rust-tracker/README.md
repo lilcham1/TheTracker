@@ -131,26 +131,45 @@ hiccups, nothing is lost — the sync pill in the header turns red, and
 back online. Uploads upsert on `(deviceId, matchid)`, so re-syncing the
 whole history never creates duplicates.
 
-### Identity
+### Accounts
 
-There's no sign-in. A random `deviceId` is generated on first run and
-stored in `device_id.txt` next to your history; the leaderboard shows the
-username from the Profile tab as the display name. That means:
+Publishing to the leaderboard requires an account (email + password, via
+Convex Auth). **Reading is open to everyone** — you can track matches and
+browse the global board signed out; an account is only needed to publish
+your own results.
 
-- Anyone who pulls the deployment URL out of the binary could write junk
-  rows — fine for a tool shared with friends, not hardened for public use.
-  Moving to real accounts would mean adding Convex Auth.
-- `matches:removeForDevice` deletes everything one install has synced, if
-  you want your data off the shared leaderboard.
+This is what stops leaderboard spam: every mutation reads the caller's
+identity from their auth token server-side and ignores any user id sent by
+the client, so knowing the deployment URL buys an attacker nothing. An
+unauthenticated `matches:upsert` is rejected outright.
+
+Password was chosen over OAuth deliberately: an OAuth provider in a desktop
+app needs an external browser round trip and a deep link back into the
+Tauri window, whereas this flow stays inside the app. The Rust backend
+drives it by calling the `auth:signIn` action directly — there is no
+JavaScript auth client bundled into the frontend.
+
+Two tokens are involved: a short-lived JWT that authenticates calls, and a
+refresh token that mints new ones. Only the refresh token is persisted (in
+`auth.json` beside the history), so a session survives a restart; if a JWT
+lapses mid-sync the worker refreshes once and replays the job rather than
+dropping a match.
+
+Matches synced by an install before it had an account are claimed by the
+first account that signs in there (`matches:claimDevice`), so upgrading
+doesn't orphan anything. `matches:removeMine` deletes everything your
+account has published.
 
 ### The Convex side
 
 ```
 convex/
-  schema.ts       — matches + profiles tables and their indexes
-  matches.ts      — upsert / listForDevice / countForDevice / removeForDevice
-  profiles.ts     — upsert / forDevice
-  leaderboard.ts  — globalTop, the cross-player ranking
+  schema.ts       — auth tables + matches/profiles and their indexes
+  auth.ts         — Convex Auth setup (password provider)
+  http.ts         — auth HTTP routes
+  matches.ts      — upsert / listMine / claimDevice / removeMine
+  profiles.ts     — upsert / mine / whoami
+  leaderboard.ts  — globalTop, the cross-player ranking (readable signed out)
 ```
 
 Deploy changes to those with `npx convex deploy` (production) or

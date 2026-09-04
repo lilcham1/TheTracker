@@ -1,15 +1,23 @@
 import { defineSchema, defineTable } from "convex/server";
+import { authTables } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-// One row per finished match, per install. `deviceId` is a random id
-// generated on first run (see device_id.rs) — there's no sign-in, so it's
-// what distinguishes one player's rows from another's. `username` is just
-// the display label the player chose in the Profile tab, copied in at sync
-// time so the leaderboard can show it without a second lookup.
+// Ownership model: `userId` is the authenticated account that published a
+// match, and it's the only thing writes are keyed on — the server takes it
+// from the auth token, never from client arguments, so a caller can't
+// publish as someone else. That's what stops leaderboard spam.
+//
+// `deviceId` is still recorded, but purely as a bookkeeping detail: it's how
+// matches synced before accounts existed get claimed by the account that
+// signs in on that install (see matches.claimDevice).
 const checkpoint = v.union(v.object({ lastHits: v.number(), denies: v.number() }), v.null());
 
 export default defineSchema({
+  // users, authSessions, authAccounts, authRefreshTokens, ...
+  ...authTables,
+
   matches: defineTable({
+    userId: v.id("users"),
     deviceId: v.string(),
     username: v.string(),
 
@@ -32,18 +40,21 @@ export default defineSchema({
 
     syncedAt: v.number(),
   })
-    // Upserts look up a specific match belonging to a specific install.
-    .index("by_device_match", ["deviceId", "matchid"])
+    // Upserts look up one match belonging to one account.
+    .index("by_user_match", ["userId", "matchid"])
     // "Restore my history onto a new PC".
+    .index("by_user", ["userId"])
+    // Claiming pre-account rows on first sign-in.
     .index("by_device", ["deviceId"])
     // Leaderboard filtered to one game type.
     .index("by_gameType", ["gameType"]),
 
   profiles: defineTable({
+    userId: v.id("users"),
     deviceId: v.string(),
     username: v.string(),
     rank: v.union(v.string(), v.null()),
     role: v.union(v.string(), v.null()),
     updatedAt: v.number(),
-  }).index("by_device", ["deviceId"]),
+  }).index("by_user", ["userId"]),
 });

@@ -14,6 +14,7 @@
 //! parsing and match-tracking logic lives in `state.rs`, unchanged from
 //! the original native-egui version — only the UI layer changed.
 
+mod auth;
 mod convex_sync;
 mod device_id;
 mod gsi;
@@ -27,6 +28,7 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::Manager;
 
+use auth::{AuthState, SharedAuth};
 use convex_sync::{SyncJob, SyncStatus, Syncer};
 use model::{MatchState, MatchSummary, Profile};
 use state::Tracker;
@@ -35,6 +37,7 @@ struct AppState {
     tracker: Arc<Mutex<Tracker>>,
     server_error: Arc<Mutex<Option<String>>>,
     syncer: Syncer,
+    auth: SharedAuth,
 }
 
 #[derive(Serialize)]
@@ -136,15 +139,52 @@ async fn global_leaderboard(
     convex_sync::global_leaderboard(&metric, &game_type, limit.unwrap_or(10.0)).await
 }
 
-/// Everything this install has synced, for restoring onto a new machine.
+/// Everything this account has published, for restoring onto a new machine.
 #[tauri::command]
-async fn cloud_history(device: String) -> Result<serde_json::Value, String> {
-    convex_sync::cloud_history(&device).await
+async fn cloud_history(app_state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let auth = app_state.auth.clone();
+    convex_sync::cloud_history(&auth).await
 }
 
 #[tauri::command]
 fn device_identity(app_state: tauri::State<AppState>) -> String {
     app_state.syncer.device_id.clone()
+}
+
+// ---------- Accounts ----------
+
+#[tauri::command]
+fn auth_status(app_state: tauri::State<AppState>) -> AuthState {
+    app_state.auth.lock().unwrap().clone()
+}
+
+/// `flow` is "signUp" to create an account or "signIn" for an existing one.
+/// On success, matches this install synced before it had an account are
+/// claimed, and anything waiting locally is pushed up.
+#[tauri::command]
+async fn sign_in(
+    email: String,
+    password: String,
+    flow: String,
+    app_state: tauri::State<'_, AppState>,
+) -> Result<AuthState, String> {
+    let auth = app_state.auth.clone();
+    let device = app_state.syncer.device_id.clone();
+
+    auth::sign_in(auth.clone(), email, password, &flow).await?;
+    // Best-effort: a failure here shouldn't undo an otherwise good sign-in.
+    let _ = convex_sync::claim_device(&auth, &device).await;
+
+    let status = auth.lock().unwrap().clone();
+    Ok(status)
+}
+
+#[tauri::command]
+async fn sign_out(app_state: tauri::State<'_, AppState>) -> Result<AuthState, String> {
+    let auth = app_state.auth.clone();
+    auth::sign_out(auth.clone()).await;
+    let status = auth.lock().unwrap().clone();
+    Ok(status)
 }
 
 fn main() {
@@ -166,12 +206,17 @@ fn main() {
         .setup(move |app| {
             // The sync worker runs on Tauri's async runtime, so it can only
             // start once the app is being set up — not before the builder.
-            let syncer = convex_sync::spawn(device_id::device_id());
+            let auth: SharedAuth = Arc::new(Mutex::new(AuthState::default()));
+            // Restores a previous session from the stored refresh token.
+            auth::restore(auth.clone());
+
+            let syncer = convex_sync::spawn(device_id::device_id(), auth.clone());
             tracker_for_setup.lock().unwrap().syncer = Some(syncer.clone());
             app.manage(AppState {
                 tracker: tracker_for_setup.clone(),
                 server_error: server_error.clone(),
                 syncer,
+                auth,
             });
             Ok(())
         })
@@ -189,6 +234,9 @@ fn main() {
             global_leaderboard,
             cloud_history,
             device_identity,
+            auth_status,
+            sign_in,
+            sign_out,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

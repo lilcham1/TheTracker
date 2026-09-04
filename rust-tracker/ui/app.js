@@ -175,6 +175,8 @@ const state = {
   lbGlobal: { rows: [], loading: false, error: null },
   deviceId: null,
   sync: null,
+  auth: { signedIn: false, email: null },
+  authForm: { email: "", password: "", error: null, busy: false },
   openHistory: new Set(),
   openTypeMenu: null,
 };
@@ -629,11 +631,14 @@ function globalListHtml() {
       </div>`;
   }
   if (!g.rows.length) {
-    return `<div class="empty-state">Nobody has synced a game with this stat yet.<br/>Yours will show up here once a match finishes.</div>`;
+    const hint = state.auth.signedIn
+      ? "Yours will show up here once a match finishes."
+      : "Sign in on the Profile tab to publish your own games here.";
+    return `<div class="empty-state">Nobody has published a game with this stat yet.<br/>${hint}</div>`;
   }
   return g.rows
     .map((r, i) => {
-      const isYou = r.deviceId === state.deviceId;
+      const isYou = state.auth.signedIn && r.userId === state.auth.userId;
       const who = r.username && r.username.length ? r.username : "Anonymous";
       return `
       <div class="lb-row ${isYou ? "is-you" : ""}">
@@ -700,6 +705,8 @@ function renderProfile() {
       <span class="save-flash" id="saveFlash">Saved!</span>
     </div>
 
+    ${accountCardHtml()}
+
     <div class="card" style="margin-top:6px">
       <p class="card-title">Cloud Sync</p>
       <div class="cloud-body">
@@ -752,6 +759,7 @@ function renderProfile() {
       setTimeout(() => flash.classList.remove("show"), 1600);
     });
   });
+  wireAccountCard(root);
   root.querySelector("#syncAllBtn").addEventListener("click", () => {
     invoke("sync_all").then(() => {
       const flash = document.getElementById("syncFlash");
@@ -760,6 +768,90 @@ function renderProfile() {
     });
   });
   renderCloudSection();
+}
+
+function accountCardHtml() {
+  const a = state.auth || {};
+  if (a.signedIn) {
+    return `
+      <div class="card" style="margin-top:6px">
+        <p class="card-title">Account</p>
+        <div class="cloud-body">
+          <div class="cloud-line">
+            <span class="cloud-key">Signed in as</span>
+            <span class="cloud-val good">${escapeHtml(a.email || "—")}</span>
+          </div>
+          <p class="cloud-note">
+            Your matches publish to the global leaderboard under this account.
+          </p>
+          <button class="roshan-btn" id="signOutBtn">Sign out</button>
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="card" style="margin-top:6px">
+      <p class="card-title">Account</p>
+      <div class="cloud-body">
+        <p class="cloud-note" style="margin-top:0">
+          Tracking works fully signed out, and you can browse the global
+          leaderboard either way — an account is only needed to
+          <em>publish</em> your own matches to it.
+        </p>
+        <input class="text-input" id="authEmail" type="email" placeholder="Email" value="${escapeHtml(state.authForm.email)}" autocomplete="off" />
+        <input class="text-input" id="authPassword" type="password" placeholder="Password (8+ characters)" value="${escapeHtml(state.authForm.password)}" autocomplete="off" />
+        ${state.authForm.error ? `<div class="auth-error">${escapeHtml(state.authForm.error)}</div>` : ""}
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="save-btn" id="signInBtn" ${state.authForm.busy ? "disabled" : ""}>
+            ${state.authForm.busy ? "Working…" : "Sign in"}
+          </button>
+          <button class="roshan-btn" id="signUpBtn" ${state.authForm.busy ? "disabled" : ""}>Create account</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function wireAccountCard(root) {
+  const emailEl = root.querySelector("#authEmail");
+  const passEl = root.querySelector("#authPassword");
+  if (emailEl) emailEl.addEventListener("input", (e) => (state.authForm.email = e.target.value));
+  if (passEl) passEl.addEventListener("input", (e) => (state.authForm.password = e.target.value));
+
+  const submit = async (flow) => {
+    const email = state.authForm.email.trim();
+    const password = state.authForm.password;
+    if (!email || !password) {
+      state.authForm.error = "Enter an email and password.";
+      renderProfile();
+      return;
+    }
+    state.authForm.busy = true;
+    state.authForm.error = null;
+    renderProfile();
+    try {
+      state.auth = await invoke("sign_in", { email, password, flow });
+      state.authForm = { email: "", password: "", error: null, busy: false };
+      // Publish anything that was waiting on an account.
+      await invoke("sync_all");
+    } catch (e) {
+      state.authForm.busy = false;
+      state.authForm.error = String(e);
+    }
+    renderProfile();
+    refreshSyncStatus();
+  };
+
+  const inBtn = root.querySelector("#signInBtn");
+  const upBtn = root.querySelector("#signUpBtn");
+  if (inBtn) inBtn.addEventListener("click", () => submit("signIn"));
+  if (upBtn) upBtn.addEventListener("click", () => submit("signUp"));
+
+  const outBtn = root.querySelector("#signOutBtn");
+  if (outBtn)
+    outBtn.addEventListener("click", async () => {
+      state.auth = await invoke("sign_out");
+      renderProfile();
+      refreshSyncStatus();
+    });
 }
 
 /// Fills in the Cloud Sync card. Split out so the 700ms status poll can
@@ -771,7 +863,8 @@ function renderCloudSection() {
   const s = state.sync || {};
 
   let text = "Connecting…";
-  if (s.pending > 0) text = `Uploading ${s.pending}…`;
+  if (!state.auth.signedIn) text = "Signed out — matches stay on this PC";
+  else if (s.pending > 0) text = `Uploading ${s.pending}…`;
   else if (s.lastError) text = `Offline — ${s.lastError}`;
   else if (s.connected) text = s.lastSync ? `Up to date (${s.lastSync})` : "Connected";
   else text = "Idle — nothing synced yet this session";
@@ -791,7 +884,10 @@ function renderSyncPill() {
   let label = "Cloud";
   let title = `Cloud sync — device ${state.deviceId || "?"}`;
 
-  if (s.pending > 0) {
+  if (!state.auth.signedIn) {
+    label = "Signed out";
+    title = "Matches are saved locally. Sign in on the Profile tab to publish them to the global leaderboard.";
+  } else if (s.pending > 0) {
     pill.classList.add("busy");
     label = `Syncing ${s.pending}`;
     title = `${s.pending} item(s) queued to upload`;
@@ -874,11 +970,19 @@ function refreshLive() {
 }
 
 function refreshSyncStatus() {
-  return invoke("sync_status")
-    .then((s) => {
+  return Promise.all([invoke("sync_status"), invoke("auth_status")])
+    .then(([s, a]) => {
+      const wasSignedIn = state.auth.signedIn;
       state.sync = s;
+      state.auth = a;
       renderSyncPill();
       renderCloudSection();
+      // A restored session (or an expired one) arrives asynchronously —
+      // redraw the account card when that lands, unless the user is
+      // mid-typing in it.
+      if (wasSignedIn !== a.signedIn && state.tab === "profile" && !state.authForm.busy) {
+        renderProfile();
+      }
     })
     .catch(() => {});
 }
@@ -905,6 +1009,7 @@ async function boot() {
   state.profile = await invoke("get_profile");
   state.profileDraft = { ...state.profile };
   state.deviceId = await invoke("device_identity").catch(() => null);
+  state.auth = (await invoke("auth_status").catch(() => null)) || { signedIn: false, email: null };
   renderTopbarProfile();
   renderProfile();
   await refreshLive();
@@ -943,15 +1048,23 @@ function mockInvoke(cmd, args) {
     }
     case "device_identity":
       return Promise.resolve("mock-device-0001");
+    case "auth_status":
+      return Promise.resolve(mock.auth ||= { signedIn: false, email: null, userId: null, lastError: null });
+    case "sign_in":
+      mock.auth = { signedIn: true, email: args.email, userId: "mock-user-1", lastError: null };
+      return Promise.resolve(mock.auth);
+    case "sign_out":
+      mock.auth = { signedIn: false, email: null, userId: null, lastError: null };
+      return Promise.resolve(mock.auth);
     case "sync_status":
       return Promise.resolve({ connected: true, pending: 0, synced: 3, lastError: null, lastSync: "12:34:56" });
     case "sync_all":
       return Promise.resolve(mock.history.length);
     case "global_leaderboard":
       return Promise.resolve([
-        { deviceId: "someone-else", username: "Dendi", heroName: "npc_dota_hero_nevermore", gameType: "ranked", date: "", value: 214 },
-        { deviceId: "mock-device-0001", username: "lilcham", heroName: "npc_dota_hero_antimage", gameType: "ranked", date: "", value: 187 },
-        { deviceId: "another", username: "Miracle", heroName: "npc_dota_hero_wisp", gameType: "turbo", date: "", value: 165 },
+        { userId: "someone-else", username: "Dendi", heroName: "npc_dota_hero_nevermore", gameType: "ranked", date: "", value: 214 },
+        { userId: "mock-user-1", username: "lilcham", heroName: "npc_dota_hero_antimage", gameType: "ranked", date: "", value: 187 },
+        { userId: "another", username: "Miracle", heroName: "npc_dota_hero_wisp", gameType: "turbo", date: "", value: 165 },
       ]);
     default:
       return Promise.resolve(null);
