@@ -171,6 +171,10 @@ const state = {
   profileDraft: { username: "", rank: null, role: null },
   lbType: "all",
   lbMetric: "last_hits_25",
+  lbScope: "personal", // "personal" = local history, "global" = Convex
+  lbGlobal: { rows: [], loading: false, error: null },
+  deviceId: null,
+  sync: null,
   openHistory: new Set(),
   openTypeMenu: null,
 };
@@ -536,10 +540,18 @@ function lbMetricFmt(key, v) {
   }
 }
 
+const MEDALS = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
+
 function renderLeaderboard() {
   const root = document.getElementById("tab-leaderboard");
   const metric = LB_METRICS.find((m) => m.key === state.lbMetric);
 
+  const scopeToggle = `
+    <div class="scope-toggle">
+      <button class="scope ${state.lbScope === "personal" ? "selected" : ""}" data-lb-scope="personal">Your Games</button>
+      <button class="scope ${state.lbScope === "global" ? "selected" : ""}" data-lb-scope="global">Global</button>
+    </div>
+  `;
   const typeChips = `
     <div class="chip-row">
       <button class="chip ${state.lbType === "all" ? "selected" : ""}" data-lb-type="all">All Types</button>
@@ -552,6 +564,37 @@ function renderLeaderboard() {
     </div>
   `;
 
+  const list = state.lbScope === "global" ? globalListHtml() : personalListHtml(metric);
+
+  root.innerHTML =
+    scopeToggle + typeChips + metricChips + `<div class="lb-list">${list}</div>`;
+
+  root.querySelectorAll("[data-lb-scope]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.lbScope = btn.dataset.lbScope;
+      renderLeaderboard();
+      if (state.lbScope === "global") loadGlobalLeaderboard();
+    });
+  });
+  root.querySelectorAll("[data-lb-type]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.lbType = btn.dataset.lbType;
+      renderLeaderboard();
+      if (state.lbScope === "global") loadGlobalLeaderboard();
+    });
+  });
+  root.querySelectorAll("[data-lb-metric]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.lbMetric = btn.dataset.lbMetric;
+      renderLeaderboard();
+      if (state.lbScope === "global") loadGlobalLeaderboard();
+    });
+  });
+  const retry = root.querySelector("[data-lb-retry]");
+  if (retry) retry.addEventListener("click", loadGlobalLeaderboard);
+}
+
+function personalListHtml(metric) {
   let ranked = state.history
     .filter((m) => state.lbType === "all" || m.gameType === state.lbType)
     .map((m) => ({ m, v: lbMetricValue(m, state.lbMetric) }))
@@ -560,35 +603,66 @@ function renderLeaderboard() {
   ranked.sort((a, b) => (metric.higherBetter ? b.v - a.v : a.v - b.v));
   ranked = ranked.slice(0, 10);
 
-  const medals = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
-  const list = ranked.length
-    ? ranked
-        .map(
-          (r, i) => `
+  if (!ranked.length) return `<div class="empty-state">No games with this stat yet.</div>`;
+  return ranked
+    .map(
+      (r, i) => `
       <div class="lb-row">
-        <span class="lb-medal">${medals[i] || ""}</span>
+        <span class="lb-medal">${MEDALS[i] || ""}</span>
         <span class="lb-rank">#${i + 1}</span>
         <span class="lb-name">${escapeHtml(heroDisplayName(r.m.heroName))}</span>
         <span class="lb-value">${lbMetricFmt(state.lbMetric, r.v)}</span>
       </div>`
-        )
-        .join("")
-    : `<div class="empty-state">No games with this stat yet.</div>`;
+    )
+    .join("");
+}
 
-  root.innerHTML = typeChips + metricChips + `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${list}</div>`;
+function globalListHtml() {
+  const g = state.lbGlobal;
+  if (g.loading) return `<div class="empty-state">Loading global standings…</div>`;
+  if (g.error) {
+    return `
+      <div class="empty-state">
+        Couldn't reach the cloud.<br/>
+        <span class="error-detail">${escapeHtml(g.error)}</span><br/>
+        <button class="roshan-btn" style="margin-top:10px" data-lb-retry>Try again</button>
+      </div>`;
+  }
+  if (!g.rows.length) {
+    return `<div class="empty-state">Nobody has synced a game with this stat yet.<br/>Yours will show up here once a match finishes.</div>`;
+  }
+  return g.rows
+    .map((r, i) => {
+      const isYou = r.deviceId === state.deviceId;
+      const who = r.username && r.username.length ? r.username : "Anonymous";
+      return `
+      <div class="lb-row ${isYou ? "is-you" : ""}">
+        <span class="lb-medal">${MEDALS[i] || ""}</span>
+        <span class="lb-rank">#${i + 1}</span>
+        <span class="lb-name">
+          ${escapeHtml(who)}${isYou ? `<span class="you-tag">you</span>` : ""}
+          <span class="lb-sub">${escapeHtml(heroDisplayName(r.heroName))} · ${gameTypeLabel(r.gameType)}</span>
+        </span>
+        <span class="lb-value">${lbMetricFmt(state.lbMetric, r.value)}</span>
+      </div>`;
+    })
+    .join("");
+}
 
-  root.querySelectorAll("[data-lb-type]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      state.lbType = btn.dataset.lbType;
-      renderLeaderboard();
+async function loadGlobalLeaderboard() {
+  state.lbGlobal = { rows: [], loading: true, error: null };
+  renderLeaderboard();
+  try {
+    const rows = await invoke("global_leaderboard", {
+      metric: state.lbMetric,
+      gameType: state.lbType,
+      limit: 10,
     });
-  });
-  root.querySelectorAll("[data-lb-metric]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      state.lbMetric = btn.dataset.lbMetric;
-      renderLeaderboard();
-    });
-  });
+    state.lbGlobal = { rows: rows || [], loading: false, error: null };
+  } catch (e) {
+    state.lbGlobal = { rows: [], loading: false, error: String(e) };
+  }
+  renderLeaderboard();
 }
 
 // ---------- Rendering: Profile tab ----------
@@ -625,6 +699,33 @@ function renderProfile() {
       <button class="save-btn" id="saveProfileBtn">Save Profile</button>
       <span class="save-flash" id="saveFlash">Saved!</span>
     </div>
+
+    <div class="card" style="margin-top:6px">
+      <p class="card-title">Cloud Sync</p>
+      <div class="cloud-body">
+        <div class="cloud-line">
+          <span class="cloud-key">Status</span>
+          <span class="cloud-val" id="cloudStatusText">—</span>
+        </div>
+        <div class="cloud-line">
+          <span class="cloud-key">Synced this session</span>
+          <span class="cloud-val" id="cloudSyncedCount">0</span>
+        </div>
+        <div class="cloud-line">
+          <span class="cloud-key">Device ID</span>
+          <span class="cloud-val mono" id="cloudDeviceId">—</span>
+        </div>
+        <p class="cloud-note">
+          Matches are always saved to this PC first, then pushed to the cloud.
+          If the cloud is unreachable nothing is lost — just press Sync
+          Everything once you're back online.
+        </p>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <button class="roshan-btn" id="syncAllBtn">Sync Everything</button>
+          <span class="save-flash" id="syncFlash">Queued!</span>
+        </div>
+      </div>
+    </div>
   `;
 
   root.querySelectorAll("[data-rank]").forEach((btn) =>
@@ -651,6 +752,61 @@ function renderProfile() {
       setTimeout(() => flash.classList.remove("show"), 1600);
     });
   });
+  root.querySelector("#syncAllBtn").addEventListener("click", () => {
+    invoke("sync_all").then(() => {
+      const flash = document.getElementById("syncFlash");
+      flash.classList.add("show");
+      setTimeout(() => flash.classList.remove("show"), 1600);
+    });
+  });
+  renderCloudSection();
+}
+
+/// Fills in the Cloud Sync card. Split out so the 700ms status poll can
+/// refresh it without rebuilding the whole profile form (which would blow
+/// away whatever the user is typing in the username field).
+function renderCloudSection() {
+  const statusText = document.getElementById("cloudStatusText");
+  if (!statusText) return; // not on the Profile tab
+  const s = state.sync || {};
+
+  let text = "Connecting…";
+  if (s.pending > 0) text = `Uploading ${s.pending}…`;
+  else if (s.lastError) text = `Offline — ${s.lastError}`;
+  else if (s.connected) text = s.lastSync ? `Up to date (${s.lastSync})` : "Connected";
+  else text = "Idle — nothing synced yet this session";
+
+  statusText.textContent = text;
+  statusText.className = "cloud-val " + (s.lastError ? "bad" : s.connected ? "good" : "");
+  document.getElementById("cloudSyncedCount").textContent = s.synced ?? 0;
+  document.getElementById("cloudDeviceId").textContent = state.deviceId || "—";
+}
+
+function renderSyncPill() {
+  const pill = document.getElementById("syncPill");
+  const s = state.sync;
+  if (!s) return;
+
+  pill.classList.remove("ok", "error", "busy");
+  let label = "Cloud";
+  let title = `Cloud sync — device ${state.deviceId || "?"}`;
+
+  if (s.pending > 0) {
+    pill.classList.add("busy");
+    label = `Syncing ${s.pending}`;
+    title = `${s.pending} item(s) queued to upload`;
+  } else if (s.lastError) {
+    pill.classList.add("error");
+    label = "Offline";
+    title = `Cloud sync failed: ${s.lastError}\nYour matches are still saved locally.`;
+  } else if (s.connected) {
+    pill.classList.add("ok");
+    label = "Synced";
+    title = s.lastSync ? `Last synced at ${s.lastSync}` : "Connected to Convex";
+  }
+
+  pill.querySelector(".label").textContent = label;
+  pill.title = title;
 }
 
 function renderTopbarProfile() {
@@ -717,6 +873,16 @@ function refreshLive() {
   });
 }
 
+function refreshSyncStatus() {
+  return invoke("sync_status")
+    .then((s) => {
+      state.sync = s;
+      renderSyncPill();
+      renderCloudSection();
+    })
+    .catch(() => {});
+}
+
 function wireTopbar() {
   document.getElementById("trackingToggle").addEventListener("click", () => {
     const nowOn = !document.getElementById("trackingToggle").classList.contains("on");
@@ -738,13 +904,16 @@ async function boot() {
   wireTopbar();
   state.profile = await invoke("get_profile");
   state.profileDraft = { ...state.profile };
+  state.deviceId = await invoke("device_identity").catch(() => null);
   renderTopbarProfile();
   renderProfile();
   await refreshLive();
+  await refreshSyncStatus();
   await loadHistory();
   renderHistory();
   renderLeaderboard();
   setInterval(refreshLive, 700);
+  setInterval(refreshSyncStatus, 1500);
 }
 
 boot();
@@ -772,6 +941,18 @@ function mockInvoke(cmd, args) {
       if (entry) entry.gameType = args.gameType;
       return Promise.resolve(mock.history);
     }
+    case "device_identity":
+      return Promise.resolve("mock-device-0001");
+    case "sync_status":
+      return Promise.resolve({ connected: true, pending: 0, synced: 3, lastError: null, lastSync: "12:34:56" });
+    case "sync_all":
+      return Promise.resolve(mock.history.length);
+    case "global_leaderboard":
+      return Promise.resolve([
+        { deviceId: "someone-else", username: "Dendi", heroName: "npc_dota_hero_nevermore", gameType: "ranked", date: "", value: 214 },
+        { deviceId: "mock-device-0001", username: "lilcham", heroName: "npc_dota_hero_antimage", gameType: "ranked", date: "", value: 187 },
+        { deviceId: "another", username: "Miracle", heroName: "npc_dota_hero_wisp", gameType: "turbo", date: "", value: 165 },
+      ]);
     default:
       return Promise.resolve(null);
   }

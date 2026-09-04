@@ -145,6 +145,149 @@ html, body {
   background: var(--red);
 }
 
+/* ---------- Cloud sync pill ---------- */
+
+.sync-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 11px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: default;
+}
+
+.sync-pill .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.sync-pill.ok { color: var(--blue); border-color: rgba(111, 168, 209, 0.35); }
+.sync-pill.ok .dot { background: var(--blue); box-shadow: 0 0 7px rgba(111, 168, 209, 0.7); }
+
+.sync-pill.busy { color: var(--amber); border-color: rgba(224, 192, 91, 0.35); }
+.sync-pill.busy .dot { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+
+.sync-pill.error { color: var(--red); border-color: rgba(226, 104, 95, 0.35); }
+.sync-pill.error .dot { background: var(--red); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* ---------- Cloud section (Profile tab) ---------- */
+
+.cloud-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cloud-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.cloud-key { color: var(--text-faint); }
+
+.cloud-val {
+  color: var(--text-dim);
+  text-align: right;
+  word-break: break-word;
+}
+
+.cloud-val.good { color: var(--green); }
+.cloud-val.bad { color: var(--red); }
+.cloud-val.mono {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11px;
+}
+
+.cloud-note {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.5;
+  margin: 2px 0 4px;
+}
+
+/* ---------- Leaderboard scope toggle ---------- */
+
+.scope-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-raised);
+  border-radius: 999px;
+}
+
+.scope {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 7px 0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.scope:hover { color: var(--text); }
+
+.scope.selected {
+  background: var(--card);
+  color: var(--gold-soft);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.lb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.lb-row.is-you {
+  border-color: rgba(217, 172, 91, 0.45);
+  background: linear-gradient(100deg, rgba(217, 172, 91, 0.1), var(--card) 70%);
+}
+
+.you-tag {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(217, 172, 91, 0.2);
+  color: var(--gold-soft);
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.lb-sub {
+  display: block;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-weight: 400;
+  margin-top: 1px;
+}
+
+.error-detail {
+  font-size: 11px;
+  color: var(--red);
+  word-break: break-word;
+}
+
 /* ---------- Banner ---------- */
 
 .banner {

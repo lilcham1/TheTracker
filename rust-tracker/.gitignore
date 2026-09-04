@@ -1,1 +1,3 @@
-/target
+# Convex deployment identifiers for this machine (written by `npx convex dev`).
+# The production URL the app ships against lives in src-tauri/src/convex_sync.rs.
+.env.local

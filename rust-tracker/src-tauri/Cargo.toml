@@ -1,6 +1,6 @@
 [package]
 name = "dota-tracker"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Native desktop Dota 2 live match tracker built on Valve's official Game State Integration (GSI) feed."
 
@@ -14,6 +14,12 @@ serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 dirs = "5"
 tiny_http = "0.12"
+# Cloud sync — see convex_sync.rs. anyhow comes along because the convex
+# client's methods return anyhow::Result.
+convex = "0.10"
+anyhow = "1"
+tokio = { version = "1", features = ["sync"] }
+uuid = { version = "1", features = ["v4"] }
 
 [profile.release]
 opt-level = 2

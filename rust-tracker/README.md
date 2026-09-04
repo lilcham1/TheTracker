@@ -24,6 +24,8 @@ src-tauri/
     model.rs           — data types (JSON-compatible with history.json)
     heroes.rs          — key-item whitelist, Roshan drop table
     storage.rs         — history.json / profile.json persistence
+    convex_sync.rs     — background cloud sync + global leaderboard queries
+    device_id.rs       — stable per-install id used by the leaderboard
   tauri.conf.json      — window, bundle and CSP config
   icons/               — generated app icons
 ```
@@ -114,6 +116,47 @@ Matches are tagged as **Ranked**, **All Pick**, **Turbo**, or **Other**, and
 comparisons only ever run within the same tag (a Turbo game is never
 compared against a Ranked one). Set it live during a match on the Live tab,
 or correct it later from the History tab.
+
+## Cloud sync (Convex)
+
+Finished matches and your profile sync to a [Convex](https://convex.dev)
+deployment, which is also what powers the **Global** leaderboard — a
+cross-player ranking, not just your own games.
+
+**Local files stay the source of truth.** Every match is written to
+`history.json` first and only then queued for upload, on a background task.
+If the network is down, Convex is unreachable, or you're mid-game when it
+hiccups, nothing is lost — the sync pill in the header turns red, and
+**Sync Everything** on the Profile tab pushes the backlog whenever you're
+back online. Uploads upsert on `(deviceId, matchid)`, so re-syncing the
+whole history never creates duplicates.
+
+### Identity
+
+There's no sign-in. A random `deviceId` is generated on first run and
+stored in `device_id.txt` next to your history; the leaderboard shows the
+username from the Profile tab as the display name. That means:
+
+- Anyone who pulls the deployment URL out of the binary could write junk
+  rows — fine for a tool shared with friends, not hardened for public use.
+  Moving to real accounts would mean adding Convex Auth.
+- `matches:removeForDevice` deletes everything one install has synced, if
+  you want your data off the shared leaderboard.
+
+### The Convex side
+
+```
+convex/
+  schema.ts       — matches + profiles tables and their indexes
+  matches.ts      — upsert / listForDevice / countForDevice / removeForDevice
+  profiles.ts     — upsert / forDevice
+  leaderboard.ts  — globalTop, the cross-player ranking
+```
+
+Deploy changes to those with `npx convex deploy` (production) or
+`npx convex dev` (dev deployment, watches for changes). The app points at
+the production deployment baked into `convex_sync.rs`; override it at
+runtime with `DOTA_TRACKER_CONVEX_URL` to aim at the dev one instead.
 
 ## Where your data lives
 

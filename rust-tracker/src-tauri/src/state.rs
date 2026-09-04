@@ -18,11 +18,14 @@ pub struct Tracker {
     pub current: Option<MatchState>,
     pub tracking_enabled: bool,
     pub log_lines: Vec<String>,
+    /// Set once Convex sync is wired up (see main.rs). Stays `None` if sync
+    /// is unavailable — the tracker is fully functional without it.
+    pub syncer: Option<crate::convex_sync::Syncer>,
 }
 
 impl Tracker {
     pub fn new() -> Self {
-        Tracker { current: None, tracking_enabled: true, log_lines: Vec::new() }
+        Tracker { current: None, tracking_enabled: true, log_lines: Vec::new(), syncer: None }
     }
 
     fn log(&mut self, line: String) {
@@ -230,6 +233,12 @@ impl Tracker {
 
         let finalized = full_history.last().cloned();
         let peers_len = finalized.as_ref().and_then(|s| s.games_compared_against).unwrap_or(0);
+
+        // Local disk is already written above; pushing to Convex is
+        // best-effort and never blocks the GSI thread.
+        if let (Some(syncer), Some(summary)) = (&self.syncer, &finalized) {
+            syncer.send(crate::convex_sync::SyncJob::Match(Box::new(summary.clone())));
+        }
 
         if let Some(cur) = self.current.as_mut() {
             cur.ended = true;
