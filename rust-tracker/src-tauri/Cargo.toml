@@ -1,18 +1,19 @@
 [package]
 name = "dota-tracker"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Native desktop Dota 2 live match tracker built on Valve's official Game State Integration (GSI) feed."
 
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
 [dependencies]
-eframe = "0.28"
-egui = "0.28"
-egui_extras = { version = "0.28", features = ["all_loaders"] }
-tiny_http = "0.12"
+tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 dirs = "5"
+tiny_http = "0.12"
 
 [profile.release]
 opt-level = 2

@@ -1,37 +1,71 @@
-# Dota Tracker (Rust)
+# Dota Tracker
 
-A native desktop rewrite of the Dota 2 match tracker, in Rust. Built entirely
-on Valve's official **Game State Integration (GSI)** feed — the same system
-pro broadcast overlays use. Nothing here reads game memory, calls a
-third-party API, or touches anything outside GSI's official local HTTP feed.
+A native desktop Dota 2 match tracker, built on Valve's official **Game
+State Integration (GSI)** feed — the same system pro broadcast overlays
+use. Nothing here reads game memory, calls a third-party API, or touches
+anything outside GSI's official local HTTP feed.
 
-Compared to the old Electron/Node version, this is one native binary — no
-Node, no Electron, no browser tab. The window you open *is* the app.
+Built with **Tauri**: the Rust backend does all the GSI listening and match
+tracking, and the interface is HTML/CSS/JS rendered in the OS's own WebView.
+One binary, no Electron, no browser tab, no Node runtime shipped.
 
-## ⚠️ First build happens on your machine, not here
+## Project layout
 
-This was written and reviewed carefully, but it was **not compiled** in the
-sandbox that generated it — that environment's network access doesn't reach
-crates.io (Rust's package registry), so `cargo build` couldn't run there.
-That means the first build needs to happen in a normal terminal on your own
-PC, where you have your usual internet access. If it doesn't compile
-cleanly, paste me the error and I'll fix it immediately — but there's a real
-chance of a small mismatch on the first try, since I couldn't verify it
-end-to-end myself.
+```
+ui/                    — the interface (plain HTML/CSS/JS, no bundler)
+  index.html
+  style.css
+  app.js               — rendering + all `invoke` calls to the backend
+src-tauri/
+  src/
+    main.rs            — Tauri entry point + the commands the UI calls
+    gsi.rs             — the GSI HTTP listener (one route: POST /)
+    state.rs           — match tracking + historical comparison logic
+    model.rs           — data types (JSON-compatible with history.json)
+    heroes.rs          — key-item whitelist, Roshan drop table
+    storage.rs         — history.json / profile.json persistence
+  tauri.conf.json      — window, bundle and CSP config
+  icons/               — generated app icons
+```
+
+The frontend never touches the filesystem or the network directly — it
+calls Rust commands (`get_live_state`, `get_history`,
+`set_history_game_type`, …) and renders what comes back.
 
 ## Build & run
 
-Requires the Rust toolchain (`rustup.rs` if you don't have it — `cargo` and
-`rustc` come with it).
+Requires the Rust toolchain (`rustup.rs`) and Node (only for the Tauri
+CLI — nothing from npm ships inside the app).
 
 ```
-cargo run --release
+npm install
+npm run tauri dev
 ```
 
-The first build will take a couple of minutes (it's fetching and compiling
-`egui`/`eframe` and friends). After that, `cargo build --release` produces
-`target/release/dota-tracker.exe` — copy that anywhere and double-click it
-like any other app; it doesn't need `cargo` installed to run, only to build.
+For a release binary:
+
+```
+cd src-tauri
+cargo build --release
+```
+
+That produces `src-tauri/target/release/dota-tracker.exe` — the frontend is
+compiled into the binary, so the `.exe` is self-contained and can be copied
+anywhere.
+
+### Windows note: this repo builds with the GNU toolchain
+
+There are no Visual Studio Build Tools on the machine this was developed
+on, so `rust-tracker/` is pinned by a `rustup override` to
+`stable-x86_64-pc-windows-gnu`, and a MinGW-w64 `bin` directory must be on
+`PATH` at build time (it provides `as.exe`/`dlltool.exe`, which rustup's
+bundled self-contained linker does not include).
+
+**The project path must not contain spaces** — MinGW's `cc1.exe` splits
+paths at the space, which breaks Tauri's build script with a confusing
+"No such file or directory" error. (If you'd rather not deal with any of
+this, installing the MSVC "C++ build tools" and switching the override to
+`stable-x86_64-pc-windows-msvc` avoids both constraints.)
 
 ## Setting up Dota 2 to send it data
 
@@ -47,67 +81,55 @@ like any other app; it doesn't need `cargo` installed to run, only to build.
    ```
    -gamestateintegration
    ```
-5. Launch the tracker (`cargo run --release`, or the built `.exe`), then
-   start a Dota 2 match. The Live tab updates automatically once GSI data
-   starts arriving.
+5. Launch the tracker, then start a Dota 2 match. The Live tab updates
+   automatically once GSI data starts arriving.
 
 ## What it tracks
-
-Same feature set as the original tracker:
 
 - **Key items** (boots tier, Blink, BKB, Aghs, refresher, etc.) — tracked by
   total owned count, so moving items between slots never re-logs them.
 - **Deaths** — time and gold lost per death.
 - **Last hits** — snapshotted at 5/10/15/20/25 minutes.
 - **Roshan** — auto-detected when GSI reports it reliably, plus a manual
-  "Mark Roshan Death" button (Valve's own Roshan state data is known to be
-  inconsistent, so the manual button is the reliable fallback).
+  "Mark Death" button (Valve's own Roshan state data is known to be
+  inconsistent, so the manual button is the reliable fallback). Shows the
+  respawn window and the drop table for that Roshan number.
 - **End-of-match summary** comparing this game's deaths/gold-lost/last-hit
-  checkpoints against your historical average for the same game type
-  (Ranked/Unranked/Turbo/Other are never compared against each other), with
+  checkpoints against your historical average for the same game type, with
   Better/Worse/Average badges and 🏆 personal-best flags.
-- **History tab** — every finished match, expandable for full detail.
+- **History tab** — every finished match, expandable for full detail. Each
+  match's game type can be **re-tagged after the fact** (Ranked / All Pick /
+  Turbo / Other) straight from its badge — GSI doesn't reliably report lobby
+  type, so this is how you correct it. Re-tagging recomputes every match's
+  comparison so the peer-group stats stay consistent.
 - **Leaderboard tab** — your own top 10 games by a stat you pick (most last
   hits @25m, fewest deaths, least gold lost, most kills), filterable by game
   type. Personal only, not a real multiplayer leaderboard.
 - **Profile tab** — a local username/rank/main-role label, stored only on
   your PC.
 
-## Bringing over your old match history
+## Game types
 
-If you used the old Electron/Node tracker, its `logs/history.json` uses the
-same shape this app reads. To carry your history forward:
+Matches are tagged as **Ranked**, **All Pick**, **Turbo**, or **Other**, and
+comparisons only ever run within the same tag (a Turbo game is never
+compared against a Ranked one). Set it live during a match on the Live tab,
+or correct it later from the History tab.
 
-1. Find the old app's log directory (Electron stores it in its per-user app
-   data folder — check the old app's `main.js` / README for the exact
-   path on your OS).
-2. Find this app's log directory: it defaults to `DotaTracker/logs` inside
-   your OS's standard app-data folder (`%APPDATA%` on Windows, `~/Library/Application Support` on
-   Mac, `~/.local/share` on Linux). You can override it entirely by setting
-   the `DOTA_TRACKER_LOG_DIR` environment variable before launching, e.g. to
-   point straight at the old app's folder.
-3. Copy `history.json` (and `profile.json`, if you want your old profile
-   too) into the new location.
+## Where your data lives
+
+`history.json` and `profile.json` in `DotaTracker/logs` inside your OS's
+standard app-data folder (`%APPDATA%` on Windows,
+`~/Library/Application Support` on Mac, `~/.local/share` on Linux).
+Override the location entirely by setting `DOTA_TRACKER_LOG_DIR` before
+launching.
+
+The on-disk format is unchanged from the older Electron/egui versions, so an
+existing `history.json` can be copied straight in.
 
 ## Why only Dota 2, for now
 
 CS2 has an official Valve GSI feed too (same mechanism), so it's the
-natural next game to add to this same app. Valorant has no live-data feed
-at all under Riot's official policy, and getting even post-match stats
-requires an approved Riot developer app plus players logging in through
-Riot's own sign-on — that's a separate, heavier piece of work. Deadlock has
-no official Valve API yet. All were deliberately left out of this build so
-what's here stays 100% built on official, allowed data access.
-
-## Project layout
-
-```
-src/
-  main.rs     — entry point: spawns the GSI listener, launches the window
-  gsi.rs      — the GSI HTTP listener (the one and only HTTP route: POST /)
-  state.rs    — match tracking logic, ported 1:1 from the original tracker
-  model.rs    — data types (kept JSON-compatible with the old history.json)
-  heroes.rs   — hero/item display names, CDN icon URLs, key-item whitelist
-  storage.rs  — history.json / profile.json persistence
-  app.rs      — the egui UI: Live / History / Leaderboard / Profile tabs
-```
+natural next game to add. Valorant has no live-data feed at all under Riot's
+official policy. Deadlock has no official Valve API yet. All were
+deliberately left out so what's here stays 100% built on official, allowed
+data access.

@@ -219,78 +219,21 @@ impl Tracker {
             Some(m) => m.clone(),
             None => return,
         };
-        let mut summary = build_summary(&m);
+        let summary = build_summary(&m);
         let mut full_history = storage::load_history();
-        // Owned (not borrowed) so we're free to push onto `full_history` below
-        // without fighting the borrow checker over `peers`.
-        let peers: Vec<MatchSummary> = full_history
-            .iter()
-            .filter(|h| h.game_type == summary.game_type)
-            .cloned()
-            .collect();
-
-        let avg = |get: &dyn Fn(&MatchSummary) -> Option<f64>| -> Option<f64> {
-            let vals: Vec<f64> = peers.iter().filter_map(|p| get(p)).collect();
-            if vals.is_empty() { None } else { Some(vals.iter().sum::<f64>() / vals.len() as f64) }
-        };
-        let best = |get: &dyn Fn(&MatchSummary) -> Option<f64>, want_min: bool| -> Option<f64> {
-            let vals: Vec<f64> = peers.iter().filter_map(|p| get(p)).collect();
-            if vals.is_empty() {
-                return None;
-            }
-            Some(if want_min {
-                vals.iter().cloned().fold(f64::INFINITY, f64::min)
-            } else {
-                vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
-            })
-        };
-
-        let mut deaths_cmp = compare_metric(
-            Some(summary.total_deaths as f64),
-            avg(&|p| Some(p.total_deaths as f64)),
-            false,
-        );
-        if let Some(b) = best(&|p| Some(p.total_deaths as f64), true) {
-            deaths_cmp.is_best = (summary.total_deaths as f64) < b;
-        }
-
-        let mut gold_cmp = compare_metric(
-            Some(summary.total_gold_lost as f64),
-            avg(&|p| Some(p.total_gold_lost as f64)),
-            false,
-        );
-        if let Some(b) = best(&|p| Some(p.total_gold_lost as f64), true) {
-            gold_cmp.is_best = (summary.total_gold_lost as f64) < b;
-        }
-
-        let mut checkpoints_cmp: BTreeMap<u32, CompareMetric> = BTreeMap::new();
-        for minute in CHECKPOINT_MINUTES {
-            let value = summary.checkpoints.get(&minute).and_then(|c| c.map(|cc| cc.last_hits as f64));
-            let get_min = move |p: &MatchSummary| -> Option<f64> {
-                p.checkpoints.get(&minute).and_then(|c| c.map(|cc| cc.last_hits as f64))
-            };
-            let avg_val = avg(&get_min);
-            let mut comp = compare_metric(value, avg_val, true);
-            if let (Some(v), Some(b)) = (value, best(&get_min, false)) {
-                comp.is_best = v > b;
-            }
-            checkpoints_cmp.insert(minute, comp);
-        }
-
-        summary.comparison = Some(Comparison {
-            deaths: deaths_cmp,
-            gold_lost: gold_cmp,
-            checkpoints: checkpoints_cmp,
-        });
-        summary.games_compared_against = Some(peers.len());
-        let peers_len = peers.len();
-
-        full_history.push(summary.clone());
+        full_history.push(summary);
+        // Recomputing the whole history keeps every match's comparison
+        // consistent with the others in its (possibly just-changed) peer
+        // group, not just the new one.
+        recompute_all_comparisons(&mut full_history);
         storage::save_history(&full_history);
+
+        let finalized = full_history.last().cloned();
+        let peers_len = finalized.as_ref().and_then(|s| s.games_compared_against).unwrap_or(0);
 
         if let Some(cur) = self.current.as_mut() {
             cur.ended = true;
-            cur.summary = Some(summary);
+            cur.summary = finalized;
         }
         self.log(format!(
             "\u{1F3C1} Match ended \u{2014} {} deaths, {}g lost, {peers_len} past {} games to compare against",
@@ -299,6 +242,85 @@ impl Tracker {
             crate::model::game_type_label(&m.game_type)
         ));
     }
+}
+
+/// Re-tags a finished match in history with a new game type (e.g. the player
+/// correcting Ranked/Turbo/All Pick/Other after the fact, since GSI doesn't
+/// always report lobby type reliably) and recomputes every match's
+/// comparison so peer-group stats stay consistent. Returns false if the
+/// matchid wasn't found or the type isn't a recognized one.
+pub fn set_history_game_type(history: &mut Vec<MatchSummary>, matchid: &str, new_type: &str) -> bool {
+    if !crate::model::GAME_TYPES.contains(&new_type) {
+        return false;
+    }
+    let Some(entry) = history.iter_mut().find(|h| h.matchid == matchid) else {
+        return false;
+    };
+    entry.game_type = new_type.to_string();
+    recompute_all_comparisons(history);
+    true
+}
+
+/// Recomputes each match's `comparison`/`games_compared_against` against its
+/// current peers (same game_type, excluding itself) in the given history.
+pub fn recompute_all_comparisons(history: &mut [MatchSummary]) {
+    let snapshot = history.to_vec();
+    for s in history.iter_mut() {
+        let peers: Vec<&MatchSummary> =
+            snapshot.iter().filter(|p| p.matchid != s.matchid && p.game_type == s.game_type).collect();
+        let (comparison, peer_count) = compute_comparison(s, &peers);
+        s.comparison = Some(comparison);
+        s.games_compared_against = Some(peer_count);
+    }
+}
+
+fn compute_comparison(summary: &MatchSummary, peers: &[&MatchSummary]) -> (Comparison, usize) {
+    let avg = |get: &dyn Fn(&MatchSummary) -> Option<f64>| -> Option<f64> {
+        let vals: Vec<f64> = peers.iter().filter_map(|p| get(p)).collect();
+        if vals.is_empty() { None } else { Some(vals.iter().sum::<f64>() / vals.len() as f64) }
+    };
+    let best = |get: &dyn Fn(&MatchSummary) -> Option<f64>, want_min: bool| -> Option<f64> {
+        let vals: Vec<f64> = peers.iter().filter_map(|p| get(p)).collect();
+        if vals.is_empty() {
+            return None;
+        }
+        Some(if want_min {
+            vals.iter().cloned().fold(f64::INFINITY, f64::min)
+        } else {
+            vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
+        })
+    };
+
+    let mut deaths_cmp =
+        compare_metric(Some(summary.total_deaths as f64), avg(&|p| Some(p.total_deaths as f64)), false);
+    if let Some(b) = best(&|p| Some(p.total_deaths as f64), true) {
+        deaths_cmp.is_best = (summary.total_deaths as f64) < b;
+    }
+
+    let mut gold_cmp =
+        compare_metric(Some(summary.total_gold_lost as f64), avg(&|p| Some(p.total_gold_lost as f64)), false);
+    if let Some(b) = best(&|p| Some(p.total_gold_lost as f64), true) {
+        gold_cmp.is_best = (summary.total_gold_lost as f64) < b;
+    }
+
+    let mut checkpoints_cmp: BTreeMap<u32, CompareMetric> = BTreeMap::new();
+    for minute in CHECKPOINT_MINUTES {
+        let value = summary.checkpoints.get(&minute).and_then(|c| c.map(|cc| cc.last_hits as f64));
+        let get_min = move |p: &MatchSummary| -> Option<f64> {
+            p.checkpoints.get(&minute).and_then(|c| c.map(|cc| cc.last_hits as f64))
+        };
+        let avg_val = avg(&get_min);
+        let mut comp = compare_metric(value, avg_val, true);
+        if let (Some(v), Some(b)) = (value, best(&get_min, false)) {
+            comp.is_best = v > b;
+        }
+        checkpoints_cmp.insert(minute, comp);
+    }
+
+    (
+        Comparison { deaths: deaths_cmp, gold_lost: gold_cmp, checkpoints: checkpoints_cmp },
+        peers.len(),
+    )
 }
 
 fn build_summary(m: &MatchState) -> MatchSummary {

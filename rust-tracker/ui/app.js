@@ -1,0 +1,842 @@
+// Dota Tracker frontend. Plain JS, no framework/bundler — Tauri serves this
+// folder as-is. Talks to the Rust backend exclusively through `invoke`
+// (see src-tauri/src/main.rs for the command list).
+
+const HERO_CDN = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/";
+const ITEM_CDN = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/";
+const CHECKPOINT_MINUTES = [5, 10, 15, 20, 25];
+
+const GAME_TYPES = [
+  { id: "ranked", label: "Ranked" },
+  { id: "all_pick", label: "All Pick" },
+  { id: "turbo", label: "Turbo" },
+  { id: "other", label: "Other" },
+];
+
+const RANKS = [
+  { id: "herald", label: "Herald", color: "#a0a0a0" },
+  { id: "guardian", label: "Guardian", color: "#5fa85f" },
+  { id: "crusader", label: "Crusader", color: "#4fa8c9" },
+  { id: "archon", label: "Archon", color: "#4f8fd1" },
+  { id: "legend", label: "Legend", color: "#8f6fd1" },
+  { id: "ancient", label: "Ancient", color: "#d14f6f" },
+  { id: "divine", label: "Divine", color: "#4fd1c9" },
+  { id: "immortal", label: "Immortal", color: "#f0a020" },
+];
+
+const ROLES = [
+  { id: "carry", label: "Carry", color: "#e05b5b" },
+  { id: "mid", label: "Mid", color: "#e0c05b" },
+  { id: "offlane", label: "Offlane", color: "#a05be0" },
+  { id: "soft_support", label: "Soft Support", color: "#5be0a0" },
+  { id: "hard_support", label: "Hard Support", color: "#5b9be0" },
+];
+
+const LB_METRICS = [
+  { key: "last_hits_25", label: "Most LH @25m", higherBetter: true },
+  { key: "fewest_deaths", label: "Fewest Deaths", higherBetter: false },
+  { key: "least_gold_lost", label: "Least Gold Lost", higherBetter: false },
+  { key: "most_kills", label: "Most Kills", higherBetter: true },
+];
+
+const HERO_NAME_OVERRIDES = {
+  antimage: "Anti-Mage",
+  nevermore: "Shadow Fiend",
+  windrunner: "Windranger",
+  vengefulspirit: "Vengeful Spirit",
+  queenofpain: "Queen of Pain",
+  skeleton_king: "Wraith King",
+  doom_bringer: "Doom",
+  necrolyte: "Necrophos",
+  furion: "Nature's Prophet",
+  life_stealer: "Lifestealer",
+  rattletrap: "Clockwerk",
+  obsidian_destroyer: "Outworld Destroyer",
+  treant: "Treant Protector",
+  wisp: "Io",
+  zuus: "Zeus",
+  shredder: "Timbersaw",
+  magnataur: "Magnus",
+  centaur: "Centaur Warrunner",
+  abyssal_underlord: "Underlord",
+  keeper_of_the_light: "Keeper of the Light",
+};
+
+// ---------- Tauri bridge (falls back to mock data when previewed as a
+// plain webpage outside Tauri, e.g. in a browser, for layout sanity-checks
+// during development) ----------
+
+const invoke = window.__TAURI__ ? window.__TAURI__.core.invoke : mockInvoke;
+
+// ---------- Small helpers ----------
+
+function gameTypeLabel(t) {
+  const found = GAME_TYPES.find((g) => g.id === t) || (t === "unranked" ? GAME_TYPES[1] : null);
+  return found ? found.label : "Unspecified";
+}
+
+function heroCleanName(raw) {
+  if (!raw) return null;
+  const clean = raw.startsWith("npc_dota_hero_") ? raw.slice("npc_dota_hero_".length) : raw;
+  return clean.length ? clean : null;
+}
+
+function titleCase(clean) {
+  return clean
+    .split("_")
+    .map((w) => (w.length ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
+function heroDisplayName(raw) {
+  const clean = heroCleanName(raw);
+  if (!clean) return "Unknown Hero";
+  return HERO_NAME_OVERRIDES[clean] || titleCase(clean);
+}
+
+function heroPortraitUrl(raw) {
+  const clean = heroCleanName(raw);
+  return clean ? `${HERO_CDN}${clean}.png` : null;
+}
+
+function fmtClock(seconds) {
+  if (seconds === null || seconds === undefined) return "??:??";
+  const neg = seconds < 0;
+  const abs = Math.floor(Math.abs(seconds));
+  const m = Math.floor(abs / 60);
+  const s = abs % 60;
+  return `${neg ? "-" : ""}${m}:${String(s).padStart(2, "0")}`;
+}
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function formatNum(v) {
+  if (v === null || v === undefined) return "—";
+  return Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : v.toFixed(1);
+}
+
+function roshanDrops(deathCount) {
+  if (deathCount <= 1) return "Aegis of the Immortal";
+  if (deathCount === 2) return "Aegis + Cheese + (Refresher Shard or Aghanim's Blessing)";
+  return "Aegis + Cheese + Aghanim's Blessing + Refresher Shard";
+}
+
+/// "black_king_bar" -> "Black King Bar", for image tooltips/fallback text.
+function itemDisplayName(item) {
+  return titleCase(item);
+}
+
+/// CDN icons occasionally 404 (renamed/removed items, or no connection).
+/// Swap those for a readable text tile instead of a broken-image glyph.
+/// Wired programmatically rather than via an inline `onerror` attribute,
+/// which the app's CSP (script-src 'self') would block.
+function wireImageFallbacks(root) {
+  root.querySelectorAll("img[data-item-img]").forEach((img) => {
+    img.addEventListener(
+      "error",
+      () => {
+        const name = img.dataset.itemImg;
+        const div = document.createElement("div");
+        div.className = "item-fallback";
+        div.textContent = itemDisplayName(name)
+          .split(" ")
+          .map((w) => w[0])
+          .join("")
+          .slice(0, 3);
+        img.replaceWith(div);
+      },
+      { once: true }
+    );
+  });
+  root.querySelectorAll("img.hero-portrait").forEach((img) => {
+    img.addEventListener("error", () => img.classList.add("portrait-missing"), { once: true });
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---------- App state ----------
+
+const state = {
+  tab: "live",
+  live: null,
+  history: [],
+  profile: { username: "", rank: null, role: null },
+  profileDraft: { username: "", rank: null, role: null },
+  lbType: "all",
+  lbMetric: "last_hits_25",
+  openHistory: new Set(),
+  openTypeMenu: null,
+};
+
+// ---------- Rendering: Live tab ----------
+
+function renderLive() {
+  const root = document.getElementById("tab-live");
+  const m = state.live && state.live.current;
+
+  if (!m) {
+    root.innerHTML = `<div class="empty-state">Waiting for a match to start&hellip;<br/>Launch Dota 2 with GSI enabled to begin tracking.</div>`;
+    return;
+  }
+
+  const portrait = heroPortraitUrl(m.heroName);
+  const parts = [];
+
+  if (m.ended && m.summary) {
+    parts.push(summaryCardHtml(m.summary));
+  }
+
+  parts.push(`
+    <div class="hero-header">
+      ${portrait ? `<img class="hero-portrait" src="${portrait}" alt="" />` : `<div class="hero-portrait"></div>`}
+      <div>
+        <p class="hero-name">${escapeHtml(heroDisplayName(m.heroName))}</p>
+        <span class="hero-clock">${fmtClock(m.lastClockTime)}</span>
+      </div>
+    </div>
+
+    <div class="chip-row" id="liveGameTypeRow">
+      ${GAME_TYPES.map(
+        (g) => `<button class="chip ${m.gameType === g.id ? "selected" : ""}" data-live-type="${g.id}">${g.label}</button>`
+      ).join("")}
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-tile">
+        <div class="stat-label">Last Hits / Denies</div>
+        <div class="stat-value">${m.lastHits} / ${m.denies}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Deaths / Gold Lost</div>
+        <div class="stat-value danger">${m.deaths.length} / ${totalGoldLost(m.deaths)}g</div>
+      </div>
+    </div>
+
+    ${roshanCardHtml(m.roshan, m.lastClockTime)}
+
+    <div class="card">
+      <p class="card-title">Last Hit Checkpoints</p>
+      ${checkpointsRowHtml(m.checkpoints)}
+    </div>
+
+    <div class="card">
+      <p class="card-title">Key Items</p>
+      ${itemGridHtml(m.keyItemLog)}
+    </div>
+
+    <div class="card">
+      <p class="card-title">Deaths</p>
+      ${deathListHtml(m.deaths)}
+    </div>
+  `);
+
+  root.innerHTML = parts.join("");
+  wireImageFallbacks(root);
+
+  root.querySelectorAll("[data-live-type]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      invoke("set_live_game_type", { gameType: btn.dataset.liveType }).then(refreshLive);
+    });
+  });
+
+  const roshBtn = root.querySelector("[data-mark-roshan]");
+  if (roshBtn) {
+    roshBtn.addEventListener("click", () => {
+      invoke("mark_roshan_death").then(refreshLive);
+    });
+  }
+}
+
+function totalGoldLost(deaths) {
+  return deaths.reduce((sum, d) => sum + (d.goldLost ?? 0), 0);
+}
+
+function roshanCardHtml(roshan, clockTime) {
+  let statusClass = "alive";
+  let status = "Roshan — Alive";
+  let sub = "No deaths recorded yet this game";
+
+  if (roshan.lastDeathClock !== null && roshan.lastDeathClock !== undefined) {
+    const minRespawn = roshan.lastDeathClock + 480;
+    const maxRespawn = roshan.lastDeathClock + 660;
+    const countdown = (target) => {
+      const rem = Math.max(0, target - clockTime);
+      return `${Math.floor(rem / 60)}:${String(Math.floor(rem % 60)).padStart(2, "0")}`;
+    };
+    if (clockTime < minRespawn) {
+      statusClass = "dead";
+      status = "Roshan — Dead";
+      sub = `Respawn window opens in ${countdown(minRespawn)}`;
+    } else if (clockTime < maxRespawn) {
+      statusClass = "maybe";
+      status = "Roshan — Maybe Alive";
+      sub = `Guaranteed alive in ${countdown(maxRespawn)}`;
+    } else {
+      status = "Roshan — Alive";
+      sub = "Respawn window has passed";
+    }
+    sub += ` · Death #${roshan.deaths} — drops: ${roshanDrops(roshan.deaths)}`;
+  }
+
+  return `
+    <div class="card roshan-card">
+      <span class="roshan-icon">\u{1F409}</span>
+      <div class="roshan-body">
+        <div class="roshan-status ${statusClass}">${status}</div>
+        <div class="roshan-sub">${sub}</div>
+      </div>
+      <button class="roshan-btn" data-mark-roshan>Mark Death</button>
+    </div>
+  `;
+}
+
+function checkpointsRowHtml(checkpoints) {
+  return `
+    <div class="checkpoint-row">
+      ${CHECKPOINT_MINUTES.map((min) => {
+        const cp = checkpoints[min];
+        return `
+          <div class="checkpoint">
+            <div class="checkpoint-min">${min}m</div>
+            <div class="checkpoint-val ${cp ? "" : "pending"}">${cp ? cp.lastHits : "—"}</div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function itemGridHtml(items) {
+  if (!items || items.length === 0) {
+    return `<div class="empty-state" style="padding:8px 0;">No key items yet</div>`;
+  }
+  return `
+    <div class="item-grid">
+      ${items
+        .map(
+          (it) => `
+        <div class="item-chip" title="${escapeHtml(itemDisplayName(it.item))} — ${escapeHtml(it.clock)}">
+          <img src="${ITEM_CDN}${it.item}.png" alt="" data-item-img="${escapeHtml(it.item)}" />
+          <span class="item-time">${escapeHtml(it.clock)}</span>
+        </div>`
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function deathListHtml(deaths) {
+  if (!deaths || deaths.length === 0) {
+    return `<div class="empty-state" style="padding:8px 0;">No deaths yet</div>`;
+  }
+  return `
+    <div class="death-list">
+      ${deaths
+        .map(
+          (d) => `
+        <div class="death-row">
+          <span class="death-clock">${escapeHtml(d.clock)}</span>
+          <span class="death-gold">${d.goldLost !== null && d.goldLost !== undefined ? `-${d.goldLost}g` : "-?g"}</span>
+        </div>`
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function badgeHtml(verdict) {
+  const map = {
+    better: ["Better", "badge-better"],
+    worse: ["Worse", "badge-worse"],
+    similar: ["Average", "badge-similar"],
+  };
+  const [text, cls] = map[verdict] || ["New", "badge-new"];
+  return `<span class="badge ${cls}">${text}</span>`;
+}
+
+function compareRowHtml(label, comp) {
+  const valStr = comp.value !== null && comp.value !== undefined ? formatNum(comp.value) : "—";
+  const avgStr = comp.avg !== null && comp.avg !== undefined ? ` (avg ${formatNum(comp.avg)})` : "";
+  return `
+    <div class="compare-row">
+      <span class="compare-label">${label}</span>
+      <span class="compare-value">${valStr}${avgStr}</span>
+      ${badgeHtml(comp.verdict)}
+      ${comp.isBest ? `<span title="Personal best">\u{1F3C6}</span>` : ""}
+    </div>
+  `;
+}
+
+function comparisonBlockHtml(summary) {
+  if (!summary.comparison) return "";
+  const cmp = summary.comparison;
+  const rows = [compareRowHtml("Deaths", cmp.deaths), compareRowHtml("Gold Lost to Deaths", cmp.goldLost)];
+  for (const min of CHECKPOINT_MINUTES) {
+    const c = cmp.checkpoints[min];
+    if (c && c.value !== null && c.value !== undefined) {
+      rows.push(compareRowHtml(`${min} min Last Hits`, c));
+    }
+  }
+  return `
+    <div class="summary-sub">vs your last ${summary.gamesComparedAgainst ?? 0} ${gameTypeLabel(summary.gameType)} games</div>
+    ${rows.join("")}
+  `;
+}
+
+function summaryCardHtml(summary) {
+  return `
+    <div class="card summary-card">
+      <p class="summary-title">\u{1F3C1} Match Summary — ${gameTypeLabel(summary.gameType)}</p>
+      <div class="summary-sub" style="margin-bottom:2px">${escapeHtml(heroDisplayName(summary.heroName))} — ${escapeHtml(summary.duration)}</div>
+      ${comparisonBlockHtml(summary)}
+    </div>
+  `;
+}
+
+// ---------- Rendering: History tab ----------
+
+function renderHistory() {
+  const root = document.getElementById("tab-history");
+  if (state.history.length === 0) {
+    root.innerHTML = `<div class="empty-state">No finished matches yet.</div>`;
+    return;
+  }
+
+  const items = [...state.history].reverse();
+  root.innerHTML = items
+    .map((m) => {
+      const open = state.openHistory.has(m.matchid);
+      const portrait = heroPortraitUrl(m.heroName);
+      return `
+        <div class="history-item ${open ? "open" : ""}" data-matchid="${escapeHtml(m.matchid)}">
+          <div class="history-head" data-toggle-history="${escapeHtml(m.matchid)}">
+            ${portrait ? `<img class="hero-portrait" src="${portrait}" alt="" />` : `<div class="hero-portrait"></div>`}
+            <div class="history-head-main">
+              <div class="history-head-title">${escapeHtml(heroDisplayName(m.heroName))}</div>
+              <div class="history-head-sub">${formatDate(m.date)}</div>
+            </div>
+            ${typeBadgeHtml(m)}
+            <span class="history-chevron">▸</span>
+          </div>
+          <div class="history-body">
+            <div class="history-quickstats">${escapeHtml(m.duration)} · ${m.totalDeaths} deaths · ${m.totalGoldLost}g lost · Rosh x${m.roshanDeaths}</div>
+            ${comparisonBlockHtml(m)}
+            <div>
+              <p class="subhead">Key Items</p>
+              ${itemGridHtml(m.keyItems)}
+            </div>
+            <div>
+              <p class="subhead">Deaths</p>
+              ${deathListHtml(m.deaths)}
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  wireImageFallbacks(root);
+
+  root.querySelectorAll("[data-toggle-history]").forEach((headEl) => {
+    headEl.addEventListener("click", (e) => {
+      if (e.target.closest("[data-type-badge]")) return;
+      const id = headEl.dataset.toggleHistory;
+      if (state.openHistory.has(id)) state.openHistory.delete(id);
+      else state.openHistory.add(id);
+      renderHistory();
+    });
+  });
+
+  wireTypeBadges(root, (matchid, gameType) => {
+    invoke("set_history_game_type", { matchid, gameType }).then((newHistory) => {
+      state.history = newHistory;
+      state.openTypeMenu = null;
+      renderHistory();
+      renderLeaderboard();
+    });
+  });
+}
+
+function typeBadgeHtml(m) {
+  const label = gameTypeLabel(m.gameType);
+  const menuOpen = state.openTypeMenu === m.matchid;
+  return `
+    <div class="type-badge-wrap">
+      <button class="type-badge type-${m.gameType}" data-type-badge="${escapeHtml(m.matchid)}">
+        ${label} <span class="caret">▾</span>
+      </button>
+      ${
+        menuOpen
+          ? `<div class="type-menu" data-type-menu="${escapeHtml(m.matchid)}">
+              ${GAME_TYPES.map(
+                (g) => `<button data-set-type="${g.id}" class="${g.id === m.gameType ? "current" : ""}">${g.label}</button>`
+              ).join("")}
+            </div>`
+          : ""
+      }
+    </div>
+  `;
+}
+
+function wireTypeBadges(root, onSetType) {
+  root.querySelectorAll("[data-type-badge]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.typeBadge;
+      state.openTypeMenu = state.openTypeMenu === id ? null : id;
+      if (root.id === "tab-history") renderHistory();
+    });
+  });
+  root.querySelectorAll("[data-type-menu]").forEach((menu) => {
+    const matchid = menu.dataset.typeMenu;
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.querySelectorAll("[data-set-type]").forEach((opt) => {
+      opt.addEventListener("click", () => onSetType(matchid, opt.dataset.setType));
+    });
+  });
+}
+
+// ---------- Rendering: Leaderboard tab ----------
+
+function lbMetricValue(m, key) {
+  switch (key) {
+    case "last_hits_25":
+      return m.checkpoints["25"] ? m.checkpoints["25"].lastHits : null;
+    case "fewest_deaths":
+      return m.totalDeaths;
+    case "least_gold_lost":
+      return m.totalGoldLost;
+    case "most_kills":
+      return m.kills;
+    default:
+      return null;
+  }
+}
+
+function lbMetricFmt(key, v) {
+  const iv = Math.round(v);
+  switch (key) {
+    case "last_hits_25":
+      return `${iv} LH`;
+    case "fewest_deaths":
+      return `${iv} deaths`;
+    case "least_gold_lost":
+      return `${iv}g lost`;
+    case "most_kills":
+      return `${iv} kills`;
+    default:
+      return String(iv);
+  }
+}
+
+function renderLeaderboard() {
+  const root = document.getElementById("tab-leaderboard");
+  const metric = LB_METRICS.find((m) => m.key === state.lbMetric);
+
+  const typeChips = `
+    <div class="chip-row">
+      <button class="chip ${state.lbType === "all" ? "selected" : ""}" data-lb-type="all">All Types</button>
+      ${GAME_TYPES.map((g) => `<button class="chip ${state.lbType === g.id ? "selected" : ""}" data-lb-type="${g.id}">${g.label}</button>`).join("")}
+    </div>
+  `;
+  const metricChips = `
+    <div class="chip-row">
+      ${LB_METRICS.map((m) => `<button class="chip small ${state.lbMetric === m.key ? "selected" : ""}" data-lb-metric="${m.key}">${m.label}</button>`).join("")}
+    </div>
+  `;
+
+  let ranked = state.history
+    .filter((m) => state.lbType === "all" || m.gameType === state.lbType)
+    .map((m) => ({ m, v: lbMetricValue(m, state.lbMetric) }))
+    .filter((r) => r.v !== null && r.v !== undefined);
+
+  ranked.sort((a, b) => (metric.higherBetter ? b.v - a.v : a.v - b.v));
+  ranked = ranked.slice(0, 10);
+
+  const medals = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
+  const list = ranked.length
+    ? ranked
+        .map(
+          (r, i) => `
+      <div class="lb-row">
+        <span class="lb-medal">${medals[i] || ""}</span>
+        <span class="lb-rank">#${i + 1}</span>
+        <span class="lb-name">${escapeHtml(heroDisplayName(r.m.heroName))}</span>
+        <span class="lb-value">${lbMetricFmt(state.lbMetric, r.v)}</span>
+      </div>`
+        )
+        .join("")
+    : `<div class="empty-state">No games with this stat yet.</div>`;
+
+  root.innerHTML = typeChips + metricChips + `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${list}</div>`;
+
+  root.querySelectorAll("[data-lb-type]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.lbType = btn.dataset.lbType;
+      renderLeaderboard();
+    });
+  });
+  root.querySelectorAll("[data-lb-metric]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.lbMetric = btn.dataset.lbMetric;
+      renderLeaderboard();
+    });
+  });
+}
+
+// ---------- Rendering: Profile tab ----------
+
+function renderProfile() {
+  const root = document.getElementById("tab-profile");
+  const p = state.profileDraft;
+
+  root.innerHTML = `
+    <div>
+      <label class="form-label">Username</label>
+      <input class="text-input" id="usernameInput" type="text" value="${escapeHtml(p.username || "")}" placeholder="Your name" />
+    </div>
+
+    <div>
+      <label class="form-label">Rank</label>
+      <div class="swatch-grid" id="rankSwatches">
+        ${RANKS.map(
+          (r) => `<button class="swatch" data-rank="${r.id}" style="${p.rank === r.id ? `background:${r.color};border-color:${r.color};` : ""}">${r.label}</button>`
+        ).join("")}
+      </div>
+    </div>
+
+    <div>
+      <label class="form-label">Main Role</label>
+      <div class="swatch-grid" id="roleSwatches">
+        ${ROLES.map(
+          (r) => `<button class="swatch" data-role="${r.id}" style="${p.role === r.id ? `background:${r.color};border-color:${r.color};` : ""}">${r.label}</button>`
+        ).join("")}
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:14px;">
+      <button class="save-btn" id="saveProfileBtn">Save Profile</button>
+      <span class="save-flash" id="saveFlash">Saved!</span>
+    </div>
+  `;
+
+  root.querySelectorAll("[data-rank]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      state.profileDraft.rank = btn.dataset.rank;
+      renderProfile();
+    })
+  );
+  root.querySelectorAll("[data-role]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      state.profileDraft.role = btn.dataset.role;
+      renderProfile();
+    })
+  );
+  root.querySelector("#usernameInput").addEventListener("input", (e) => {
+    state.profileDraft.username = e.target.value;
+  });
+  root.querySelector("#saveProfileBtn").addEventListener("click", () => {
+    invoke("save_profile", { profile: state.profileDraft }).then(() => {
+      state.profile = { ...state.profileDraft };
+      renderTopbarProfile();
+      const flash = document.getElementById("saveFlash");
+      flash.classList.add("show");
+      setTimeout(() => flash.classList.remove("show"), 1600);
+    });
+  });
+}
+
+function renderTopbarProfile() {
+  const badge = document.getElementById("profileBadge");
+  const p = state.profile;
+  const hasInfo = (p.username && p.username.length) || p.rank || p.role;
+  if (!hasInfo) {
+    badge.hidden = true;
+    return;
+  }
+  const rank = RANKS.find((r) => r.id === p.rank);
+  const role = ROLES.find((r) => r.id === p.role);
+  badge.hidden = false;
+  badge.innerHTML = `
+    ${p.username ? `<span>${escapeHtml(p.username)}</span>` : ""}
+    ${rank ? `<span class="rank-chip" style="background:${rank.color}22;color:${rank.color}">${rank.label}</span>` : ""}
+    ${role ? `<span class="role-chip" style="background:${role.color}22;color:${role.color}">${role.label}</span>` : ""}
+  `;
+}
+
+// ---------- Top-level wiring ----------
+
+function setTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
+  if (tab === "history") {
+    loadHistory().then(renderHistory);
+  } else if (tab === "leaderboard") {
+    loadHistory().then(renderLeaderboard);
+  }
+}
+
+async function loadHistory() {
+  state.history = await invoke("get_history");
+  return state.history;
+}
+
+function refreshLive() {
+  return invoke("get_live_state").then((live) => {
+    const wasEnded = state.live && state.live.current && state.live.current.ended;
+    state.live = live;
+    renderLive();
+
+    const trackBtn = document.getElementById("trackingToggle");
+    trackBtn.classList.toggle("on", live.trackingEnabled);
+    trackBtn.classList.toggle("off", !live.trackingEnabled);
+    trackBtn.querySelector(".label").textContent = live.trackingEnabled ? "Tracking" : "Paused";
+
+    const errBanner = document.getElementById("serverError");
+    if (live.serverError) {
+      errBanner.hidden = false;
+      errBanner.textContent = `⚠ ${live.serverError}`;
+    } else {
+      errBanner.hidden = true;
+    }
+
+    // A match just finished while we were on the Live tab — refresh cached
+    // history so switching to History/Leaderboard shows it immediately.
+    const isEndedNow = live.current && live.current.ended;
+    if (isEndedNow && !wasEnded) {
+      loadHistory();
+    }
+  });
+}
+
+function wireTopbar() {
+  document.getElementById("trackingToggle").addEventListener("click", () => {
+    const nowOn = !document.getElementById("trackingToggle").classList.contains("on");
+    invoke("set_tracking", { enabled: nowOn }).then(refreshLive);
+  });
+  document.getElementById("tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest(".tab");
+    if (btn) setTab(btn.dataset.tab);
+  });
+  document.addEventListener("click", () => {
+    if (state.openTypeMenu !== null) {
+      state.openTypeMenu = null;
+      if (state.tab === "history") renderHistory();
+    }
+  });
+}
+
+async function boot() {
+  wireTopbar();
+  state.profile = await invoke("get_profile");
+  state.profileDraft = { ...state.profile };
+  renderTopbarProfile();
+  renderProfile();
+  await refreshLive();
+  await loadHistory();
+  renderHistory();
+  renderLeaderboard();
+  setInterval(refreshLive, 700);
+}
+
+boot();
+
+// ---------- Mock backend (only used outside Tauri, for visual preview) ----------
+
+function mockInvoke(cmd, args) {
+  const mock = (window.__mockState ||= {
+    history: mockHistory(),
+    profile: { username: "lilcham", rank: "archon", role: "mid" },
+    current: mockCurrentMatch(),
+  });
+  switch (cmd) {
+    case "get_live_state":
+      return Promise.resolve({ current: mock.current, trackingEnabled: true, serverError: null });
+    case "get_history":
+      return Promise.resolve(mock.history);
+    case "get_profile":
+      return Promise.resolve(mock.profile);
+    case "save_profile":
+      mock.profile = args.profile;
+      return Promise.resolve();
+    case "set_history_game_type": {
+      const entry = mock.history.find((h) => h.matchid === args.matchid);
+      if (entry) entry.gameType = args.gameType;
+      return Promise.resolve(mock.history);
+    }
+    default:
+      return Promise.resolve(null);
+  }
+}
+
+function mockCurrentMatch() {
+  return {
+    matchid: "7891234560",
+    heroName: "npc_dota_hero_queenofpain",
+    startedAt: new Date().toISOString(),
+    wasAlive: true,
+    ownedItemCounts: {},
+    deaths: [
+      { clock: "6:41", goldLost: 214 },
+      { clock: "14:02", goldLost: 388 },
+      { clock: "21:37", goldLost: 512 },
+    ],
+    keyItemLog: [
+      { clock: "8:12", item: "power_treads" },
+      { clock: "16:30", item: "black_king_bar" },
+      { clock: "24:05", item: "aghanims_scepter" },
+    ],
+    checkpoints: { 5: { lastHits: 31, denies: 4 }, 10: { lastHits: 68, denies: 9 }, 15: { lastHits: 104, denies: 12 }, 20: null, 25: null },
+    lastClockTime: 1123,
+    lastHits: 137,
+    denies: 15,
+    kills: 8,
+    prevGold: 2400,
+    ended: false,
+    summary: null,
+    gameType: "ranked",
+    roshan: { deaths: 1, lastDeathClock: 900, wasAlive: false },
+  };
+}
+
+function mockHistory() {
+  const mk = (matchid, hero, date, duration, kills, deaths, gold, type, lh25) => ({
+    matchid,
+    heroName: hero,
+    date,
+    duration,
+    kills,
+    totalDeaths: deaths,
+    totalGoldLost: gold,
+    deaths: [
+      { clock: "9:14", goldLost: Math.round(gold / Math.max(deaths, 1)) },
+      { clock: "18:52", goldLost: Math.round(gold / Math.max(deaths, 1)) },
+    ],
+    keyItems: [
+      { clock: "9:40", item: "phase_boots" },
+      { clock: "19:20", item: "blink" },
+    ],
+    checkpoints: { 5: { lastHits: 28, denies: 3 }, 10: { lastHits: 61, denies: 7 }, 15: { lastHits: 95, denies: 10 }, 20: { lastHits: 128, denies: 12 }, 25: { lastHits: lh25, denies: 14 } },
+    roshanDeaths: 2,
+    gameType: type,
+    comparison: {
+      deaths: { value: deaths, avg: 5.2, verdict: deaths < 5 ? "better" : "worse", isBest: deaths <= 2 },
+      goldLost: { value: gold, avg: 1420, verdict: gold < 1400 ? "better" : "worse", isBest: false },
+      checkpoints: { 25: { value: lh25, avg: 150.4, verdict: lh25 > 155 ? "better" : "similar", isBest: lh25 > 180 } },
+    },
+    gamesComparedAgainst: 7,
+  });
+  return [
+    mk("7891234501", "npc_dota_hero_antimage", "2026-09-01T18:22:00Z", "38:14", 11, 3, 980, "ranked", 187),
+    mk("7891234502", "npc_dota_hero_nevermore", "2026-09-02T20:05:00Z", "44:52", 7, 8, 2140, "turbo", 142),
+    mk("7891234503", "npc_dota_hero_rattletrap", "2026-09-03T21:41:00Z", "31:08", 4, 5, 1310, "all_pick", 151),
+  ];
+}

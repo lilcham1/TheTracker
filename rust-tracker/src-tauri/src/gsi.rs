@@ -6,7 +6,6 @@
 //! and written directly against shared in-process state by the native UI,
 //! no browser/JSON API required.
 
-use std::io::Read;
 use std::sync::{Arc, Mutex};
 
 use crate::state::Tracker;

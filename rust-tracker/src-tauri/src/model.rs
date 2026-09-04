@@ -162,39 +162,22 @@ impl Default for Profile {
     }
 }
 
-pub const GAME_TYPES: [&str; 4] = ["ranked", "unranked", "turbo", "other"];
+pub const GAME_TYPES: [&str; 4] = ["ranked", "all_pick", "turbo", "other"];
 
 pub fn game_type_label(t: &str) -> &'static str {
     match t {
         "ranked" => "Ranked",
-        "unranked" => "Unranked",
+        "all_pick" => "All Pick",
         "turbo" => "Turbo",
         "other" => "Other",
+        // Old egui-version saves used "unranked" for this category; keep it
+        // mapped to the same label so any pre-existing history still reads
+        // sensibly instead of falling through to "Unspecified".
+        "unranked" => "All Pick",
         _ => "Unspecified",
     }
 }
 
-pub struct RankInfo {
-    pub id: &'static str,
-    pub label: &'static str,
-    pub color: (u8, u8, u8),
-}
-
-pub const RANKS: [RankInfo; 8] = [
-    RankInfo { id: "herald", label: "Herald", color: (0xa0, 0xa0, 0xa0) },
-    RankInfo { id: "guardian", label: "Guardian", color: (0x5f, 0xa8, 0x5f) },
-    RankInfo { id: "crusader", label: "Crusader", color: (0x4f, 0xa8, 0xc9) },
-    RankInfo { id: "archon", label: "Archon", color: (0x4f, 0x8f, 0xd1) },
-    RankInfo { id: "legend", label: "Legend", color: (0x8f, 0x6f, 0xd1) },
-    RankInfo { id: "ancient", label: "Ancient", color: (0xd1, 0x4f, 0x6f) },
-    RankInfo { id: "divine", label: "Divine", color: (0x4f, 0xd1, 0xc9) },
-    RankInfo { id: "immortal", label: "Immortal", color: (0xf0, 0xa0, 0x20) },
-];
-
-pub const ROLES: [RankInfo; 5] = [
-    RankInfo { id: "carry", label: "Carry", color: (0xe0, 0x5b, 0x5b) },
-    RankInfo { id: "mid", label: "Mid", color: (0xe0, 0xc0, 0x5b) },
-    RankInfo { id: "offlane", label: "Offlane", color: (0xa0, 0x5b, 0xe0) },
-    RankInfo { id: "soft_support", label: "Soft Support", color: (0x5b, 0xe0, 0xa0) },
-    RankInfo { id: "hard_support", label: "Hard Support", color: (0x5b, 0x9b, 0xe0) },
-];
+// Rank/role display metadata (labels and colors) lives in the frontend —
+// see RANKS/ROLES in `ui/app.js`. The backend only stores the raw id
+// strings the user picked, in profile.json.

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dota Tracker</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-glyph">⚔</span>
+        <div class="brand-text">
+          <h1>Dota Tracker</h1>
+          <span class="subtitle">Match Intelligence</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div id="profileBadge" class="profile-badge" hidden></div>
+        <button id="trackingToggle" class="tracking-toggle" type="button">
+          <span class="dot"></span>
+          <span class="label">Tracking</span>
+        </button>
+      </div>
+    </header>
+
+    <div id="serverError" class="banner banner-error" hidden></div>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="live" type="button">Live</button>
+      <button class="tab" data-tab="history" type="button">History</button>
+      <button class="tab" data-tab="leaderboard" type="button">Leaderboard</button>
+      <button class="tab" data-tab="profile" type="button">Profile</button>
+    </nav>
+
+    <main class="content">
+      <section id="tab-live" class="tab-panel active"></section>
+      <section id="tab-history" class="tab-panel"></section>
+      <section id="tab-leaderboard" class="tab-panel"></section>
+      <section id="tab-profile" class="tab-panel"></section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

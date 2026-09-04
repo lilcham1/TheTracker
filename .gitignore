@@ -1,5 +1,9 @@
-# Rust
-rust-tracker/target/
+# Rust / Tauri
+rust-tracker/src-tauri/target/
+rust-tracker/src-tauri/gen/schemas/
+
+# Node (Tauri CLI)
+rust-tracker/node_modules/
 
 # Electron / Node
 electron-tracker/node_modules/
