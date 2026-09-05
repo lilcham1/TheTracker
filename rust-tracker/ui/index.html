@@ -19,6 +19,10 @@
       </div>
       <div class="topbar-right">
         <div id="profileBadge" class="profile-badge" hidden></div>
+        <button id="overlayToggle" class="tracking-toggle" type="button" title="Show an in-game overlay">
+          <span class="ov-glyph">▣</span>
+          <span class="label">Overlay</span>
+        </button>
         <div id="syncPill" class="sync-pill" title="Cloud sync">
           <span class="dot"></span>
           <span class="label">Cloud</span>
@@ -32,6 +36,11 @@
 
     <div id="serverError" class="banner banner-error" hidden></div>
 
+    <nav class="game-switch" id="gameSwitch">
+      <button class="game active" data-game="dota" type="button">Dota 2</button>
+      <button class="game" data-game="deadlock" type="button">Deadlock</button>
+    </nav>
+
     <nav class="tabs" id="tabs">
       <button class="tab active" data-tab="live" type="button">Live</button>
       <button class="tab" data-tab="history" type="button">History</button>
@@ -39,14 +48,28 @@
       <button class="tab" data-tab="profile" type="button">Profile</button>
     </nav>
 
+    <nav class="tabs" id="dlTabs" hidden>
+      <button class="tab active" data-dltab="dloverview" type="button">Overview</button>
+      <button class="tab" data-dltab="dlmatches" type="button">Matches</button>
+      <button class="tab" data-dltab="dlheroes" type="button">Heroes</button>
+      <button class="tab" data-dltab="dlaccount" type="button">Account</button>
+    </nav>
+
     <main class="content">
       <section id="tab-live" class="tab-panel active"></section>
       <section id="tab-history" class="tab-panel"></section>
       <section id="tab-leaderboard" class="tab-panel"></section>
       <section id="tab-profile" class="tab-panel"></section>
+
+      <section id="tab-dloverview" class="tab-panel"></section>
+      <section id="tab-dlmatches" class="tab-panel"></section>
+      <section id="tab-dlheroes" class="tab-panel"></section>
+      <section id="tab-dlaccount" class="tab-panel"></section>
     </main>
   </div>
 
   <script src="app.js"></script>
+  <script src="deadlock.js"></script>
+  <script src="boot.js"></script>
 </body>
 </html>

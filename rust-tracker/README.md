@@ -188,10 +188,50 @@ launching.
 The on-disk format is unchanged from the older Electron/egui versions, so an
 existing `history.json` can be copied straight in.
 
-## Why only Dota 2, for now
+## Deadlock
 
-CS2 has an official Valve GSI feed too (same mechanism), so it's the
+The Deadlock side works **fundamentally differently** from the Dota side, and
+it's worth understanding why before relying on it.
+
+Dota 2 ships Valve's official Game State Integration: the game itself pushes
+live state to this app several times a second. **Deadlock has no equivalent.**
+Valve publishes no GSI for it, so nothing can read a live Deadlock match
+locally — not this app, not any other.
+
+What exists instead is [deadlock-api.com](https://deadlock-api.com), an
+independent, community-run service that aggregates match data from Valve's
+own client APIs. So the Deadlock tab is:
+
+- **post-match, not live.** Matches appear once the API has ingested them,
+  shortly after a game ends. There are no in-match numbers.
+- **keyed to a Steam account.** You link yours once, under Deadlock →
+  Account. Nothing is read from your machine.
+- **dependent on a third party.** Valve has been tightening rate limits on
+  the underlying APIs, so matches can be delayed or missing. The app says so
+  plainly rather than showing a misleading empty state.
+
+Deliberately not done: nothing reads Deadlock's memory, injects into the
+game, or surfaces information a player couldn't already see. The only live
+signal is "are you currently in a match", from the public active-match
+list, and the overlay shows the hero lineup the game already shows you —
+never opponent identities, ranks or stats.
+
+## Overlay
+
+Both games get an optional in-game overlay: a separate transparent,
+always-on-top, click-through window that floats over the game. It is an
+ordinary desktop window — nothing is injected into either game.
+
+Toggle it from the header. Click-through is on by default so it never eats
+mouse input; turn it off temporarily to drag the overlay somewhere else,
+then turn it back on.
+
+For Dota it mirrors the live GSI data (clock, last hits, deaths and gold
+lost, Roshan timer, checkpoints). For Deadlock — which has no live feed — it
+shows the current match and lineup only.
+
+## Why not CS2 or Valorant
+
+CS2 has an official Valve GSI feed (same mechanism as Dota), so it's the
 natural next game to add. Valorant has no live-data feed at all under Riot's
-official policy. Deadlock has no official Valve API yet. All were
-deliberately left out so what's here stays 100% built on official, allowed
-data access.
+official policy, and post-match stats need an approved Riot developer app.

@@ -32,6 +32,13 @@
   box-sizing: border-box;
 }
 
+/* Any element carrying the hidden attribute must stay hidden. Without this,
+   component rules like .tabs{display:flex} silently override the browser's
+   [hidden]{display:none}, and "hidden" panels render anyway. */
+[hidden] {
+  display: none !important;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -312,6 +319,65 @@ html, body {
   background: var(--red-soft);
   color: #ffb3ac;
   border: 1px solid rgba(226, 104, 95, 0.35);
+}
+
+/* ---------- Game switcher ----------
+   Dota and Deadlock are separate products with separate data models, so the
+   switch is a deliberate top-level mode change, not another tab. The accent
+   shifts with it so it's obvious which game you're looking at. */
+
+.game-switch {
+  display: flex;
+  gap: 6px;
+  margin: 2px 18px 0;
+  flex-shrink: 0;
+}
+
+.game {
+  flex: 1;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-faint);
+  padding: 7px 0;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.game:hover {
+  color: var(--text);
+}
+
+.game.active {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+/* Deadlock swaps the gold accent for its cooler palette. */
+:root {
+  --accent: #d9ac5b;
+  --accent-strong: #e0c186;
+  --accent-wash: rgba(217, 172, 91, 0.14);
+}
+
+body.theme-deadlock {
+  --accent: #4fa8c9;
+  --accent-strong: #7fc9e4;
+  --accent-wash: rgba(79, 168, 201, 0.14);
+  --gold: #4fa8c9;
+  --gold-soft: #7fc9e4;
+}
+
+.ov-glyph {
+  font-size: 12px;
+}
+
+.tracking-toggle.on .ov-glyph {
+  color: var(--green);
 }
 
 /* ---------- Tabs ---------- */
@@ -1015,4 +1081,295 @@ html, body {
 
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* ---------- Deadlock views ---------- */
+
+.dl-dim {
+  color: var(--text-faint);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 4px 0 1px;
+}
+
+.stat-value.good { color: var(--green); }
+.stat-value.dl-small { font-size: 15px; }
+
+.dl-rank-card {
+  background: linear-gradient(160deg, var(--accent-wash), var(--card) 65%);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.dl-rank-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dl-rank-label {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.dl-rank-right { text-align: right; }
+
+.dl-form {
+  display: flex;
+  align-items: center;
+  margin-top: 12px;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.form-pip {
+  width: 19px;
+  height: 19px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.form-w { background: var(--green-soft); color: var(--green); }
+.form-l { background: var(--red-soft); color: var(--red); }
+.form-x { background: rgba(168,158,151,0.14); color: var(--text-faint); }
+
+.dl-kda-row {
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+}
+
+.dl-kda-row span {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-k { color: var(--green); }
+.dl-d { color: var(--red); }
+.dl-a { color: var(--blue); }
+
+/* Match rows */
+
+.dl-match {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border-soft);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.dl-match.win { border-left-color: var(--green); }
+.dl-match.loss { border-left-color: var(--red); }
+.dl-match.neutral { border-left-color: var(--text-faint); }
+
+.dl-hero-img {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--bg-raised);
+  flex-shrink: 0;
+}
+
+.dl-hero-img.sm { width: 38px; height: 38px; }
+
+.dl-match-main { flex: 1; min-width: 0; }
+
+.dl-match-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.dl-hero-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dl-outcome {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.dl-outcome.win { color: var(--green); }
+.dl-outcome.loss { color: var(--red); }
+.dl-outcome.neutral { color: var(--text-faint); }
+
+.dl-match-sub {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-kda { font-weight: 600; }
+
+.dl-match-meta {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-top: 3px;
+}
+
+.dl-match-meta.mono {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+/* Hero breakdown */
+
+.dl-hero-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.dl-hero-row:hover { border-color: var(--accent); }
+
+.dl-hero-main { flex: 1; min-width: 0; }
+
+.dl-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.dl-wr { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dl-wr.good { color: var(--green); }
+.dl-wr.bad { color: var(--red); }
+
+.dl-winbar {
+  height: 4px;
+  background: var(--bg-raised);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 6px 0 4px;
+}
+
+.dl-winbar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+/* Account linking */
+
+.dl-linked, .dl-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dl-result {
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.dl-result:hover {
+  background: var(--bg-raised);
+  border-color: var(--accent);
+}
+
+.dl-result-main { flex: 1; min-width: 0; }
+
+.dl-results {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.dl-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+
+.dl-avatar.sm { width: 32px; height: 32px; }
+
+/* Live Deadlock match */
+
+.dl-live-card {
+  border-color: rgba(111, 209, 138, 0.35);
+  background: linear-gradient(160deg, rgba(111, 209, 138, 0.08), var(--card) 65%);
+}
+
+.dl-live-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dl-live-title { font-weight: 700; flex: 1; }
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(111, 209, 138, 0.8);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.dl-live-teams {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ov-heroes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.ov-hero-chip {
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-dim);
+}
+
+.ov-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent-strong);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
 }

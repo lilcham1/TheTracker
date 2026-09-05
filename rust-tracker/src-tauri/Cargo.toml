@@ -1,6 +1,6 @@
 [package]
 name = "dota-tracker"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Native desktop Dota 2 live match tracker built on Valve's official Game State Integration (GSI) feed."
 
@@ -20,6 +20,13 @@ convex = "0.10"
 anyhow = "1"
 tokio = { version = "1", features = ["sync"] }
 uuid = { version = "1", features = ["v4"] }
+# Deadlock data comes from the community REST API (see deadlock.rs) — there
+# is no official Valve feed for it the way Dota has GSI.
+reqwest = { version = "0.12", features = ["json"] }
+
+[dev-dependencies]
+# The Deadlock integration tests are async and hit the live community API.
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [profile.release]
 opt-level = 2

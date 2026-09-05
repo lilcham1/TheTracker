@@ -1,0 +1,175 @@
+/* Overlay styling. The window itself is transparent, so the page must not
+   paint a background — only the card does. Everything is sized generously
+   and high-contrast because it's read at a glance, over a moving game. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #f1ece6;
+  user-select: none;
+  cursor: default;
+  overflow: hidden;
+}
+
+.overlay {
+  margin: 8px;
+  border-radius: 12px;
+  /* Semi-opaque rather than solid: readable without blacking out the game. */
+  background: rgba(16, 13, 18, 0.82);
+  border: 1px solid rgba(217, 172, 91, 0.35);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.ov-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 8px;
+}
+
+.ov-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #756b66;
+  flex-shrink: 0;
+}
+
+.ov-dot.live {
+  background: #6fd18a;
+  box-shadow: 0 0 8px rgba(111, 209, 138, 0.8);
+}
+
+.ov-title {
+  flex: 1;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ov-clock {
+  font-variant-numeric: tabular-nums;
+  color: #d9ac5b;
+  font-weight: 700;
+}
+
+.ov-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ov-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.ov-label {
+  color: #a89e97;
+  font-size: 11.5px;
+}
+
+.ov-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-value.danger {
+  color: #e2685f;
+}
+
+.ov-value.good {
+  color: #6fd18a;
+}
+
+.ov-rosh {
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ov-rosh-status {
+  font-weight: 700;
+  font-size: 12.5px;
+  margin-bottom: 2px;
+}
+
+.ov-rosh-status.dead {
+  color: #e2685f;
+}
+.ov-rosh-status.maybe {
+  color: #e0c05b;
+}
+.ov-rosh-status.alive {
+  color: #6fd18a;
+}
+
+.ov-rosh-sub {
+  font-size: 11px;
+  color: #a89e97;
+}
+
+.ov-checkpoints {
+  display: flex;
+  gap: 4px;
+}
+
+.ov-cp {
+  flex: 1;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 4px 2px;
+}
+
+.ov-cp-min {
+  font-size: 9px;
+  color: #756b66;
+}
+
+.ov-cp-val {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-cp-val.pending {
+  color: #4d4741;
+  font-weight: 400;
+}
+
+.ov-hint {
+  font-size: 10.5px;
+  color: #756b66;
+  line-height: 1.45;
+}
+
+.ov-heroes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ov-hero-chip {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #cfc7c0;
+}

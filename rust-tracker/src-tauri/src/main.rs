@@ -16,10 +16,12 @@
 
 mod auth;
 mod convex_sync;
+mod deadlock;
 mod device_id;
 mod gsi;
 mod heroes;
 mod model;
+mod overlay;
 mod state;
 mod storage;
 
@@ -38,6 +40,7 @@ struct AppState {
     server_error: Arc<Mutex<Option<String>>>,
     syncer: Syncer,
     auth: SharedAuth,
+    heroes: deadlock::SharedHeroes,
 }
 
 #[derive(Serialize)]
@@ -187,6 +190,101 @@ async fn sign_out(app_state: tauri::State<'_, AppState>) -> Result<AuthState, St
     Ok(status)
 }
 
+// ---------- Deadlock ----------
+
+#[tauri::command]
+fn deadlock_link_status() -> deadlock::DeadlockLink {
+    deadlock::load_link()
+}
+
+#[tauri::command]
+async fn deadlock_search(query: String) -> Result<Vec<deadlock::SteamProfile>, String> {
+    if query.trim().len() < 2 {
+        return Err("Type at least two characters to search.".to_string());
+    }
+    deadlock::search_players(query.trim()).await
+}
+
+#[tauri::command]
+fn deadlock_link(
+    account_id: u64,
+    personaname: String,
+    avatar: Option<String>,
+) -> deadlock::DeadlockLink {
+    let link = deadlock::DeadlockLink {
+        account_id: Some(account_id),
+        personaname: Some(personaname),
+        avatar,
+    };
+    deadlock::save_link(&link);
+    link
+}
+
+#[tauri::command]
+fn deadlock_unlink() -> deadlock::DeadlockLink {
+    let empty = deadlock::DeadlockLink::default();
+    deadlock::save_link(&empty);
+    empty
+}
+
+#[derive(Serialize)]
+struct DeadlockOverview {
+    matches: Vec<deadlock::DeadlockMatch>,
+    summary: deadlock::DeadlockSummary,
+    rank: Option<deadlock::DeadlockRank>,
+}
+
+#[tauri::command]
+async fn deadlock_overview(
+    limit: Option<usize>,
+    app_state: tauri::State<'_, AppState>,
+) -> Result<DeadlockOverview, String> {
+    let link = deadlock::load_link();
+    let Some(account_id) = link.account_id else {
+        return Err("No Deadlock account linked yet.".to_string());
+    };
+    let cache = app_state.heroes.clone();
+
+    let matches = deadlock::match_history(account_id, &cache, limit.unwrap_or(50)).await?;
+    let summary = deadlock::summarize(&matches);
+    // A missing rank shouldn't sink the whole view — plenty of accounts
+    // simply haven't been ranked yet.
+    let rank = deadlock::rank(account_id).await.unwrap_or(None);
+
+    Ok(DeadlockOverview { matches, summary, rank })
+}
+
+#[tauri::command]
+async fn deadlock_live(
+    app_state: tauri::State<'_, AppState>,
+) -> Result<Option<deadlock::DeadlockLive>, String> {
+    let Some(account_id) = deadlock::load_link().account_id else { return Ok(None) };
+    let cache = app_state.heroes.clone();
+    deadlock::live_match(account_id, &cache).await
+}
+
+// ---------- Overlay ----------
+
+#[tauri::command]
+fn overlay_show(app: tauri::AppHandle) -> Result<(), String> {
+    overlay::show(&app)
+}
+
+#[tauri::command]
+fn overlay_hide(app: tauri::AppHandle) -> Result<(), String> {
+    overlay::hide(&app)
+}
+
+#[tauri::command]
+fn overlay_visible(app: tauri::AppHandle) -> bool {
+    overlay::is_visible(&app)
+}
+
+#[tauri::command]
+fn overlay_click_through(app: tauri::AppHandle, click_through: bool) -> Result<(), String> {
+    overlay::set_click_through(&app, click_through)
+}
+
 fn main() {
     let tracker = Arc::new(Mutex::new(Tracker::new()));
     let server_error: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
@@ -217,6 +315,7 @@ fn main() {
                 server_error: server_error.clone(),
                 syncer,
                 auth,
+                heroes: Arc::new(Mutex::new(deadlock::HeroCache::default())),
             });
             Ok(())
         })
@@ -237,6 +336,16 @@ fn main() {
             auth_status,
             sign_in,
             sign_out,
+            deadlock_link_status,
+            deadlock_search,
+            deadlock_link,
+            deadlock_unlink,
+            deadlock_overview,
+            deadlock_live,
+            overlay_show,
+            overlay_hide,
+            overlay_visible,
+            overlay_click_through,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

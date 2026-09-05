@@ -164,6 +164,9 @@ function escapeHtml(s) {
 // ---------- App state ----------
 
 const state = {
+  game: "dota", // "dota" | "deadlock"
+  dlTab: "dloverview",
+  overlay: { visible: false, clickThrough: true },
   tab: "live",
   live: null,
   history: [],
@@ -927,12 +930,40 @@ function renderTopbarProfile() {
 
 function setTab(tab) {
   state.tab = tab;
-  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+  document.querySelectorAll("#tabs .tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
   document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
   if (tab === "history") {
     loadHistory().then(renderHistory);
   } else if (tab === "leaderboard") {
     loadHistory().then(renderLeaderboard);
+  }
+}
+
+function setDeadlockTab(tab) {
+  state.dlTab = tab;
+  document.querySelectorAll("#dlTabs .tab").forEach((t) => t.classList.toggle("active", t.dataset.dltab === tab));
+  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
+  dlRender();
+}
+
+/// Switches between the two games. They're genuinely different products —
+/// Dota is a live local feed, Deadlock is a post-match API lookup — so each
+/// gets its own tab strip rather than being forced into shared tabs.
+function setGame(game) {
+  state.game = game;
+  document.querySelectorAll(".game").forEach((b) => b.classList.toggle("active", b.dataset.game === game));
+  document.getElementById("tabs").hidden = game !== "dota";
+  document.getElementById("dlTabs").hidden = game !== "deadlock";
+  document.body.classList.toggle("theme-deadlock", game === "deadlock");
+
+  if (game === "dota") {
+    setTab(state.tab);
+  } else {
+    setDeadlockTab(state.dlTab);
+    dlRefreshLink().then(() => {
+      dlRender();
+      dlLoad();
+    });
   }
 }
 
@@ -969,6 +1000,34 @@ function refreshLive() {
   });
 }
 
+/// The overlay is a separate always-on-top window. Opening it also drops
+/// it into click-through mode so it can't steal input from the game; the
+/// "Move" affordance temporarily hands input back so it can be dragged.
+async function toggleOverlay() {
+  try {
+    if (state.overlay.visible) {
+      await invoke("overlay_hide");
+      state.overlay.visible = false;
+    } else {
+      await invoke("overlay_show");
+      state.overlay.visible = true;
+      state.overlay.clickThrough = true;
+      await invoke("overlay_click_through", { clickThrough: true });
+    }
+  } catch (e) {
+    console.error("overlay toggle failed", e);
+  }
+  renderOverlayToggle();
+  if (state.tab === "profile" && state.game === "dota") renderProfile();
+}
+
+function renderOverlayToggle() {
+  const btn = document.getElementById("overlayToggle");
+  if (!btn) return;
+  btn.classList.toggle("on", state.overlay.visible);
+  btn.querySelector(".label").textContent = state.overlay.visible ? "Overlay on" : "Overlay";
+}
+
 function refreshSyncStatus() {
   return Promise.all([invoke("sync_status"), invoke("auth_status")])
     .then(([s, a]) => {
@@ -996,6 +1055,15 @@ function wireTopbar() {
     const btn = e.target.closest(".tab");
     if (btn) setTab(btn.dataset.tab);
   });
+  document.getElementById("dlTabs").addEventListener("click", (e) => {
+    const btn = e.target.closest(".tab");
+    if (btn) setDeadlockTab(btn.dataset.dltab);
+  });
+  document.getElementById("gameSwitch").addEventListener("click", (e) => {
+    const btn = e.target.closest(".game");
+    if (btn) setGame(btn.dataset.game);
+  });
+  document.getElementById("overlayToggle").addEventListener("click", toggleOverlay);
   document.addEventListener("click", () => {
     if (state.openTypeMenu !== null) {
       state.openTypeMenu = null;
@@ -1010,6 +1078,8 @@ async function boot() {
   state.profileDraft = { ...state.profile };
   state.deviceId = await invoke("device_identity").catch(() => null);
   state.auth = (await invoke("auth_status").catch(() => null)) || { signedIn: false, email: null };
+  state.overlay.visible = await invoke("overlay_visible").catch(() => false);
+  renderOverlayToggle();
   renderTopbarProfile();
   renderProfile();
   await refreshLive();
@@ -1017,11 +1087,28 @@ async function boot() {
   await loadHistory();
   renderHistory();
   renderLeaderboard();
+
+  // Deadlock's link is cheap to read (local file); its match data is only
+  // fetched when that tab is actually opened.
+  await dlRefreshLink();
+
   setInterval(refreshLive, 700);
   setInterval(refreshSyncStatus, 1500);
-}
 
-boot();
+  // Live Deadlock presence, polled slowly — it hits a rate-limited
+  // community API, unlike Dota's local feed.
+  const pollDeadlockLive = async () => {
+    if (!DL.link.accountId) return;
+    try {
+      DL.live = await invoke("deadlock_live");
+      if (state.game === "deadlock" && state.dlTab === "dloverview") dlRender();
+    } catch (_) {
+      /* community API is allowed to be flaky */
+    }
+  };
+  pollDeadlockLive();
+  setInterval(pollDeadlockLive, 45000);
+}
 
 // ---------- Mock backend (only used outside Tauri, for visual preview) ----------
 
@@ -1060,6 +1147,31 @@ function mockInvoke(cmd, args) {
       return Promise.resolve({ connected: true, pending: 0, synced: 3, lastError: null, lastSync: "12:34:56" });
     case "sync_all":
       return Promise.resolve(mock.history.length);
+    case "overlay_visible":
+      return Promise.resolve(false);
+    case "overlay_show":
+    case "overlay_hide":
+    case "overlay_click_through":
+      return Promise.resolve(null);
+    case "deadlock_link_status":
+      return Promise.resolve(mock.dlLink ||= { accountId: null, personaname: null, avatar: null });
+    case "deadlock_search":
+      return Promise.resolve([
+        { accountId: 850402858, personaname: "恵lilcham", avatar: null, profileUrl: null },
+        { accountId: 111111111, personaname: "lilcham alt", avatar: null, profileUrl: null },
+      ]);
+    case "deadlock_link":
+      mock.dlLink = { accountId: args.accountId, personaname: args.personaname, avatar: args.avatar };
+      return Promise.resolve(mock.dlLink);
+    case "deadlock_unlink":
+      mock.dlLink = { accountId: null, personaname: null, avatar: null };
+      return Promise.resolve(mock.dlLink);
+    case "deadlock_live":
+      return Promise.resolve(null);
+    case "deadlock_overview": {
+      const matches = mockDeadlockMatches();
+      return Promise.resolve({ matches, summary: mockDeadlockSummary(matches), rank: { badge: 26, tier: 2, subrank: 6, tierName: "Seeker", label: "Seeker 6" } });
+    }
     case "global_leaderboard":
       return Promise.resolve([
         { userId: "someone-else", username: "Dendi", heroName: "npc_dota_hero_nevermore", gameType: "ranked", date: "", value: 214 },
@@ -1069,6 +1181,52 @@ function mockInvoke(cmd, args) {
     default:
       return Promise.resolve(null);
   }
+}
+
+function mockDeadlockMatches() {
+  const heroes = ["Yamato", "Infernus", "Seven", "Lash", "Bebop"];
+  const out = [];
+  for (let i = 0; i < 14; i++) {
+    const outcome = i % 3 === 0 ? "loss" : i % 7 === 5 ? "abandoned" : "win";
+    out.push({
+      matchId: 103485245 - i,
+      heroId: 27,
+      heroName: heroes[i % heroes.length],
+      heroImage: null,
+      startTime: Math.floor(Date.now() / 1000) - i * 7200,
+      durationSeconds: 1800 + i * 60,
+      kills: 4 + (i % 9),
+      deaths: 3 + (i % 6),
+      assists: 6 + (i % 8),
+      netWorth: 28000 + i * 900,
+      lastHits: 100 + i * 7,
+      denies: i % 12,
+      heroLevel: 24 + (i % 12),
+      outcome,
+      abandoned: outcome === "abandoned",
+    });
+  }
+  return out;
+}
+
+function mockDeadlockSummary(matches) {
+  const scored = matches.filter((m) => m.outcome === "win" || m.outcome === "loss");
+  const wins = scored.filter((m) => m.outcome === "win").length;
+  const k = matches.reduce((s, m) => s + m.kills, 0);
+  const d = matches.reduce((s, m) => s + m.deaths, 0);
+  const a = matches.reduce((s, m) => s + m.assists, 0);
+  return {
+    matches: matches.length,
+    wins,
+    losses: scored.length - wins,
+    winRate: scored.length ? (wins / scored.length) * 100 : 0,
+    kills: k,
+    deaths: d,
+    assists: a,
+    kda: (k + a) / Math.max(d, 1),
+    avgSouls: Math.round(matches.reduce((s, m) => s + m.netWorth, 0) / matches.length),
+    bestHero: "Yamato",
+  };
 }
 
 function mockCurrentMatch() {
