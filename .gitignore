@@ -8,3 +8,10 @@ TheTracker/node_modules/
 # OS cruft
 .DS_Store
 Thumbs.db
+
+# Built app kept at the top level for convenience — not committed.
+# A 35 MB binary would be added to history on every release and can never
+# be removed from it; the GitHub Releases page already distributes these.
+/TheTracker.exe
+/TheTracker-Setup.exe
+/WebView2Loader.dll
