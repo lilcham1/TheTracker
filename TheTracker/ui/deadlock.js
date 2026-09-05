@@ -287,9 +287,23 @@ function dlRenderHeroes() {
             ${(h.k / h.played).toFixed(1)}/${(h.d / h.played).toFixed(1)}/${(h.a / h.played).toFixed(1)} avg
           </div>
         </div>
+        <button class="chip fav-btn" data-dl-fav="${escapeHtml(h.name)}" title="Set as favourite hero">${
+          state.prefs.favorites.deadlock === h.name ? "★" : "☆"
+        }</button>
       </div>`;
     })
     .join("");
+
+  root.querySelectorAll("[data-dl-fav]").forEach((el) =>
+    el.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const name = el.dataset.dlFav;
+      const next = state.prefs.favorites.deadlock === name ? null : name;
+      state.prefs = await invoke("set_favorite_hero", { game: "deadlock", hero: next });
+      dlRenderHeroes();
+      dlRenderFavorite();
+    })
+  );
 
   root.querySelectorAll("[data-dl-hero]").forEach((el) =>
     el.addEventListener("click", () => {
@@ -455,8 +469,11 @@ function dlRender() {
     case "dlheroes":
       dlRenderHeroes();
       break;
-    case "dlaccount":
-      dlRenderAccount();
+    case "dlfavorite":
+      dlRenderFavorite();
+      break;
+    case "dlbuilds":
+      dlRenderBuilds();
       break;
     default:
       dlRenderOverview();
