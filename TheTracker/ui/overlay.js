@@ -1,12 +1,16 @@
-// Overlay renderer. Runs in its own transparent, always-on-top window and
-// polls the same Tauri commands the main window does.
+// Overlay renderer.
 //
-// Dota only. Deadlock publishes no live feed, so a Deadlock overlay could
-// show nothing beyond "you are in a match" — not worth floating a window
-// over the game for.
+// Dota only — Deadlock publishes no live feed, so an overlay there could
+// say nothing beyond "you are in a match".
 //
-// Everything drawn here is either the player's own GSI state or arithmetic
-// on the match clock they can already see. Nothing is read out of the game
+// The guiding rule is that a timer earns its place only while it matters.
+// A wall of countdowns that are all six minutes away is noise you learn to
+// ignore; a single chip that appears twenty seconds before a rune is
+// something you actually use. So each piece has a relevance window, and
+// outside that window it simply isn't drawn.
+//
+// Everything shown is either the player's own GSI state or arithmetic on
+// the match clock they can already see. Nothing is read from the game
 // process and nothing reveals an opponent's state.
 
 const invoke = window.__TAURI__ ? window.__TAURI__.core.invoke : null;
@@ -24,51 +28,25 @@ const WISDOM_EVERY = 420;
 
 // Neutral camps spawn on the minute, so the stack pull goes out at :53.
 const STACK_AT = 53;
-
-// Day and night alternate every 5 minutes.
 const DAY_CYCLE = 300;
 
-function fmtClock(seconds) {
-  if (seconds === null || seconds === undefined) return "--:--";
-  const neg = seconds < 0;
-  const abs = Math.floor(Math.abs(seconds));
-  return `${neg ? "-" : ""}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, "0")}`;
-}
+// How early each thing is worth showing. These are the numbers that decide
+// whether the overlay is useful or just busy.
+const LEAD = {
+  rune: 45, // a rune is worth walking to about here
+  stack: 12, // enough time to send a camp
+  daynight: 30, // enough to reposition before vision changes
+};
+
+let SETTINGS = {
+  opacity: 0.85,
+  scale: 1,
+  dota: { stats: true, roshan: true, runes: true, stacks: true, daynight: true },
+};
 
 function countdown(seconds) {
   const s = Math.max(0, Math.floor(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
-
-function heroDisplayName(raw) {
-  if (!raw) return "Unknown Hero";
-  const clean = raw.startsWith("npc_dota_hero_") ? raw.slice(14) : raw;
-  const overrides = {
-    antimage: "Anti-Mage",
-    nevermore: "Shadow Fiend",
-    windrunner: "Windranger",
-    queenofpain: "Queen of Pain",
-    skeleton_king: "Wraith King",
-    doom_bringer: "Doom",
-    necrolyte: "Necrophos",
-    furion: "Nature's Prophet",
-    life_stealer: "Lifestealer",
-    rattletrap: "Clockwerk",
-    obsidian_destroyer: "Outworld Destroyer",
-    treant: "Treant Protector",
-    wisp: "Io",
-    zuus: "Zeus",
-    shredder: "Timbersaw",
-    magnataur: "Magnus",
-    centaur: "Centaur Warrunner",
-    abyssal_underlord: "Underlord",
-    vengefulspirit: "Vengeful Spirit",
-    keeper_of_the_light: "Keeper of the Light",
-  };
-  return (
-    overrides[clean] ||
-    clean.split("_").map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" ")
-  );
 }
 
 function esc(s) {
@@ -79,28 +57,26 @@ function totalGoldLost(deaths) {
   return deaths.reduce((sum, d) => sum + (d.goldLost ?? 0), 0);
 }
 
-// ---------- Settings ----------
+/// Seconds until the next multiple of `every`, counting from `from`.
+function nextEvery(clock, every, from = 0) {
+  if (clock < from) return from - clock;
+  return every - ((clock - from) % every);
+}
 
-let OV_SETTINGS = {
-  opacity: 0.85,
-  scale: 1,
-  dota: { stats: true, roshan: true, runes: true, stacks: true, daynight: true },
-};
+function chip(label, value, tone = "") {
+  return `<div class="chip ${tone}"><span class="label">${label}</span><span class="value">${value}</span></div>`;
+}
 
-async function refreshOverlaySettings() {
+async function refreshSettings() {
   if (!invoke) return;
   try {
     const p = await invoke("get_prefs");
     if (p && p.overlay) {
-      OV_SETTINGS = {
-        ...OV_SETTINGS,
-        ...p.overlay,
-        dota: { ...OV_SETTINGS.dota, ...(p.overlay.dota || {}) },
-      };
-      const card = document.getElementById("overlay");
-      if (card) {
-        card.style.opacity = String(OV_SETTINGS.opacity);
-        card.style.fontSize = (13 * (OV_SETTINGS.scale || 1)).toFixed(1) + "px";
+      SETTINGS = { ...SETTINGS, ...p.overlay, dota: { ...SETTINGS.dota, ...(p.overlay.dota || {}) } };
+      const root = document.getElementById("overlay");
+      if (root) {
+        root.style.opacity = String(SETTINGS.opacity);
+        root.style.fontSize = (12.5 * (SETTINGS.scale || 1)).toFixed(1) + "px";
       }
     }
   } catch (_) {
@@ -108,133 +84,118 @@ async function refreshOverlaySettings() {
   }
 }
 
-// ---------- Timer maths ----------
+// ---------- Contextual pieces ----------
+//
+// Each returns "" when it isn't currently worth screen space.
 
-/// Seconds until the next multiple of `every`, counting from `from`.
-function nextEvery(clock, every, from = 0) {
-  if (clock < from) return from - clock;
-  return every - ((clock - from) % every);
-}
+function roshanChip(roshan, clock) {
+  // Nothing to say while Roshan is simply alive — that is the default state
+  // and a chip repeating it all game is pure noise.
+  if (roshan.lastDeathClock === null || roshan.lastDeathClock === undefined) return "";
 
-function row(label, value, tone = "") {
-  return `
-    <div class="ov-row">
-      <span class="ov-label">${label}</span>
-      <span class="ov-value ${tone}">${value}</span>
-    </div>`;
-}
-
-function roshanRow(roshan, clock) {
-  if (roshan.lastDeathClock === null || roshan.lastDeathClock === undefined) {
-    return row("Roshan", "Alive", "good");
-  }
   const min = roshan.lastDeathClock + 480;
   const max = roshan.lastDeathClock + 660;
 
-  if (clock < min) return row("Roshan", countdown(min - clock), "danger");
-  if (clock < max) return row("Roshan &middot; maybe up", countdown(max - clock), "warn");
-  return row("Roshan", "Alive", "good");
+  if (clock < min) return chip("Roshan", countdown(min - clock), "urgent");
+  if (clock < max) return chip("Roshan maybe up", countdown(max - clock), "soon");
+
+  // Past the window he is definitely up; worth saying once he could be
+  // contested, but it stops being news after a while.
+  if (clock < max + 120) return chip("Roshan", "up", "good");
+  return "";
 }
 
-function runeRows(clock) {
-  const out = [row("Bounty rune", countdown(nextEvery(clock, BOUNTY_EVERY)))];
+function runeChips(clock) {
+  const out = [];
 
-  // Water runes exist only at 2:00 and 4:00. Afterwards the row would be a
-  // permanent "never", so it disappears rather than lying.
-  const nextWater = WATER_TIMES.find((t) => t > clock);
-  if (nextWater !== undefined) out.push(row("Water rune", countdown(nextWater - clock)));
+  const bounty = nextEvery(clock, BOUNTY_EVERY);
+  if (bounty <= LEAD.rune) out.push(chip("Bounty", countdown(bounty), bounty <= 15 ? "urgent" : "soon"));
 
-  out.push(
-    row(
-      "Power rune",
-      clock < POWER_FROM
-        ? countdown(POWER_FROM - clock)
-        : countdown(nextEvery(clock, POWER_EVERY, POWER_FROM))
-    )
-  );
-  out.push(row("Wisdom rune", countdown(nextEvery(clock, WISDOM_EVERY, WISDOM_EVERY))));
+  const water = WATER_TIMES.find((t) => t > clock);
+  if (water !== undefined && water - clock <= LEAD.rune) {
+    const t = water - clock;
+    out.push(chip("Water", countdown(t), t <= 15 ? "urgent" : "soon"));
+  }
+
+  if (clock >= POWER_FROM - LEAD.rune) {
+    const power = clock < POWER_FROM ? POWER_FROM - clock : nextEvery(clock, POWER_EVERY, POWER_FROM);
+    if (power <= LEAD.rune) out.push(chip("Power", countdown(power), power <= 15 ? "urgent" : "soon"));
+  }
+
+  const wisdom = nextEvery(clock, WISDOM_EVERY, WISDOM_EVERY);
+  if (wisdom <= LEAD.rune) out.push(chip("Wisdom", countdown(wisdom), wisdom <= 15 ? "urgent" : "soon"));
+
   return out.join("");
 }
 
-function stackRow(clock) {
+function stackChip(clock) {
   const intoMinute = clock % 60;
   const until = intoMinute <= STACK_AT ? STACK_AT - intoMinute : 60 + STACK_AT - intoMinute;
-  return row("Stack camps", countdown(until), until <= 5 ? "warn" : "");
+  if (until > LEAD.stack) return "";
+  return chip("Stack", countdown(until), until <= 5 ? "urgent" : "soon");
 }
 
-function dayNightRow(clock, isDaytime) {
-  // GSI reports daytime directly, so only the flip needs computing.
+function dayNightChip(clock, isDaytime) {
   const until = DAY_CYCLE - (clock % DAY_CYCLE);
-  const now = isDaytime === false ? "Night" : "Day";
-  return row(`${now} &rarr; ${now === "Day" ? "night" : "day"}`, countdown(until));
+  if (until > LEAD.daynight) return "";
+  const next = isDaytime === false ? "Day" : "Night";
+  return chip(next, countdown(until), "soon");
 }
 
-// ---------- Renders ----------
+// ---------- Render ----------
 
-function renderDota(m) {
-  document.getElementById("ovDot").classList.add("live");
-  document.getElementById("ovTitle").textContent = heroDisplayName(m.heroName);
-  document.getElementById("ovClock").textContent = fmtClock(m.lastClockTime);
-
-  const d = OV_SETTINGS.dota || {};
+function renderMatch(m) {
+  const d = SETTINGS.dota || {};
   const clock = m.lastClockTime || 0;
   const parts = [];
 
+  // The player's own line stays up, because it is the one thing that is
+  // always relevant while playing.
   if (d.stats) {
     parts.push(
-      row("Kills / deaths", `${m.kills} / ${m.deaths.length}`) +
-        row("Last hits / denies", `${m.lastHits} / ${m.denies}`) +
-        row("Gold lost", `${totalGoldLost(m.deaths)}g`, "danger")
+      chip("KDA", `${m.kills} / ${m.deaths.length}`) +
+        chip("LH", `${m.lastHits}`) +
+        (totalGoldLost(m.deaths) > 0 ? chip("Lost", `${totalGoldLost(m.deaths)}g`, "urgent") : "")
     );
   }
 
-  const timers = d.roshan || d.runes || d.stacks || d.daynight;
-  if (d.stats && timers) parts.push(`<div class="ov-sep"></div>`);
+  if (d.roshan) parts.push(roshanChip(m.roshan, clock));
+  if (d.runes) parts.push(runeChips(clock));
+  if (d.stacks) parts.push(stackChip(clock));
+  if (d.daynight) parts.push(dayNightChip(clock, m.daytime));
 
-  if (d.roshan) parts.push(roshanRow(m.roshan, clock));
-  if (d.runes) parts.push(runeRows(clock));
-  if (d.stacks) parts.push(stackRow(clock));
-  if (d.daynight) parts.push(dayNightRow(clock, m.daytime));
-
-  if (!parts.length) {
-    parts.push(`<div class="ov-hint">All panels are hidden — turn some on in Overlay Settings.</div>`);
-  }
-
-  document.getElementById("ovBody").innerHTML = parts.join("");
+  document.getElementById("overlay").innerHTML = parts.join("");
 }
 
-function renderIdle(message) {
-  document.getElementById("ovDot").classList.remove("live");
-  document.getElementById("ovTitle").textContent = "TheTracker";
-  document.getElementById("ovClock").textContent = "";
-  document.getElementById("ovBody").innerHTML = `<div class="ov-hint">${esc(message)}</div>`;
+function renderIdle() {
+  // With auto-show on, this is only reached if the overlay was opened by
+  // hand outside a match. Say why it is empty rather than showing nothing.
+  document.getElementById("overlay").innerHTML =
+    `<div class="hint">TheTracker — waiting for a Dota 2 match. This hides itself when no game is running.</div>`;
 }
-
-// ---------- Loop ----------
-//
-// The GSI feed is local, so polling it every second costs nothing.
 
 async function tick() {
   if (!invoke) {
-    renderIdle("Overlay preview — not running inside the app.");
+    document.getElementById("overlay").innerHTML =
+      `<div class="hint">Overlay preview — not running inside the app.</div>`;
     return;
   }
 
   try {
     const live = await invoke("get_live_state");
     if (live && live.current && !live.current.ended) {
-      renderDota(live.current);
+      renderMatch(live.current);
       return;
     }
   } catch (_) {
-    // The listener may not be up yet; the idle message below is honest either way.
+    // The GSI listener may not be up yet; idle is honest either way.
   }
 
-  renderIdle("Waiting for a Dota 2 match. Start one with GSI enabled and this fills in by itself.");
+  renderIdle();
 }
 
-refreshOverlaySettings();
+refreshSettings();
 tick();
 setInterval(tick, 1000);
-// Settings change rarely, so a slow refresh keeps the window in sync without churn.
-setInterval(refreshOverlaySettings, 3000);
+// Settings change rarely; a slow refresh keeps this in sync without churn.
+setInterval(refreshSettings, 3000);

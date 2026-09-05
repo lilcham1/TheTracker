@@ -432,6 +432,40 @@ fn overlay_click_through(app: tauri::AppHandle, click_through: bool) -> Result<(
     overlay::set_click_through(&app, click_through)
 }
 
+/// Opens the overlay when a match starts and closes it when the match ends.
+///
+/// Polled rather than event-driven because the tracker state is already
+/// polled by the UI; one more cheap read every two seconds is far simpler
+/// than threading a callback through the GSI listener.
+///
+/// Only acts on transitions, so a player who closes the overlay by hand
+/// mid-match does not get it forced back open a second later.
+fn spawn_overlay_watcher(app: tauri::AppHandle, tracker: Arc<Mutex<Tracker>>) {
+    std::thread::spawn(move || {
+        let mut was_live = false;
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+
+            let live = tracker
+                .lock()
+                .ok()
+                .and_then(|t| t.current.as_ref().map(|m| !m.ended))
+                .unwrap_or(false);
+
+            if live == was_live {
+                continue;
+            }
+            was_live = live;
+
+            if !prefs::load().overlay.auto {
+                continue;
+            }
+
+            let _ = if live { overlay::show(&app) } else { overlay::hide(&app) };
+        }
+    });
+}
+
 fn main() {
     // Must run before anything reads history/profile files.
     storage::migrate_legacy_dir();
@@ -461,6 +495,8 @@ fn main() {
 
             let syncer = convex_sync::spawn(device_id::device_id(), auth.clone());
             tracker_for_setup.lock().unwrap().syncer = Some(syncer.clone());
+            spawn_overlay_watcher(app.handle().clone(), tracker_for_setup.clone());
+
             app.manage(AppState {
                 tracker: tracker_for_setup.clone(),
                 server_error: server_error.clone(),

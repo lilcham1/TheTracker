@@ -60,6 +60,11 @@ pub struct OverlaySettings {
     pub corner: String,
     #[serde(rename = "clickThrough", default = "yes")]
     pub click_through: bool,
+    /// Show the overlay by itself when a match starts and hide it when the
+    /// match ends. On by default: an overlay you have to remember to open
+    /// is one you forget to open.
+    #[serde(default = "yes")]
+    pub auto: bool,
     #[serde(default)]
     pub dota: DotaPanels,
 }
@@ -81,6 +86,7 @@ impl Default for OverlaySettings {
             scale: default_scale(),
             corner: default_corner(),
             click_through: true,
+            auto: true,
             dota: DotaPanels::default(),
         }
     }

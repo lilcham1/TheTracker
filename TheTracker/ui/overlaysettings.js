@@ -42,6 +42,12 @@ function renderOverlaySettings() {
         no game memory is read, and it only ever draws information you
         already have.
       </p>
+
+      <label class="switch-row" style="margin-top:10px">
+        <input type="checkbox" id="ovAuto" ${o.auto !== false ? "checked" : ""} />
+        <span>Open by itself when a match starts, and close when it ends</span>
+      </label>
+
       <div class="row" style="margin-top:12px">
         <button class="btn btn-secondary" id="ovReposition" type="button" ${open ? "" : "disabled"}>
           ${o.clickThrough ? "Unlock to move" : "Lock in place"}
@@ -121,6 +127,13 @@ function renderOverlaySettings() {
       await invoke("overlay_click_through", { clickThrough: next }).catch(() => {});
       renderOverlaySettings();
     });
+  }
+
+  const auto = root.querySelector("#ovAuto");
+  if (auto) {
+    auto.addEventListener("change", () =>
+      saveOverlay({ auto: auto.checked }).then(renderOverlaySettings)
+    );
   }
 
   root.querySelector("#ovOpacity").addEventListener("change", (e) =>
