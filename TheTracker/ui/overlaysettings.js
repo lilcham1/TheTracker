@@ -38,7 +38,6 @@ function renderOverlaySettings() {
     ["runes", "Runes — bounty, water, power, wisdom"],
     ["lotus", "Healing lotus spawns"],
     ["stacks", "Neutral camp stack pull (:53)"],
-    ["daynight", "Day / night flip"],
   ];
 
   root.innerHTML = `

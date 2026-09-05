@@ -28,7 +28,6 @@ const WISDOM_EVERY = 420;
 
 // Neutral camps spawn on the minute, so the stack pull goes out at :53.
 const STACK_AT = 53;
-const DAY_CYCLE = 300;
 
 // Lotus pools spawn their first lotuses at 3:00 and every 3 minutes after.
 // Turbo halves that, which is worth honouring because the whole point of a
@@ -51,7 +50,7 @@ let SETTINGS = {
   opacity: 0.85,
   scale: 1,
   clickThrough: true,
-  dota: { runes: true, lotus: true, stacks: true, daynight: true },
+  dota: { runes: true, lotus: true, stacks: true },
 };
 
 function countdown(seconds) {
@@ -125,10 +124,6 @@ function stackEvents(clock) {
   return [["Stack", into <= STACK_AT ? STACK_AT - into : 60 + STACK_AT - into]];
 }
 
-function dayNightEvents(clock, isDaytime) {
-  return [[isDaytime === false ? "Day" : "Night", DAY_CYCLE - (clock % DAY_CYCLE)]];
-}
-
 // ---------- Render ----------
 
 function renderMatch(m) {
@@ -147,7 +142,6 @@ function renderMatch(m) {
   if (d.runes) events.push(...runeEvents(clock));
   if (d.lotus) events.push(...lotusEvents(clock, m.gameType));
   if (d.stacks) events.push(...stackEvents(clock));
-  if (d.daynight) events.push(...dayNightEvents(clock, m.daytime));
 
   paint(
     events

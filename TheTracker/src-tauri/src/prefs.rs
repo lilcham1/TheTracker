@@ -12,19 +12,22 @@ use crate::storage::log_dir;
 
 /// Which events the Dota overlay counts down to.
 ///
-/// All of them are arithmetic on the game clock the player can already see
-/// — rune spawns, lotuses, the :53 stack pull and the day/night flip. None
-/// of it reveals an opponent's state.
+/// Three of them, all arithmetic on the game clock the player can already
+/// see: rune spawns, lotuses, and the :53 stack pull. None of it reveals an
+/// opponent's state.
 ///
-/// Two things are deliberately absent. There is no panel for the player's
-/// own scoreboard line: the overlay shows a countdown in the last five
-/// seconds before an event and nothing at any other time, and a line pinned
-/// there permanently is exactly the sort of thing you stop seeing. And
-/// there is no Roshan timer, because it can only be started from a death
-/// the player happened to see — so it would be missing whenever it mattered
-/// most. Roshan deaths are still recorded in match history.
+/// The list has been cut down deliberately, and each removal has its own
+/// reason. The player's own scoreboard line went because the overlay shows
+/// a countdown in the last five seconds before an event and nothing at any
+/// other time, and a line pinned there permanently is exactly the sort of
+/// thing you stop seeing. Roshan went because his timer can only start from
+/// a death the player happened to witness, so it would be missing whenever
+/// it mattered most; his deaths are still recorded in match history. The
+/// day/night flip went because it is a five-minute cycle you can read off
+/// the clock, and it fires all game whether or not anything hangs on it.
 ///
-/// A prefs.json written before either removal has its extra keys ignored.
+/// A prefs.json written before any of those removals has its extra keys
+/// ignored.
 ///
 /// The overlay is Dota-only: Deadlock publishes no live feed, so there is
 /// nothing to drive a timer from.
@@ -39,13 +42,11 @@ pub struct DotaPanels {
     /// Neutral camp stack timer (the :53 pull).
     #[serde(default = "yes")]
     pub stacks: bool,
-    #[serde(default = "yes")]
-    pub daynight: bool,
 }
 
 impl Default for DotaPanels {
     fn default() -> Self {
-        DotaPanels { runes: true, lotus: true, stacks: true, daynight: true }
+        DotaPanels { runes: true, lotus: true, stacks: true }
     }
 }
 
@@ -261,10 +262,10 @@ mod tests {
 
     #[test]
     fn removed_panel_keys_do_not_break_an_existing_prefs_file() {
-        // Both `stats` and `roshan` were panels once. Anyone who used the app
-        // before they were dropped has them sitting in prefs.json, and serde
-        // must ignore them rather than refuse the whole file and reset every
-        // other setting.
+        // `stats`, `roshan` and `daynight` were all panels once. Anyone who
+        // used the app before they were dropped has them sitting in
+        // prefs.json, and serde must ignore them rather than refuse the whole
+        // file and reset every other setting.
         let old = r#"{"overlay":{"opacity":0.5,"dota":{"stats":true,"roshan":false,"runes":true,"stacks":true,"daynight":true}}}"#;
         let p: Prefs = serde_json::from_str(old).expect("prefs with removed keys should still parse");
         assert_eq!(p.overlay.opacity, 0.5);
