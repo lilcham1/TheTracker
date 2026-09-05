@@ -410,6 +410,36 @@ async fn deadlock_popular_items(hero_id: u32) -> Result<Vec<popular::DeadlockPop
     popular::deadlock_builds(hero_id, 12).await
 }
 
+#[derive(Serialize)]
+struct MonitorInfo {
+    name: String,
+    width: u32,
+    height: u32,
+    primary: bool,
+}
+
+/// The displays the overlay can be pinned to.
+#[tauri::command]
+fn list_monitors(app: tauri::AppHandle) -> Vec<MonitorInfo> {
+    let primary = app.primary_monitor().ok().flatten().and_then(|m| m.name().cloned());
+
+    app.available_monitors()
+        .map(|list| {
+            list.into_iter()
+                .map(|m| {
+                    let name = m.name().cloned().unwrap_or_default();
+                    MonitorInfo {
+                        primary: Some(&name) == primary.as_ref(),
+                        width: m.size().width,
+                        height: m.size().height,
+                        name,
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 // ---------- Overlay ----------
 
 #[tauri::command]
@@ -449,7 +479,7 @@ fn spawn_overlay_watcher(app: tauri::AppHandle, tracker: Arc<Mutex<Tracker>>) {
             let live = tracker
                 .lock()
                 .ok()
-                .and_then(|t| t.current.as_ref().map(|m| !m.ended))
+                .and_then(|t| t.current.as_ref().map(|m| !m.ended && m.in_progress))
                 .unwrap_or(false);
 
             if live == was_live {
@@ -462,6 +492,28 @@ fn spawn_overlay_watcher(app: tauri::AppHandle, tracker: Arc<Mutex<Tracker>>) {
             }
 
             let _ = if live { overlay::show(&app) } else { overlay::hide(&app) };
+        }
+    });
+}
+
+/// Periodically asks OpenDota to name the game types GSI cannot.
+///
+/// Valve's GSI feed carries no game mode or lobby type — the map block has
+/// the clock, the game state and the match id, and nothing else — so a match
+/// tracked live lands in history as "unspecified" and used to need tagging by
+/// hand. OpenDota knows, but only once it has ingested the finished game,
+/// which takes a few minutes; hence a retry loop rather than one lookup.
+///
+/// It only fills blanks. A type the player chose themselves is never
+/// overwritten, and when nothing is untagged the call returns without
+/// touching the network.
+fn spawn_game_type_backfill() {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            // A short first delay keeps startup free of network work.
+            tokio::time::sleep(std::time::Duration::from_secs(45)).await;
+            let _ = dota_api::backfill_game_types().await;
+            tokio::time::sleep(std::time::Duration::from_secs(300)).await;
         }
     });
 }
@@ -499,7 +551,23 @@ fn main() {
             // and could produce two stacked windows.
             let _ = overlay::ensure(&app.handle().clone());
 
+            // Diagnostic: report window labels and which monitor each is on.
+            if std::env::var("THETRACKER_WINDOW_DEBUG").is_ok() {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    for (label, w) in h.webview_windows() {
+                        let mon = w.current_monitor().ok().flatten();
+                        let name = mon.as_ref().and_then(|m| m.name().cloned()).unwrap_or_default();
+                        let pos = mon.as_ref().map(|m| format!("{:?}", m.position())).unwrap_or_default();
+                        let size = mon.as_ref().map(|m| format!("{:?}", m.size())).unwrap_or_default();
+                        eprintln!("WINDOW_DEBUG label={label} monitor='{name}' origin={pos} size={size}");
+                    }
+                });
+            }
+
             spawn_overlay_watcher(app.handle().clone(), tracker_for_setup.clone());
+            spawn_game_type_backfill();
 
             app.manage(AppState {
                 tracker: tracker_for_setup.clone(),
@@ -546,6 +614,7 @@ fn main() {
             install_update,
             dota_popular_builds,
             deadlock_popular_items,
+            list_monitors,
             overlay_show,
             overlay_hide,
             overlay_visible,

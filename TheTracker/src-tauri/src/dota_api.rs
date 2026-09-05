@@ -532,3 +532,103 @@ pub fn summarize(matches: &[DotaApiMatch]) -> DotaApiSummary {
         avg_last_hits: (lh / div) as u32,
     }
 }
+
+// ---------- Automatic game-type tagging ----------
+
+/// Asks OpenDota what game types the linked account's recent matches were,
+/// keyed by match id.
+///
+/// GSI never says which mode you are in — Valve's map block carries the
+/// clock, the game state and the match id, but no `game_mode` or
+/// `lobby_type` — so a match finalized from GSI alone lands in history as
+/// "unspecified" and used to need tagging by hand.
+///
+/// This is one lean request covering the whole recent tail rather than a
+/// lookup per match: `/matches` on a player is cheap when projected, while
+/// `/matches/{id}` pulls a full ten-player record for a single answer.
+async fn recent_game_types(account_id: u64, limit: usize) -> Result<HashMap<String, String>, String> {
+    let path = format!(
+        "/players/{account_id}/matches?limit={limit}&project=match_id&project=game_mode&project=lobby_type"
+    );
+    let value = get_json(&path).await?;
+    let rows = value.as_array().ok_or("OpenDota returned an unexpected shape")?;
+
+    Ok(rows
+        .iter()
+        .filter_map(|m| {
+            let id = m.get("match_id").and_then(|v| v.as_u64())?;
+            let mode = m.get("game_mode").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let lobby = m.get("lobby_type").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            Some((id.to_string(), classify(mode, lobby).to_string()))
+        })
+        .collect())
+}
+
+/// Fills in the game type of any locally tracked match still marked
+/// "unspecified", and returns how many were resolved.
+///
+/// Only untagged matches are touched: a type the player set by hand is
+/// their call and is left alone. OpenDota takes a few minutes to ingest a
+/// finished game, so this is retried periodically rather than once.
+pub async fn backfill_game_types() -> Result<usize, String> {
+    let Some(account_id) = load_link().account_id else {
+        return Ok(0);
+    };
+
+    let mut history = crate::storage::load_history();
+    if !history.iter().any(|m| m.game_type == "unspecified") {
+        return Ok(0);
+    }
+
+    let types = recent_game_types(account_id, 50).await?;
+
+    let mut filled = 0;
+    for entry in history.iter_mut() {
+        if entry.game_type != "unspecified" {
+            continue;
+        }
+        if let Some(t) = types.get(&entry.matchid) {
+            entry.game_type = t.clone();
+            filled += 1;
+        }
+    }
+
+    if filled > 0 {
+        crate::storage::save_history(&history);
+    }
+    Ok(filled)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn turbo_is_decided_before_ranked() {
+        // Ranked Turbo exists (mode 23 in lobby 7). Checking the lobby first
+        // would file those as plain "ranked" and the overlay would then use
+        // full-length lotus and rune timings in a game that runs at double
+        // speed — late every time, which is the one thing a warning must not
+        // be.
+        assert_eq!(classify(23, 7), "turbo");
+        assert_eq!(classify(23, 0), "turbo");
+        assert_eq!(classify(22, 7), "ranked");
+        assert_eq!(classify(22, 0), "all_pick");
+        assert_eq!(classify(1, 0), "all_pick");
+        assert_eq!(classify(2, 1), "other");
+    }
+
+    #[test]
+    fn every_classification_is_one_the_ui_knows() {
+        // History entries are filed under these names, and the type filter
+        // matches on them exactly. A new label here would silently vanish
+        // from every filter.
+        for (mode, lobby) in [(23u32, 7u32), (22, 7), (22, 0), (1, 0), (2, 1), (18, 0)] {
+            let t = classify(mode, lobby);
+            assert!(
+                crate::model::GAME_TYPES.contains(&t),
+                "classify({mode},{lobby}) produced {t}, which the UI has no filter for"
+            );
+        }
+    }
+}

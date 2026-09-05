@@ -5,6 +5,20 @@
 // Deadlock overlay could show nothing beyond "you are in a match", which
 // isn't worth a window floating over the game.
 
+// Displays available to pin the overlay to. Fetched once; the list only
+// changes when a monitor is plugged in or removed.
+let OVERLAY_MONITORS = null;
+
+async function loadMonitors() {
+  if (OVERLAY_MONITORS) return OVERLAY_MONITORS;
+  try {
+    OVERLAY_MONITORS = await invoke("list_monitors");
+  } catch (_) {
+    OVERLAY_MONITORS = [];
+  }
+  return OVERLAY_MONITORS;
+}
+
 function renderOverlaySettings() {
   const root = document.getElementById("tab-overlaysettings");
   if (!root) return;
@@ -24,10 +38,10 @@ function renderOverlaySettings() {
     ["stats", "Your line — kills, deaths, last hits, gold lost"],
     ["roshan", "Roshan respawn window"],
     ["runes", "Rune timers — bounty, water, power, wisdom"],
+    ["lotus", "Healing lotus spawns"],
     ["stacks", "Neutral camp stack timer (:53)"],
     ["daynight", "Day / night countdown"],
   ];
-
 
   root.innerHTML = `
     <section class="home-section" style="padding-top:0">
@@ -73,6 +87,26 @@ function renderOverlaySettings() {
           <label class="form-label">Size &mdash; ${Math.round((o.scale ?? 1) * 100)}%</label>
           <input type="range" id="ovScale" min="75" max="150" step="5" value="${Math.round((o.scale ?? 1) * 100)}" />
         </div>
+        <div class="split-item">
+          <label class="form-label">Display</label>
+          <select class="text-input" id="ovMonitor">
+            <option value="" ${!o.monitor ? "selected" : ""}>Follow the app window</option>
+            ${(OVERLAY_MONITORS || [])
+              .map(
+                (m) =>
+                  `<option value="${escapeHtml(m.name)}" ${o.monitor === m.name ? "selected" : ""}>${escapeHtml(
+                    m.name.split("\\").pop() || m.name
+                  )} — ${m.width}×${m.height}${m.primary ? " (primary)" : ""}</option>`
+              )
+              .join("")}
+          </select>
+          <p class="field-hint" style="margin-top:6px">
+            Pick the screen you play on. Following the app window puts the
+            overlay wherever the tracker is, which is the wrong screen if you
+            keep it on a second monitor.
+          </p>
+        </div>
+
         <div class="split-item">
           <label class="form-label">Corner</label>
           <div class="chip-row">
@@ -127,6 +161,20 @@ function renderOverlaySettings() {
       await invoke("overlay_click_through", { clickThrough: next }).catch(() => {});
       renderOverlaySettings();
     });
+  }
+
+  // Populate the display list, then redraw once so the picker fills in.
+  if (!OVERLAY_MONITORS) loadMonitors().then(renderOverlaySettings);
+
+  const mon = root.querySelector("#ovMonitor");
+  if (mon) {
+    mon.addEventListener("change", () =>
+      saveOverlay({ monitor: mon.value }).then(() => {
+        // Re-show so the move is visible straight away.
+        if (state.overlay.visible) invoke("overlay_show").catch(() => {});
+        renderOverlaySettings();
+      })
+    );
   }
 
   const auto = root.querySelector("#ovAuto");

@@ -108,6 +108,14 @@ pub struct MatchState {
     /// and computing it from the clock alone would drift after a pause.
     #[serde(default)]
     pub daytime: Option<bool>,
+    /// True only once the horn has gone and the game clock is real.
+    ///
+    /// GSI reports a clock during hero selection and strategy time too, so
+    /// anything derived from it — rune spawns, stacks, the day/night flip —
+    /// is meaningless until this is true. Without it the overlay counts down
+    /// to events during the draft.
+    #[serde(rename = "inProgress", default)]
+    pub in_progress: bool,
     #[serde(rename = "lastHits")]
     pub last_hits: i64,
     pub denies: i64,
@@ -138,6 +146,7 @@ impl MatchState {
             checkpoints,
             last_clock_time: 0.0,
             daytime: None,
+            in_progress: false,
             last_hits: 0,
             denies: 0,
             kills: 0,

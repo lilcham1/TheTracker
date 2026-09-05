@@ -111,6 +111,12 @@ impl Tracker {
         {
             let m = self.current.as_mut().unwrap();
             m.last_clock_time = clock_time;
+            // Only GAME_IN_PROGRESS means the clock is the real match
+            // clock. HERO_SELECTION, STRATEGY_TIME and PRE_GAME all report a
+            // clock too, and timers built on those are nonsense.
+            m.in_progress = map.get("game_state").and_then(|v| v.as_str())
+                == Some("DOTA_GAMERULES_STATE_GAME_IN_PROGRESS");
+
             if let Some(day) = map.get("daytime").and_then(|v| v.as_bool()) {
                 m.daytime = Some(day);
             }

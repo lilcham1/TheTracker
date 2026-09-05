@@ -112,9 +112,18 @@ pub fn apply_settings(app: &AppHandle, settings: &crate::prefs::OverlaySettings)
     // created — in practice the primary screen — so on a multi-monitor setup
     // it would appear on a display the player isn't looking at, which reads
     // exactly like the button doing nothing.
-    let monitor = app
-        .get_webview_window("main")
-        .and_then(|main| main.current_monitor().ok().flatten())
+    // An explicitly chosen display wins. Otherwise fall back to whichever
+    // one the main window is on.
+    let chosen = if settings.monitor.is_empty() {
+        None
+    } else {
+        win.available_monitors()
+            .ok()
+            .and_then(|list| list.into_iter().find(|m| m.name().map(|n| n.as_str()) == Some(settings.monitor.as_str())))
+    };
+
+    let monitor = chosen
+        .or_else(|| app.get_webview_window("main").and_then(|w| w.current_monitor().ok().flatten()))
         .or_else(|| win.current_monitor().ok().flatten());
 
     let Some(monitor) = monitor else { return };

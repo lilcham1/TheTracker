@@ -29,6 +29,9 @@ pub struct DotaPanels {
     /// Bounty / water / power / wisdom rune countdowns.
     #[serde(default = "yes")]
     pub runes: bool,
+    /// Healing lotus spawns.
+    #[serde(default = "yes")]
+    pub lotus: bool,
     /// Neutral camp stack timer (the :53 pull).
     #[serde(default = "yes")]
     pub stacks: bool,
@@ -38,7 +41,7 @@ pub struct DotaPanels {
 
 impl Default for DotaPanels {
     fn default() -> Self {
-        DotaPanels { stats: true, roshan: true, runes: true, stacks: true, daynight: true }
+        DotaPanels { stats: true, roshan: true, runes: true, lotus: true, stacks: true, daynight: true }
     }
 }
 
@@ -65,6 +68,16 @@ pub struct OverlaySettings {
     /// is one you forget to open.
     #[serde(default = "yes")]
     pub auto: bool,
+    /// Which display to put the overlay on, by name. Empty means "follow the
+    /// main window".
+    ///
+    /// Following the app window is the wrong default for anyone who plays on
+    /// one screen and keeps the tracker on another — the overlay lands where
+    /// the tracker is, not where the game is. There is no reliable way to ask
+    /// which monitor Dota is fullscreen on, so this is an explicit choice
+    /// rather than a guess.
+    #[serde(default)]
+    pub monitor: String,
     #[serde(default)]
     pub dota: DotaPanels,
 }
@@ -87,6 +100,7 @@ impl Default for OverlaySettings {
             corner: default_corner(),
             click_through: true,
             auto: true,
+            monitor: String::new(),
             dota: DotaPanels::default(),
         }
     }
@@ -217,7 +231,7 @@ mod tests {
         let d = OverlaySettings::default();
         assert!(d.click_through, "click-through must default on, or the overlay eats game input");
         assert!(d.dota.roshan, "Roshan timer is the point of the Dota overlay");
-
+        assert!(d.dota.lotus, "lotus warnings are on by default like every other timer");
     }
 
     #[test]

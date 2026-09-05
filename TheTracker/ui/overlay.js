@@ -30,18 +30,21 @@ const WISDOM_EVERY = 420;
 const STACK_AT = 53;
 const DAY_CYCLE = 300;
 
-// How early each thing is worth showing. These are the numbers that decide
-// whether the overlay is useful or just busy.
-const LEAD = {
-  rune: 45, // a rune is worth walking to about here
-  stack: 12, // enough time to send a camp
-  daynight: 30, // enough to reposition before vision changes
-};
+// Lotus pools spawn their first lotuses at 3:00 and every 3 minutes after.
+// Turbo halves that, which is worth honouring because the whole point of a
+// lotus warning is being there when they pop.
+const LOTUS_FROM = 180;
+const LOTUS_EVERY = 180;
+
+// How long before an event its chip appears. One number for everything: a
+// chip shows for the last ten seconds and then goes, so each event is
+// announced once rather than sitting on screen counting down for a minute.
+const LEAD = 10;
 
 let SETTINGS = {
   opacity: 0.85,
   scale: 1,
-  dota: { stats: true, roshan: true, runes: true, stacks: true, daynight: true },
+  dota: { stats: true, roshan: true, runes: true, lotus: true, stacks: true, daynight: true },
 };
 
 function countdown(seconds) {
@@ -105,39 +108,50 @@ function roshanChip(roshan, clock) {
   return "";
 }
 
+/// Bounty every 4 minutes from 0:00, water only at 2:00 and 4:00, power
+/// every 2 minutes from 6:00, wisdom every 7 from 7:00. Each shows only in
+/// the last ten seconds before it lands, so it is announced once rather
+/// than sitting there counting down.
 function runeChips(clock) {
   const out = [];
+  const due = (label, secs) => {
+    if (secs > 0 && secs <= LEAD) out.push(chip(label, countdown(secs), secs <= 5 ? "urgent" : "soon"));
+  };
 
-  const bounty = nextEvery(clock, BOUNTY_EVERY);
-  if (bounty <= LEAD.rune) out.push(chip("Bounty", countdown(bounty), bounty <= 15 ? "urgent" : "soon"));
+  due("Bounty", nextEvery(clock, BOUNTY_EVERY));
 
   const water = WATER_TIMES.find((t) => t > clock);
-  if (water !== undefined && water - clock <= LEAD.rune) {
-    const t = water - clock;
-    out.push(chip("Water", countdown(t), t <= 15 ? "urgent" : "soon"));
-  }
+  if (water !== undefined) due("Water", water - clock);
 
-  if (clock >= POWER_FROM - LEAD.rune) {
-    const power = clock < POWER_FROM ? POWER_FROM - clock : nextEvery(clock, POWER_EVERY, POWER_FROM);
-    if (power <= LEAD.rune) out.push(chip("Power", countdown(power), power <= 15 ? "urgent" : "soon"));
-  }
-
-  const wisdom = nextEvery(clock, WISDOM_EVERY, WISDOM_EVERY);
-  if (wisdom <= LEAD.rune) out.push(chip("Wisdom", countdown(wisdom), wisdom <= 15 ? "urgent" : "soon"));
+  due("Power", clock < POWER_FROM ? POWER_FROM - clock : nextEvery(clock, POWER_EVERY, POWER_FROM));
+  due("Wisdom", nextEvery(clock, WISDOM_EVERY, WISDOM_EVERY));
 
   return out.join("");
+}
+
+/// Healing lotuses: first at 3:00, then every 3 minutes. Turbo halves both,
+/// and the tracked game type is used when it is known — being late is the
+/// one thing a lotus warning must not be.
+function lotusChip(clock, gameType) {
+  const turbo = gameType === "turbo";
+  const from = turbo ? LOTUS_FROM / 2 : LOTUS_FROM;
+  const every = turbo ? LOTUS_EVERY / 2 : LOTUS_EVERY;
+
+  const secs = clock < from ? from - clock : nextEvery(clock, every, from);
+  if (secs <= 0 || secs > LEAD) return "";
+  return chip("Lotus", countdown(secs), secs <= 5 ? "urgent" : "soon");
 }
 
 function stackChip(clock) {
   const intoMinute = clock % 60;
   const until = intoMinute <= STACK_AT ? STACK_AT - intoMinute : 60 + STACK_AT - intoMinute;
-  if (until > LEAD.stack) return "";
+  if (until > LEAD) return "";
   return chip("Stack", countdown(until), until <= 5 ? "urgent" : "soon");
 }
 
 function dayNightChip(clock, isDaytime) {
   const until = DAY_CYCLE - (clock % DAY_CYCLE);
-  if (until > LEAD.daynight) return "";
+  if (until > LEAD) return "";
   const next = isDaytime === false ? "Day" : "Night";
   return chip(next, countdown(until), "soon");
 }
@@ -159,10 +173,18 @@ function renderMatch(m) {
     );
   }
 
-  if (d.roshan) parts.push(roshanChip(m.roshan, clock));
-  if (d.runes) parts.push(runeChips(clock));
-  if (d.stacks) parts.push(stackChip(clock));
-  if (d.daynight) parts.push(dayNightChip(clock, m.daytime));
+  // GSI reports a clock during hero selection and strategy time as well, so
+  // every timer below would otherwise count down to events in a match that
+  // has not started. Only draw them once the horn has actually gone.
+  if (m.inProgress && clock > 0) {
+    if (d.roshan) parts.push(roshanChip(m.roshan, clock));
+    if (d.runes) parts.push(runeChips(clock));
+    if (d.lotus) parts.push(lotusChip(clock, m.gameType));
+    if (d.stacks) parts.push(stackChip(clock));
+    if (d.daynight) parts.push(dayNightChip(clock, m.daytime));
+  } else if (!m.inProgress) {
+    parts.push(chip("Drafting", "timers start at the horn"));
+  }
 
   document.getElementById("overlay").innerHTML = parts.join("");
 }
@@ -185,6 +207,7 @@ function renderPreview() {
   if (d.stats) parts.push(chip("KDA", "7 / 2") + chip("LH", "148"));
   if (d.roshan) parts.push(chip("Roshan", "4:12", "urgent"));
   if (d.runes) parts.push(chip("Bounty", "0:22", "soon"));
+  if (d.lotus) parts.push(chip("Lotus", "0:08", "soon"));
   if (d.stacks) parts.push(chip("Stack", "0:06", "urgent"));
   if (d.daynight) parts.push(chip("Night", "0:18", "soon"));
 
