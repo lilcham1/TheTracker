@@ -5,15 +5,6 @@ rust-tracker/src-tauri/gen/schemas/
 # Node (Tauri CLI)
 rust-tracker/node_modules/
 
-# Electron / Node
-electron-tracker/node_modules/
-electron-tracker/dist/
-electron-tracker/*.log
-npm-debug.log*
-
-# Old scratch folder, not part of the project
-/_to_delete/
-
 # OS cruft
 .DS_Store
 Thumbs.db

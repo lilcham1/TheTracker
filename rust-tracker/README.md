@@ -86,7 +86,7 @@ this, installing the MSVC "C++ build tools" and switching the override to
    - Linux: `~/.steam/steam/steamapps/common/dota 2 beta/game/dota/cfg`
 2. Inside `cfg`, create a folder named `gamestate_integration` (if it
    doesn't already exist).
-3. Copy `gamestate_integration_dota_tracker.cfg` (in this folder) into that
+3. Copy `gamestate_integration_thetracker.cfg` (in this folder) into that
    `gamestate_integration` folder.
 4. In Steam: right-click **Dota 2 → Properties → Launch Options**, add:
    ```
