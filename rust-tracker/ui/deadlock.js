@@ -435,7 +435,7 @@ function dlWireRetry(root) {
 }
 
 function dlRender() {
-  if (state.game !== "deadlock") return;
+  if (!String(state.view || "").startsWith("dl")) return;
   switch (state.dlTab) {
     case "dlmatches":
       dlRenderMatches();

@@ -164,7 +164,7 @@ function escapeHtml(s) {
 // ---------- App state ----------
 
 const state = {
-  game: "dota", // "dota" | "deadlock"
+  view: "live",
   dlTab: "dloverview",
   overlay: { visible: false, clickThrough: true },
   tab: "live",
@@ -203,11 +203,11 @@ function renderLive() {
   }
 
   parts.push(`
-    <div class="hero-header">
+    <div class="live-hero">
       ${portrait ? `<img class="hero-portrait" src="${portrait}" alt="" />` : `<div class="hero-portrait"></div>`}
       <div>
-        <p class="hero-name">${escapeHtml(heroDisplayName(m.heroName))}</p>
-        <span class="hero-clock">${fmtClock(m.lastClockTime)}</span>
+        <p class="live-hero-name">${escapeHtml(heroDisplayName(m.heroName))}</p>
+        <span class="live-clock">${fmtClock(m.lastClockTime)}</span>
       </div>
     </div>
 
@@ -217,31 +217,31 @@ function renderLive() {
       ).join("")}
     </div>
 
-    <div class="stat-grid">
-      <div class="stat-tile">
+    <div class="stat-row">
+      <div class="stat">
         <div class="stat-label">Last Hits / Denies</div>
         <div class="stat-value">${m.lastHits} / ${m.denies}</div>
       </div>
-      <div class="stat-tile">
+      <div class="stat">
         <div class="stat-label">Deaths / Gold Lost</div>
-        <div class="stat-value danger">${m.deaths.length} / ${totalGoldLost(m.deaths)}g</div>
+        <div class="stat-value loss">${m.deaths.length} / ${totalGoldLost(m.deaths)}g</div>
       </div>
     </div>
 
     ${roshanCardHtml(m.roshan, m.lastClockTime)}
 
     <div class="card">
-      <p class="card-title">Last Hit Checkpoints</p>
+      <p class="section-title">Last Hit Checkpoints</p>
       ${checkpointsRowHtml(m.checkpoints)}
     </div>
 
     <div class="card">
-      <p class="card-title">Key Items</p>
+      <p class="section-title">Key Items</p>
       ${itemGridHtml(m.keyItemLog)}
     </div>
 
     <div class="card">
-      <p class="card-title">Deaths</p>
+      <p class="section-title">Deaths</p>
       ${deathListHtml(m.deaths)}
     </div>
   `);
@@ -295,26 +295,26 @@ function roshanCardHtml(roshan, clockTime) {
   }
 
   return `
-    <div class="card roshan-card">
-      <span class="roshan-icon">\u{1F409}</span>
-      <div class="roshan-body">
-        <div class="roshan-status ${statusClass}">${status}</div>
-        <div class="roshan-sub">${sub}</div>
+    <div class="card rosh">
+      <span class="rosh-icon">\u{1F409}</span>
+      <div class="rosh-body grow">
+        <div class="rosh-status ${statusClass}">${status}</div>
+        <div class="rosh-sub">${sub}</div>
       </div>
-      <button class="roshan-btn" data-mark-roshan>Mark Death</button>
+      <button class="btn btn-secondary" data-mark-roshan>Mark Death</button>
     </div>
   `;
 }
 
 function checkpointsRowHtml(checkpoints) {
   return `
-    <div class="checkpoint-row">
+    <div class="cp-row">
       ${CHECKPOINT_MINUTES.map((min) => {
         const cp = checkpoints[min];
         return `
-          <div class="checkpoint">
-            <div class="checkpoint-min">${min}m</div>
-            <div class="checkpoint-val ${cp ? "" : "pending"}">${cp ? cp.lastHits : "—"}</div>
+          <div class="cp">
+            <div class="cp-min">${min}m</div>
+            <div class="cp-val ${cp ? "" : "pending"}">${cp ? cp.lastHits : "—"}</div>
           </div>
         `;
       }).join("")}
@@ -333,7 +333,7 @@ function itemGridHtml(items) {
           (it) => `
         <div class="item-chip" title="${escapeHtml(itemDisplayName(it.item))} — ${escapeHtml(it.clock)}">
           <img src="${ITEM_CDN}${it.item}.png" alt="" data-item-img="${escapeHtml(it.item)}" />
-          <span class="item-time">${escapeHtml(it.clock)}</span>
+          <span class="">${escapeHtml(it.clock)}</span>
         </div>`
         )
         .join("")}
@@ -351,8 +351,8 @@ function deathListHtml(deaths) {
         .map(
           (d) => `
         <div class="death-row">
-          <span class="death-clock">${escapeHtml(d.clock)}</span>
-          <span class="death-gold">${d.goldLost !== null && d.goldLost !== undefined ? `-${d.goldLost}g` : "-?g"}</span>
+          <span class="clock">${escapeHtml(d.clock)}</span>
+          <span class="gold">${d.goldLost !== null && d.goldLost !== undefined ? `-${d.goldLost}g` : "-?g"}</span>
         </div>`
         )
         .join("")}
@@ -362,11 +362,11 @@ function deathListHtml(deaths) {
 
 function badgeHtml(verdict) {
   const map = {
-    better: ["Better", "badge-better"],
-    worse: ["Worse", "badge-worse"],
-    similar: ["Average", "badge-similar"],
+    better: ["Better", "badge-win"],
+    worse: ["Worse", "badge-loss"],
+    similar: ["Average", "badge-neutral"],
   };
-  const [text, cls] = map[verdict] || ["New", "badge-new"];
+  const [text, cls] = map[verdict] || ["New", "badge-neutral"];
   return `<span class="badge ${cls}">${text}</span>`;
 }
 
@@ -374,9 +374,9 @@ function compareRowHtml(label, comp) {
   const valStr = comp.value !== null && comp.value !== undefined ? formatNum(comp.value) : "—";
   const avgStr = comp.avg !== null && comp.avg !== undefined ? ` (avg ${formatNum(comp.avg)})` : "";
   return `
-    <div class="compare-row">
-      <span class="compare-label">${label}</span>
-      <span class="compare-value">${valStr}${avgStr}</span>
+    <div class="cmp-row">
+      <span class="cmp-label">${label}</span>
+      <span class="cmp-value">${valStr}${avgStr}</span>
       ${badgeHtml(comp.verdict)}
       ${comp.isBest ? `<span title="Personal best">\u{1F3C6}</span>` : ""}
     </div>
@@ -401,7 +401,7 @@ function comparisonBlockHtml(summary) {
 
 function summaryCardHtml(summary) {
   return `
-    <div class="card summary-card">
+    <div class="card">
       <p class="summary-title">\u{1F3C1} Match Summary — ${gameTypeLabel(summary.gameType)}</p>
       <div class="summary-sub" style="margin-bottom:2px">${escapeHtml(heroDisplayName(summary.heroName))} — ${escapeHtml(summary.duration)}</div>
       ${comparisonBlockHtml(summary)}
@@ -438,11 +438,11 @@ function renderHistory() {
             <div class="history-quickstats">${escapeHtml(m.duration)} · ${m.totalDeaths} deaths · ${m.totalGoldLost}g lost · Rosh x${m.roshanDeaths}</div>
             ${comparisonBlockHtml(m)}
             <div>
-              <p class="subhead">Key Items</p>
+              <p class="section-title">Key Items</p>
               ${itemGridHtml(m.keyItems)}
             </div>
             <div>
-              <p class="subhead">Deaths</p>
+              <p class="section-title">Deaths</p>
               ${deathListHtml(m.deaths)}
             </div>
           </div>
@@ -630,7 +630,7 @@ function globalListHtml() {
       <div class="empty-state">
         Couldn't reach the cloud.<br/>
         <span class="error-detail">${escapeHtml(g.error)}</span><br/>
-        <button class="roshan-btn" style="margin-top:10px" data-lb-retry>Try again</button>
+        <button class="btn btn-secondary" style="margin-top:10px" data-lb-retry>Try again</button>
       </div>`;
   }
   if (!g.rows.length) {
@@ -708,34 +708,7 @@ function renderProfile() {
       <span class="save-flash" id="saveFlash">Saved!</span>
     </div>
 
-    ${accountCardHtml()}
 
-    <div class="card" style="margin-top:6px">
-      <p class="card-title">Cloud Sync</p>
-      <div class="cloud-body">
-        <div class="cloud-line">
-          <span class="cloud-key">Status</span>
-          <span class="cloud-val" id="cloudStatusText">—</span>
-        </div>
-        <div class="cloud-line">
-          <span class="cloud-key">Synced this session</span>
-          <span class="cloud-val" id="cloudSyncedCount">0</span>
-        </div>
-        <div class="cloud-line">
-          <span class="cloud-key">Device ID</span>
-          <span class="cloud-val mono" id="cloudDeviceId">—</span>
-        </div>
-        <p class="cloud-note">
-          Matches are always saved to this PC first, then pushed to the cloud.
-          If the cloud is unreachable nothing is lost — just press Sync
-          Everything once you're back online.
-        </p>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <button class="roshan-btn" id="syncAllBtn">Sync Everything</button>
-          <span class="save-flash" id="syncFlash">Queued!</span>
-        </div>
-      </div>
-    </div>
   `;
 
   root.querySelectorAll("[data-rank]").forEach((btn) =>
@@ -756,21 +729,12 @@ function renderProfile() {
   root.querySelector("#saveProfileBtn").addEventListener("click", () => {
     invoke("save_profile", { profile: state.profileDraft }).then(() => {
       state.profile = { ...state.profileDraft };
-      renderTopbarProfile();
+      renderUserChip();
       const flash = document.getElementById("saveFlash");
       flash.classList.add("show");
       setTimeout(() => flash.classList.remove("show"), 1600);
     });
   });
-  wireAccountCard(root);
-  root.querySelector("#syncAllBtn").addEventListener("click", () => {
-    invoke("sync_all").then(() => {
-      const flash = document.getElementById("syncFlash");
-      flash.classList.add("show");
-      setTimeout(() => flash.classList.remove("show"), 1600);
-    });
-  });
-  renderCloudSection();
 }
 
 function accountCardHtml() {
@@ -778,7 +742,7 @@ function accountCardHtml() {
   if (a.signedIn) {
     return `
       <div class="card" style="margin-top:6px">
-        <p class="card-title">Account</p>
+        <p class="section-title">Account</p>
         <div class="cloud-body">
           <div class="cloud-line">
             <span class="cloud-key">Signed in as</span>
@@ -787,13 +751,13 @@ function accountCardHtml() {
           <p class="cloud-note">
             Your matches publish to the global leaderboard under this account.
           </p>
-          <button class="roshan-btn" id="signOutBtn">Sign out</button>
+          <button class="btn btn-secondary" id="signOutBtn">Sign out</button>
         </div>
       </div>`;
   }
   return `
     <div class="card" style="margin-top:6px">
-      <p class="card-title">Account</p>
+      <p class="section-title">Account</p>
       <div class="cloud-body">
         <p class="cloud-note" style="margin-top:0">
           Tracking works fully signed out, and you can browse the global
@@ -807,7 +771,7 @@ function accountCardHtml() {
           <button class="save-btn" id="signInBtn" ${state.authForm.busy ? "disabled" : ""}>
             ${state.authForm.busy ? "Working…" : "Sign in"}
           </button>
-          <button class="roshan-btn" id="signUpBtn" ${state.authForm.busy ? "disabled" : ""}>Create account</button>
+          <button class="btn btn-secondary" id="signUpBtn" ${state.authForm.busy ? "disabled" : ""}>Create account</button>
         </div>
       </div>
     </div>`;
@@ -824,12 +788,12 @@ function wireAccountCard(root) {
     const password = state.authForm.password;
     if (!email || !password) {
       state.authForm.error = "Enter an email and password.";
-      renderProfile();
+      renderAccounts();
       return;
     }
     state.authForm.busy = true;
     state.authForm.error = null;
-    renderProfile();
+    renderAccounts();
     try {
       state.auth = await invoke("sign_in", { email, password, flow });
       state.authForm = { email: "", password: "", error: null, busy: false };
@@ -839,7 +803,7 @@ function wireAccountCard(root) {
       state.authForm.busy = false;
       state.authForm.error = String(e);
     }
-    renderProfile();
+    renderAccounts();
     refreshSyncStatus();
   };
 
@@ -852,7 +816,7 @@ function wireAccountCard(root) {
   if (outBtn)
     outBtn.addEventListener("click", async () => {
       state.auth = await invoke("sign_out");
-      renderProfile();
+      renderAccounts();
       refreshSyncStatus();
     });
 }
@@ -883,7 +847,7 @@ function renderSyncPill() {
   const s = state.sync;
   if (!s) return;
 
-  pill.classList.remove("ok", "error", "busy");
+  pill.classList.remove("ok", "err", "warn");
   let label = "Cloud";
   let title = `Cloud sync — device ${state.deviceId || "?"}`;
 
@@ -891,11 +855,11 @@ function renderSyncPill() {
     label = "Signed out";
     title = "Matches are saved locally. Sign in on the Profile tab to publish them to the global leaderboard.";
   } else if (s.pending > 0) {
-    pill.classList.add("busy");
+    pill.classList.add("warn");
     label = `Syncing ${s.pending}`;
     title = `${s.pending} item(s) queued to upload`;
   } else if (s.lastError) {
-    pill.classList.add("error");
+    pill.classList.add("err");
     label = "Offline";
     title = `Cloud sync failed: ${s.lastError}\nYour matches are still saved locally.`;
   } else if (s.connected) {
@@ -904,67 +868,74 @@ function renderSyncPill() {
     title = s.lastSync ? `Last synced at ${s.lastSync}` : "Connected to Convex";
   }
 
-  pill.querySelector(".label").textContent = label;
+  document.getElementById("syncText").textContent = label;
   pill.title = title;
 }
 
-function renderTopbarProfile() {
-  const badge = document.getElementById("profileBadge");
-  const p = state.profile;
-  const hasInfo = (p.username && p.username.length) || p.rank || p.role;
-  if (!hasInfo) {
-    badge.hidden = true;
-    return;
-  }
-  const rank = RANKS.find((r) => r.id === p.rank);
-  const role = ROLES.find((r) => r.id === p.role);
-  badge.hidden = false;
-  badge.innerHTML = `
-    ${p.username ? `<span>${escapeHtml(p.username)}</span>` : ""}
-    ${rank ? `<span class="rank-chip" style="background:${rank.color}22;color:${rank.color}">${rank.label}</span>` : ""}
-    ${role ? `<span class="role-chip" style="background:${role.color}22;color:${role.color}">${role.label}</span>` : ""}
-  `;
-}
 
 // ---------- Top-level wiring ----------
 
-function setTab(tab) {
-  state.tab = tab;
-  document.querySelectorAll("#tabs .tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
-  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
-  if (tab === "history") {
-    loadHistory().then(renderHistory);
-  } else if (tab === "leaderboard") {
-    loadHistory().then(renderLeaderboard);
+// Every view the sidebar can show, with the heading shown in the top bar.
+const VIEWS = {
+  live: { title: "Live", sub: "Real-time Dota 2 match tracking via GSI" },
+  dotamatches: { title: "Match History", sub: "Full results and scoreboards from OpenDota" },
+  history: { title: "Tracked Sessions", sub: "Matches this app recorded locally from the live feed" },
+  leaderboard: { title: "Leaderboard", sub: "Your personal bests and the shared board" },
+  dloverview: { title: "Deadlock Overview", sub: "Post-match stats via the community Deadlock API" },
+  dlmatches: { title: "Deadlock Matches", sub: "Recent games for your linked account" },
+  dlheroes: { title: "Deadlock Heroes", sub: "Per-hero breakdown of your recent games" },
+  profile: { title: "Profile", sub: "Your display name, rank and role" },
+  accounts: { title: "Accounts", sub: "Cloud sync and linked game accounts" },
+};
+
+function setView(view) {
+  if (!VIEWS[view]) view = "live";
+  state.view = view;
+  state.tab = view; // kept so existing render helpers keep working
+
+  document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  document.querySelectorAll(".view").forEach((p) => p.classList.toggle("active", p.id === `tab-${view}`));
+
+  const meta = VIEWS[view];
+  document.getElementById("viewTitle").textContent = meta.title;
+  document.getElementById("viewSub").textContent = meta.sub;
+
+  switch (view) {
+    case "history":
+      loadHistory().then(renderHistory);
+      break;
+    case "leaderboard":
+      loadHistory().then(renderLeaderboard);
+      break;
+    case "dotamatches":
+      dtRefreshLink().then(() => {
+        dtRender();
+        dtLoad();
+      });
+      break;
+    case "dloverview":
+    case "dlmatches":
+    case "dlheroes":
+      state.dlTab = view;
+      dlRefreshLink().then(() => {
+        dlRender();
+        dlLoad();
+      });
+      break;
+    case "profile":
+      renderProfile();
+      break;
+    case "accounts":
+      renderAccounts();
+      break;
+    default:
+      break;
   }
 }
 
+/// Deadlock views share one renderer, so it needs to know which is showing.
 function setDeadlockTab(tab) {
-  state.dlTab = tab;
-  document.querySelectorAll("#dlTabs .tab").forEach((t) => t.classList.toggle("active", t.dataset.dltab === tab));
-  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
-  dlRender();
-}
-
-/// Switches between the two games. They're genuinely different products —
-/// Dota is a live local feed, Deadlock is a post-match API lookup — so each
-/// gets its own tab strip rather than being forced into shared tabs.
-function setGame(game) {
-  state.game = game;
-  document.querySelectorAll(".game").forEach((b) => b.classList.toggle("active", b.dataset.game === game));
-  document.getElementById("tabs").hidden = game !== "dota";
-  document.getElementById("dlTabs").hidden = game !== "deadlock";
-  document.body.classList.toggle("theme-deadlock", game === "deadlock");
-
-  if (game === "dota") {
-    setTab(state.tab);
-  } else {
-    setDeadlockTab(state.dlTab);
-    dlRefreshLink().then(() => {
-      dlRender();
-      dlLoad();
-    });
-  }
+  setView(tab);
 }
 
 async function loadHistory() {
@@ -1018,14 +989,14 @@ async function toggleOverlay() {
     console.error("overlay toggle failed", e);
   }
   renderOverlayToggle();
-  if (state.tab === "profile" && state.game === "dota") renderProfile();
+  if (state.view === "profile") renderProfile();
 }
 
 function renderOverlayToggle() {
-  const btn = document.getElementById("overlayToggle");
+  const btn = document.getElementById("overlayBtn");
   if (!btn) return;
   btn.classList.toggle("on", state.overlay.visible);
-  btn.querySelector(".label").textContent = state.overlay.visible ? "Overlay on" : "Overlay";
+  btn.querySelector(".ghost-label").textContent = state.overlay.visible ? "Overlay on" : "Overlay";
 }
 
 function refreshSyncStatus() {
@@ -1039,48 +1010,179 @@ function refreshSyncStatus() {
       // A restored session (or an expired one) arrives asynchronously —
       // redraw the account card when that lands, unless the user is
       // mid-typing in it.
-      if (wasSignedIn !== a.signedIn && state.tab === "profile" && !state.authForm.busy) {
-        renderProfile();
+      if (wasSignedIn !== a.signedIn && state.view === "accounts" && !state.authForm.busy) {
+        renderAccounts();
       }
     })
     .catch(() => {});
 }
 
-function wireTopbar() {
+function wireShell() {
   document.getElementById("trackingToggle").addEventListener("click", () => {
     const nowOn = !document.getElementById("trackingToggle").classList.contains("on");
     invoke("set_tracking", { enabled: nowOn }).then(refreshLive);
   });
-  document.getElementById("tabs").addEventListener("click", (e) => {
-    const btn = e.target.closest(".tab");
-    if (btn) setTab(btn.dataset.tab);
+
+  document.getElementById("nav").addEventListener("click", (e) => {
+    const btn = e.target.closest(".nav-item");
+    if (btn) setView(btn.dataset.view);
   });
-  document.getElementById("dlTabs").addEventListener("click", (e) => {
-    const btn = e.target.closest(".tab");
-    if (btn) setDeadlockTab(btn.dataset.dltab);
-  });
-  document.getElementById("gameSwitch").addEventListener("click", (e) => {
-    const btn = e.target.closest(".game");
-    if (btn) setGame(btn.dataset.game);
-  });
-  document.getElementById("overlayToggle").addEventListener("click", toggleOverlay);
+
+  document.getElementById("overlayBtn").addEventListener("click", toggleOverlay);
+
   document.addEventListener("click", () => {
     if (state.openTypeMenu !== null) {
       state.openTypeMenu = null;
-      if (state.tab === "history") renderHistory();
+      if (state.view === "history") renderHistory();
     }
   });
 }
 
+/// The chip in the top-right shows the signed-in account, falling back to
+/// the local profile name so it isn't blank before anyone signs in.
+function renderUserChip() {
+  const nameEl = document.getElementById("userName");
+  const rankEl = document.getElementById("userRank");
+  const avatarEl = document.getElementById("userAvatar");
+  if (!nameEl) return;
+
+  const p = state.profile || {};
+  const rank = RANKS.find((r) => r.id === p.rank);
+  const role = ROLES.find((r) => r.id === p.role);
+
+  nameEl.textContent = p.username || state.auth.email || "Signed out";
+  rankEl.textContent = [rank && rank.label, role && role.label].filter(Boolean).join(" · ");
+  if (rank) rankEl.style.color = rank.color;
+
+  const avatar = (DOTA.link && DOTA.link.avatar) || (DL.link && DL.link.avatar);
+  avatarEl.style.backgroundImage = avatar ? `url("${avatar}")` : "none";
+}
+
+/// Accounts view: cloud sign-in plus the two linked game accounts, all in
+/// one place rather than buried in each game's own tab.
+function renderAccounts() {
+  const root = document.getElementById("tab-accounts");
+  if (!root) return;
+
+  const dotaLinked = DOTA.link && DOTA.link.accountId;
+  const dlLinked = DL.link && DL.link.accountId;
+
+  root.innerHTML = `
+    ${accountCardHtml()}
+    <div class="card" style="margin-top:6px">
+      <p class="section-title">Cloud Sync</p>
+      <div class="cloud-body">
+        <div class="cloud-line">
+          <span class="cloud-key">Status</span>
+          <span class="cloud-val" id="cloudStatusText">—</span>
+        </div>
+        <div class="cloud-line">
+          <span class="cloud-key">Synced this session</span>
+          <span class="cloud-val" id="cloudSyncedCount">0</span>
+        </div>
+        <div class="cloud-line">
+          <span class="cloud-key">Device ID</span>
+          <span class="cloud-val mono" id="cloudDeviceId">—</span>
+        </div>
+        <p class="cloud-note">
+          Matches are always saved to this PC first, then pushed to the cloud.
+          If the cloud is unreachable nothing is lost — just press Sync
+          Everything once you're back online.
+        </p>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <button class="btn btn-secondary" id="syncAllBtn">Sync Everything</button>
+          <span class="save-flash" id="syncFlash">Queued!</span>
+        </div>
+      </div>
+    </div>
+
+
+    <div class="card col">
+      <div class="section-head"><h3 class="section-title">Dota 2 — Steam account</h3></div>
+      ${
+        dotaLinked
+          ? `<div class="row">
+               ${DOTA.link.avatar ? `<img src="${escapeHtml(DOTA.link.avatar)}" style="width:38px;height:38px;border-radius:50%" alt="" />` : ""}
+               <div class="grow">
+                 <div class="result-name">${escapeHtml(DOTA.link.personaname || "Linked")}</div>
+                 <div class="result-id">Account ${DOTA.link.accountId}</div>
+               </div>
+               <button class="btn btn-secondary" id="dotaUnlinkBtn" type="button">Unlink</button>
+             </div>
+             <p class="hint">Powers Match History: real results, game modes and scoreboards from OpenDota.</p>`
+          : `<p class="hint">Not linked. Open <b>Match History</b> to search for your Steam profile and link it.</p>`
+      }
+    </div>
+
+    <div class="card col">
+      <div class="section-head"><h3 class="section-title">Deadlock — Steam account</h3></div>
+      ${
+        dlLinked
+          ? `<div class="row">
+               ${DL.link.avatar ? `<img src="${escapeHtml(DL.link.avatar)}" style="width:38px;height:38px;border-radius:50%" alt="" />` : ""}
+               <div class="grow">
+                 <div class="result-name">${escapeHtml(DL.link.personaname || "Linked")}</div>
+                 <div class="result-id">Account ${DL.link.accountId}</div>
+               </div>
+               <button class="btn btn-secondary" id="dlUnlinkBtn" type="button">Unlink</button>
+             </div>
+             <p class="hint">Powers the Deadlock views via the community Deadlock API.</p>`
+          : `<p class="hint">Not linked. Open <b>Deadlock → Overview</b> to search for your Steam profile.</p>`
+      }
+    </div>`;
+
+  wireAccountCard(root);
+  const syncBtn = root.querySelector("#syncAllBtn");
+  if (syncBtn)
+    syncBtn.addEventListener("click", () => {
+      invoke("sync_all").then(() => {
+        const flash = document.getElementById("syncFlash");
+        if (flash) {
+          flash.classList.add("show");
+          setTimeout(() => flash.classList.remove("show"), 1600);
+        }
+      });
+    });
+  renderCloudSection();
+
+  const du = root.querySelector("#dotaUnlinkBtn");
+  if (du)
+    du.addEventListener("click", async () => {
+      DOTA.link = await invoke("dota_unlink");
+      DOTA.matches = [];
+      DOTA.summary = null;
+      DOTA.loadedAt = 0;
+      renderAccounts();
+      renderUserChip();
+    });
+
+  const dlu = root.querySelector("#dlUnlinkBtn");
+  if (dlu)
+    dlu.addEventListener("click", async () => {
+      DL.link = await invoke("deadlock_unlink");
+      DL.matches = [];
+      DL.summary = null;
+      DL.loadedAt = 0;
+      renderAccounts();
+      renderUserChip();
+    });
+}
+
 async function boot() {
-  wireTopbar();
+  wireShell();
   state.profile = await invoke("get_profile");
   state.profileDraft = { ...state.profile };
   state.deviceId = await invoke("device_identity").catch(() => null);
   state.auth = (await invoke("auth_status").catch(() => null)) || { signedIn: false, email: null };
   state.overlay.visible = await invoke("overlay_visible").catch(() => false);
+
+  // Both links are local file reads; the match data behind them is only
+  // fetched when the relevant view is actually opened.
+  await dlRefreshLink();
+  await dtRefreshLink();
+
   renderOverlayToggle();
-  renderTopbarProfile();
+  renderUserChip();
   renderProfile();
   await refreshLive();
   await refreshSyncStatus();
@@ -1088,9 +1190,7 @@ async function boot() {
   renderHistory();
   renderLeaderboard();
 
-  // Deadlock's link is cheap to read (local file); its match data is only
-  // fetched when that tab is actually opened.
-  await dlRefreshLink();
+  setView("live");
 
   setInterval(refreshLive, 700);
   setInterval(refreshSyncStatus, 1500);
@@ -1101,7 +1201,7 @@ async function boot() {
     if (!DL.link.accountId) return;
     try {
       DL.live = await invoke("deadlock_live");
-      if (state.game === "deadlock" && state.dlTab === "dloverview") dlRender();
+      if (state.view === "dloverview") dlRender();
     } catch (_) {
       /* community API is allowed to be flaky */
     }

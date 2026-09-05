@@ -1,13 +1,22 @@
-# Dota Tracker
+# TheTracker
 
-A native desktop Dota 2 match tracker, built on Valve's official **Game
-State Integration (GSI)** feed — the same system pro broadcast overlays
-use. Nothing here reads game memory, calls a third-party API, or touches
-anything outside GSI's official local HTTP feed.
+A desktop match tracker for **Dota 2** and **Deadlock**.
 
-Built with **Tauri**: the Rust backend does all the GSI listening and match
-tracking, and the interface is HTML/CSS/JS rendered in the OS's own WebView.
-One binary, no Electron, no browser tab, no Node runtime shipped.
+Two different kinds of data feed it, and the app is explicit about which is
+which rather than blurring them:
+
+- **Live Dota tracking** comes from Valve's official **Game State
+  Integration (GSI)** feed — the same system pro broadcast overlays use.
+  Nothing reads game memory or touches the game process.
+- **Dota match history** comes from the public **OpenDota** API. GSI only
+  ever reports your own state and never says who won, so results, game
+  modes and full scoreboards come from there.
+- **Deadlock** has no Valve feed at all, so it uses the community-run
+  **Deadlock API**. See the Deadlock section below for what that means.
+
+Built with **Tauri**: a Rust backend does the GSI listening, match tracking
+and API work, and the interface is HTML/CSS/JS rendered in the OS's own
+WebView. One binary — no Electron, no browser tab, no bundled Node runtime.
 
 ## Project layout
 
@@ -51,7 +60,7 @@ cd src-tauri
 cargo build --release
 ```
 
-That produces `src-tauri/target/release/dota-tracker.exe` — the frontend is
+That produces `src-tauri/target/release/thetracker.exe` — the frontend is
 compiled into the binary, so the `.exe` is self-contained and can be copied
 anywhere.
 
@@ -109,6 +118,36 @@ this, installing the MSVC "C++ build tools" and switching the override to
   type. Personal only, not a real multiplayer leaderboard.
 - **Profile tab** — a local username/rank/main-role label, stored only on
   your PC.
+
+## Dota match history
+
+The Live tab and the Match History tab are fed by different sources, on
+purpose.
+
+GSI is a live feed of *your own* state — it is excellent for tracking a
+game as it happens, but Valve deliberately exposes nothing else. It never
+reports the result, the other nine players, or the lobby type. That is why
+matches recorded purely from GSI show up under **Tracked Sessions** with no
+win/loss and an unspecified game type.
+
+**Match History** fills that in from [OpenDota](https://www.opendota.com),
+the same public dataset Dotabuff and friends use. Link your Steam account
+once (Match History → search your name) and you get:
+
+- real **win/loss**, including abandons
+- authoritative **game mode and lobby type**, so Ranked / All Pick / Turbo
+  stop being a manual guess
+- **KDA, GPM, XPM, last hits, hero damage**, party size and duration
+- the full **ten-player scoreboard** with items, expanded per match
+
+Your row is highlighted in the scoreboard. Game-type classification is
+verified against OpenDota's own constants: lobby type 7 is Ranked, game
+mode 23 is Turbo, 22 and 1 are All Pick. Turbo is checked first, since a
+ranked turbo game is still turbo and comparing its last-hit counts against
+normal ranked games would be meaningless.
+
+If nothing shows up, your Dota profile is probably private: in Dota 2 go to
+Settings → Options → Advanced Options → **Expose Public Match Data**.
 
 ## Game types
 
@@ -179,7 +218,7 @@ runtime with `DOTA_TRACKER_CONVEX_URL` to aim at the dev one instead.
 
 ## Where your data lives
 
-`history.json` and `profile.json` in `DotaTracker/logs` inside your OS's
+`history.json` and `profile.json` in `TheTracker/logs` inside your OS's
 standard app-data folder (`%APPDATA%` on Windows,
 `~/Library/Application Support` on Mac, `~/.local/share` on Linux).
 Override the location entirely by setting `DOTA_TRACKER_LOG_DIR` before

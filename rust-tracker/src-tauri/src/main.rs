@@ -17,6 +17,7 @@
 mod auth;
 mod convex_sync;
 mod deadlock;
+mod dota_api;
 mod device_id;
 mod gsi;
 mod heroes;
@@ -41,6 +42,7 @@ struct AppState {
     syncer: Syncer,
     auth: SharedAuth,
     heroes: deadlock::SharedHeroes,
+    dota_heroes: dota_api::SharedDotaHeroes,
 }
 
 #[derive(Serialize)]
@@ -263,6 +265,69 @@ async fn deadlock_live(
     deadlock::live_match(account_id, &cache).await
 }
 
+// ---------- Dota match history (OpenDota) ----------
+
+#[tauri::command]
+fn dota_link_status() -> dota_api::DotaLink {
+    dota_api::load_link()
+}
+
+#[tauri::command]
+async fn dota_search(query: String) -> Result<Vec<dota_api::DotaProfile>, String> {
+    if query.trim().len() < 2 {
+        return Err("Type at least two characters to search.".to_string());
+    }
+    dota_api::search_players(query.trim()).await
+}
+
+#[tauri::command]
+fn dota_link(account_id: u64, personaname: String, avatar: Option<String>) -> dota_api::DotaLink {
+    let link = dota_api::DotaLink {
+        account_id: Some(account_id),
+        personaname: Some(personaname),
+        avatar,
+    };
+    dota_api::save_link(&link);
+    link
+}
+
+#[tauri::command]
+fn dota_unlink() -> dota_api::DotaLink {
+    let empty = dota_api::DotaLink::default();
+    dota_api::save_link(&empty);
+    empty
+}
+
+#[derive(Serialize)]
+struct DotaApiOverview {
+    matches: Vec<dota_api::DotaApiMatch>,
+    summary: dota_api::DotaApiSummary,
+}
+
+#[tauri::command]
+async fn dota_api_history(
+    limit: Option<usize>,
+    app_state: tauri::State<'_, AppState>,
+) -> Result<DotaApiOverview, String> {
+    let Some(account_id) = dota_api::load_link().account_id else {
+        return Err("No Steam account linked yet.".to_string());
+    };
+    let cache = app_state.dota_heroes.clone();
+    let matches = dota_api::match_history(account_id, &cache, limit.unwrap_or(50)).await?;
+    let summary = dota_api::summarize(&matches);
+    Ok(DotaApiOverview { matches, summary })
+}
+
+#[tauri::command]
+async fn dota_match_detail(
+    match_id: u64,
+    app_state: tauri::State<'_, AppState>,
+) -> Result<dota_api::DotaMatchDetail, String> {
+    let me = dota_api::load_link().account_id;
+    let cache = app_state.dota_heroes.clone();
+    dota_api::match_detail(match_id, me, &cache).await
+}
+
 // ---------- Overlay ----------
 
 #[tauri::command]
@@ -286,6 +351,9 @@ fn overlay_click_through(app: tauri::AppHandle, click_through: bool) -> Result<(
 }
 
 fn main() {
+    // Must run before anything reads history/profile files.
+    storage::migrate_legacy_dir();
+
     let tracker = Arc::new(Mutex::new(Tracker::new()));
     let server_error: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
@@ -316,6 +384,7 @@ fn main() {
                 syncer,
                 auth,
                 heroes: Arc::new(Mutex::new(deadlock::HeroCache::default())),
+                dota_heroes: Arc::new(Mutex::new(dota_api::DotaHeroCache::default())),
             });
             Ok(())
         })
@@ -346,6 +415,12 @@ fn main() {
             overlay_hide,
             overlay_visible,
             overlay_click_through,
+            dota_link_status,
+            dota_search,
+            dota_link,
+            dota_unlink,
+            dota_api_history,
+            dota_match_detail,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

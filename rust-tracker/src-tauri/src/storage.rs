@@ -8,14 +8,46 @@ use std::path::PathBuf;
 
 use crate::model::{MatchSummary, Profile};
 
-/// Log directory: `DOTA_TRACKER_LOG_DIR` env var if set (matches the old
-/// app's override), otherwise `<platform data dir>/DotaTracker/logs`.
+/// Log directory: `THETRACKER_LOG_DIR` (or the legacy
+/// `DOTA_TRACKER_LOG_DIR`) if set, otherwise
+/// `<platform data dir>/TheTracker/logs`.
 pub fn log_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("DOTA_TRACKER_LOG_DIR") {
-        return PathBuf::from(dir);
+    for var in ["THETRACKER_LOG_DIR", "DOTA_TRACKER_LOG_DIR"] {
+        if let Ok(dir) = std::env::var(var) {
+            return PathBuf::from(dir);
+        }
     }
     let base = dirs::data_dir().unwrap_or_else(std::env::temp_dir);
-    base.join("DotaTracker").join("logs")
+    base.join("TheTracker").join("logs")
+}
+
+/// The app used to store data under `DotaTracker/logs`. Renaming to
+/// TheTracker would otherwise look like losing every past match, so on first
+/// run the old directory is copied across (never moved — if anything goes
+/// wrong the original is still sitting there untouched).
+pub fn migrate_legacy_dir() {
+    let new_dir = log_dir();
+    if new_dir.join("history.json").exists() {
+        return;
+    }
+    let Some(base) = dirs::data_dir() else { return };
+    let old_dir = base.join("DotaTracker").join("logs");
+    if !old_dir.is_dir() || old_dir == new_dir {
+        return;
+    }
+    if fs::create_dir_all(&new_dir).is_err() {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(&old_dir) else { return };
+    for entry in entries.flatten() {
+        if !entry.path().is_file() {
+            continue;
+        }
+        let target = new_dir.join(entry.file_name());
+        if !target.exists() {
+            let _ = fs::copy(entry.path(), target);
+        }
+    }
 }
 
 fn history_file() -> PathBuf {

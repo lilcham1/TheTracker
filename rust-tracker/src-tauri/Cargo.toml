@@ -1,8 +1,8 @@
 [package]
-name = "dota-tracker"
+name = "thetracker"
 version = "0.4.0"
 edition = "2021"
-description = "Native desktop Dota 2 live match tracker built on Valve's official Game State Integration (GSI) feed."
+description = "TheTracker — desktop match tracker for Dota 2 and Deadlock."
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

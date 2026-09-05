@@ -2,74 +2,97 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dota Tracker</title>
+  <title>TheTracker</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="app">
-    <header class="topbar">
+  <div id="app" class="shell">
+
+    <aside class="sidebar">
       <div class="brand">
-        <span class="brand-glyph">⚔</span>
+        <img class="brand-mark" src="brand.png" alt="" />
         <div class="brand-text">
-          <h1>Dota Tracker</h1>
-          <span class="subtitle">Match Intelligence</span>
+          <span class="brand-name">The<b>Tracker</b></span>
+          <span class="brand-sub">Match Intelligence</span>
         </div>
       </div>
-      <div class="topbar-right">
-        <div id="profileBadge" class="profile-badge" hidden></div>
-        <button id="overlayToggle" class="tracking-toggle" type="button" title="Show an in-game overlay">
-          <span class="ov-glyph">▣</span>
-          <span class="label">Overlay</span>
-        </button>
-        <div id="syncPill" class="sync-pill" title="Cloud sync">
-          <span class="dot"></span>
-          <span class="label">Cloud</span>
+
+      <nav class="nav" id="nav">
+        <div class="nav-group">
+          <span class="nav-group-label">Dota 2</span>
+          <button class="nav-item active" data-view="live">
+            <span class="nav-ico live-ico"></span><span class="nav-label">Live</span><span class="nav-badge" id="liveBadge" hidden></span>
+          </button>
+          <button class="nav-item" data-view="dotamatches"><span class="nav-ico">▤</span><span class="nav-label">Match History</span></button>
+          <button class="nav-item" data-view="history"><span class="nav-ico">◷</span><span class="nav-label">Tracked Sessions</span></button>
+          <button class="nav-item" data-view="leaderboard"><span class="nav-ico">▲</span><span class="nav-label">Leaderboard</span></button>
         </div>
-        <button id="trackingToggle" class="tracking-toggle" type="button">
-          <span class="dot"></span>
-          <span class="label">Tracking</span>
+
+        <div class="nav-group">
+          <span class="nav-group-label">Deadlock</span>
+          <button class="nav-item" data-view="dloverview"><span class="nav-ico">◆</span><span class="nav-label">Overview</span></button>
+          <button class="nav-item" data-view="dlmatches"><span class="nav-ico">▤</span><span class="nav-label">Matches</span></button>
+          <button class="nav-item" data-view="dlheroes"><span class="nav-ico">✦</span><span class="nav-label">Heroes</span></button>
+        </div>
+
+        <div class="nav-group">
+          <span class="nav-group-label">Settings</span>
+          <button class="nav-item" data-view="profile"><span class="nav-ico">◎</span><span class="nav-label">Profile</span></button>
+          <button class="nav-item" data-view="accounts"><span class="nav-ico">⚿</span><span class="nav-label">Accounts</span></button>
+        </div>
+      </nav>
+
+      <div class="sidebar-foot">
+        <button class="ghost-btn" id="overlayBtn" type="button">
+          <span class="nav-ico">▣</span><span class="ghost-label">Overlay</span>
         </button>
+        <div class="sync-pill" id="syncPill">
+          <span class="sync-dot"></span><span class="sync-label" id="syncText">Local only</span>
+        </div>
       </div>
-    </header>
+    </aside>
 
-    <div id="serverError" class="banner banner-error" hidden></div>
+    <div class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 class="view-title" id="viewTitle">Live</h1>
+          <span class="view-sub" id="viewSub"></span>
+        </div>
+        <div class="topbar-right">
+          <div id="serverError" class="pill pill-error" hidden></div>
+          <button class="pill pill-toggle" id="trackingToggle" type="button">
+            <span class="dot"></span><span class="label">Tracking</span>
+          </button>
+          <div class="user-chip" id="userChip">
+            <div class="user-avatar" id="userAvatar"></div>
+            <div class="user-meta">
+              <span class="user-name" id="userName">Signed out</span>
+              <span class="user-rank" id="userRank"></span>
+            </div>
+          </div>
+        </div>
+      </header>
 
-    <nav class="game-switch" id="gameSwitch">
-      <button class="game active" data-game="dota" type="button">Dota 2</button>
-      <button class="game" data-game="deadlock" type="button">Deadlock</button>
-    </nav>
+      <main class="content" id="content">
+        <section id="tab-live" class="view active"></section>
+        <section id="tab-dotamatches" class="view"></section>
+        <section id="tab-history" class="view"></section>
+        <section id="tab-leaderboard" class="view"></section>
 
-    <nav class="tabs" id="tabs">
-      <button class="tab active" data-tab="live" type="button">Live</button>
-      <button class="tab" data-tab="history" type="button">History</button>
-      <button class="tab" data-tab="leaderboard" type="button">Leaderboard</button>
-      <button class="tab" data-tab="profile" type="button">Profile</button>
-    </nav>
+        <section id="tab-dloverview" class="view"></section>
+        <section id="tab-dlmatches" class="view"></section>
+        <section id="tab-dlheroes" class="view"></section>
 
-    <nav class="tabs" id="dlTabs" hidden>
-      <button class="tab active" data-dltab="dloverview" type="button">Overview</button>
-      <button class="tab" data-dltab="dlmatches" type="button">Matches</button>
-      <button class="tab" data-dltab="dlheroes" type="button">Heroes</button>
-      <button class="tab" data-dltab="dlaccount" type="button">Account</button>
-    </nav>
-
-    <main class="content">
-      <section id="tab-live" class="tab-panel active"></section>
-      <section id="tab-history" class="tab-panel"></section>
-      <section id="tab-leaderboard" class="tab-panel"></section>
-      <section id="tab-profile" class="tab-panel"></section>
-
-      <section id="tab-dloverview" class="tab-panel"></section>
-      <section id="tab-dlmatches" class="tab-panel"></section>
-      <section id="tab-dlheroes" class="tab-panel"></section>
-      <section id="tab-dlaccount" class="tab-panel"></section>
-    </main>
+        <section id="tab-profile" class="view"></section>
+        <section id="tab-accounts" class="view"></section>
+      </main>
+    </div>
   </div>
 
   <script src="app.js"></script>
   <script src="deadlock.js"></script>
+  <script src="dotamatches.js"></script>
   <script src="boot.js"></script>
 </body>
 </html>
