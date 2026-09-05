@@ -35,12 +35,11 @@ function renderOverlaySettings() {
   ];
 
   const dotaPanels = [
-    ["stats", "Your line — kills, deaths, last hits, gold lost"],
-    ["roshan", "Roshan respawn window"],
-    ["runes", "Rune timers — bounty, water, power, wisdom"],
+    ["roshan", "Roshan — respawn window opening, and when he is certainly up"],
+    ["runes", "Runes — bounty, water, power, wisdom"],
     ["lotus", "Healing lotus spawns"],
-    ["stacks", "Neutral camp stack timer (:53)"],
-    ["daynight", "Day / night countdown"],
+    ["stacks", "Neutral camp stack pull (:53)"],
+    ["daynight", "Day / night flip"],
   ];
 
   root.innerHTML = `
@@ -55,6 +54,15 @@ function renderOverlaySettings() {
         ordinary desktop window &mdash; nothing is injected into either game,
         no game memory is read, and it only ever draws information you
         already have.
+      </p>
+      <p class="hint" style="max-width:70ch;margin-top:8px">
+        It draws one thing: a countdown in the <b>last five seconds</b>
+        before an event. At every other moment &mdash; between matches,
+        during the draft, and most of the match itself &mdash; the window is
+        empty, so expect to see nothing until something is about to happen.
+        To place it, use <b>Unlock to move</b> below; a single marker stands
+        in while it is unlocked, since an empty transparent window cannot be
+        dragged anywhere you can see.
       </p>
 
       <label class="switch-row" style="margin-top:10px">
@@ -123,8 +131,8 @@ function renderOverlaySettings() {
 
     <section class="home-section">
       <div class="home-head">
-        <h2 class="home-title">Dota 2 panels</h2>
-        <div class="home-meta">live from Valve's GSI feed</div>
+        <h2 class="home-title">Warn me about</h2>
+        <div class="home-meta">five seconds before each</div>
       </div>
       ${dotaPanels
         .map(
@@ -136,11 +144,10 @@ function renderOverlaySettings() {
         )
         .join("")}
       <p class="hint" style="margin-top:10px;max-width:72ch">
-        These are the timers every established Dota overlay shows. All of them
-        are arithmetic on the match clock you can already see, and the stats
-        line is your own. Valve ships Game State Integration specifically so
-        tools can read this, and it only ever exposes your own state &mdash;
-        never an opponent's.
+        These are the timers every established Dota overlay shows, and all of
+        them are arithmetic on the match clock you can already see. Valve
+        ships Game State Integration specifically so tools can read this, and
+        it only ever exposes your own state &mdash; never an opponent's.
       </p>
     </section>
 

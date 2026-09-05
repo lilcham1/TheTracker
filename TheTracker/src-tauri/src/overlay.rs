@@ -62,6 +62,13 @@ pub fn show(app: &AppHandle) -> Result<(), String> {
     apply_settings(app, &settings);
     win.show().map_err(|e| e.to_string())?;
     win.set_always_on_top(true).map_err(|e| e.to_string())?;
+
+    // Tell the page when it appeared. The window is built once at startup
+    // and afterwards only toggled, so it is never reloaded and cannot work
+    // this out from load time — without the stamp it has no way to tell a
+    // fresh manual open from having sat hidden for an hour, and so no way
+    // to acknowledge the button and then get out of the way.
+    let _ = win.eval("window.__overlayShownAt = Date.now()");
     Ok(())
 }
 

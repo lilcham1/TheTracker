@@ -10,20 +10,24 @@ use serde::{Deserialize, Serialize};
 
 use crate::storage::log_dir;
 
-/// Panels the Dota overlay can draw.
+/// Which events the Dota overlay counts down to.
 ///
-/// These are the timers every established Dota overlay shows, and all of
-/// them are arithmetic on the game clock the player can already see —
-/// Roshan's respawn window, rune spawns, the :53 stack pull, and the
-/// day/night flip. None of it reveals an opponent's state.
+/// All of them are arithmetic on the game clock the player can already see
+/// — Roshan's respawn window, rune spawns, lotuses, the :53 stack pull and
+/// the day/night flip. None of it reveals an opponent's state.
+///
+/// There is deliberately no panel for the player's own scoreboard line. The
+/// overlay shows a countdown in the last five seconds before an event and
+/// nothing at any other time; a line pinned there permanently is exactly
+/// the sort of thing you stop seeing. A prefs.json written before this has
+/// its extra key ignored.
 ///
 /// The overlay is Dota-only: Deadlock publishes no live feed, so there is
-/// nothing to drive a timer or a stats line from.
+/// nothing to drive a timer from.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DotaPanels {
-    /// Your own scoreboard line: kills, deaths, last hits, gold lost.
-    #[serde(default = "yes")]
-    pub stats: bool,
+    /// The moment Roshan's respawn window opens, and the moment past which
+    /// he is certainly up.
     #[serde(default = "yes")]
     pub roshan: bool,
     /// Bounty / water / power / wisdom rune countdowns.
@@ -41,7 +45,7 @@ pub struct DotaPanels {
 
 impl Default for DotaPanels {
     fn default() -> Self {
-        DotaPanels { stats: true, roshan: true, runes: true, lotus: true, stacks: true, daynight: true }
+        DotaPanels { roshan: true, runes: true, lotus: true, stacks: true, daynight: true }
     }
 }
 

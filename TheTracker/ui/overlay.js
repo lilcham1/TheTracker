@@ -3,15 +3,15 @@
 // Dota only — Deadlock publishes no live feed, so an overlay there could
 // say nothing beyond "you are in a match".
 //
-// The guiding rule is that a timer earns its place only while it matters.
-// A wall of countdowns that are all six minutes away is noise you learn to
-// ignore; a single chip that appears twenty seconds before a rune is
-// something you actually use. So each piece has a relevance window, and
-// outside that window it simply isn't drawn.
+// It draws exactly one kind of thing: a countdown in the last five seconds
+// before an event. The rest of the time the window is empty. No idle panel,
+// no sample values, no "waiting for a match" — anything that sits on screen
+// permanently is something you stop seeing, and a panel of numbers that
+// never move looks like a hung window rather than a tracker.
 //
-// Everything shown is either the player's own GSI state or arithmetic on
-// the match clock they can already see. Nothing is read from the game
-// process and nothing reveals an opponent's state.
+// Everything shown is arithmetic on the match clock the player can already
+// see. Nothing is read from the game process and nothing reveals an
+// opponent's state.
 
 const invoke = window.__TAURI__ ? window.__TAURI__.core.invoke : null;
 
@@ -36,38 +36,40 @@ const DAY_CYCLE = 300;
 const LOTUS_FROM = 180;
 const LOTUS_EVERY = 180;
 
-// How long before an event its chip appears. One number for everything: a
-// chip shows for the last ten seconds and then goes, so each event is
-// announced once rather than sitting on screen counting down for a minute.
-const LEAD = 10;
+// Roshan's respawn window opens 8 minutes after he dies and closes at 11.
+const ROSHAN_MIN = 480;
+const ROSHAN_MAX = 660;
+
+// How long before an event its countdown appears. Five seconds: long
+// enough to react, short enough that nothing is ever on screen that isn't
+// about to happen.
+const LEAD = 5;
 
 let SETTINGS = {
   opacity: 0.85,
   scale: 1,
-  dota: { stats: true, roshan: true, runes: true, lotus: true, stacks: true, daynight: true },
+  clickThrough: true,
+  dota: { roshan: true, runes: true, lotus: true, stacks: true, daynight: true },
 };
 
 function countdown(seconds) {
   const s = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  return `0:0${s}`.slice(-4);
 }
 
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function chip(label, secs) {
+  const tone = secs <= 2 ? "urgent" : "soon";
+  return `<div class="chip ${tone}"><span class="label">${label}</span><span class="value">${countdown(secs)}</span></div>`;
 }
 
-function totalGoldLost(deaths) {
-  return deaths.reduce((sum, d) => sum + (d.goldLost ?? 0), 0);
+function paint(html) {
+  document.getElementById("overlay").innerHTML = html;
 }
 
 /// Seconds until the next multiple of `every`, counting from `from`.
 function nextEvery(clock, every, from = 0) {
   if (clock < from) return from - clock;
   return every - ((clock - from) % every);
-}
-
-function chip(label, value, tone = "") {
-  return `<div class="chip ${tone}"><span class="label">${label}</span><span class="value">${value}</span></div>`;
 }
 
 async function refreshSettings() {
@@ -87,73 +89,54 @@ async function refreshSettings() {
   }
 }
 
-// ---------- Contextual pieces ----------
+// ---------- Events ----------
 //
-// Each returns "" when it isn't currently worth screen space.
+// Each returns [label, secondsAway] pairs. Whether a pair is close enough
+// to draw is decided in one place below, so no event can quietly invent its
+// own lead time.
 
-function roshanChip(roshan, clock) {
-  // Nothing to say while Roshan is simply alive — that is the default state
-  // and a chip repeating it all game is pure noise.
-  if (roshan.lastDeathClock === null || roshan.lastDeathClock === undefined) return "";
-
-  const min = roshan.lastDeathClock + 480;
-  const max = roshan.lastDeathClock + 660;
-
-  if (clock < min) return chip("Roshan", countdown(min - clock), "urgent");
-  if (clock < max) return chip("Roshan maybe up", countdown(max - clock), "soon");
-
-  // Past the window he is definitely up; worth saying once he could be
-  // contested, but it stops being news after a while.
-  if (clock < max + 120) return chip("Roshan", "up", "good");
-  return "";
-}
-
-/// Bounty every 4 minutes from 0:00, water only at 2:00 and 4:00, power
-/// every 2 minutes from 6:00, wisdom every 7 from 7:00. Each shows only in
-/// the last ten seconds before it lands, so it is announced once rather
-/// than sitting there counting down.
-function runeChips(clock) {
-  const out = [];
-  const due = (label, secs) => {
-    if (secs > 0 && secs <= LEAD) out.push(chip(label, countdown(secs), secs <= 5 ? "urgent" : "soon"));
-  };
-
-  due("Bounty", nextEvery(clock, BOUNTY_EVERY));
+function runeEvents(clock) {
+  const out = [
+    ["Bounty", nextEvery(clock, BOUNTY_EVERY)],
+    ["Power", clock < POWER_FROM ? POWER_FROM - clock : nextEvery(clock, POWER_EVERY, POWER_FROM)],
+    ["Wisdom", nextEvery(clock, WISDOM_EVERY, WISDOM_EVERY)],
+  ];
 
   const water = WATER_TIMES.find((t) => t > clock);
-  if (water !== undefined) due("Water", water - clock);
+  if (water !== undefined) out.push(["Water", water - clock]);
 
-  due("Power", clock < POWER_FROM ? POWER_FROM - clock : nextEvery(clock, POWER_EVERY, POWER_FROM));
-  due("Wisdom", nextEvery(clock, WISDOM_EVERY, WISDOM_EVERY));
-
-  return out.join("");
+  return out;
 }
 
 /// Healing lotuses: first at 3:00, then every 3 minutes. Turbo halves both,
 /// and the tracked game type is used when it is known — being late is the
 /// one thing a lotus warning must not be.
-function lotusChip(clock, gameType) {
+function lotusEvents(clock, gameType) {
   const turbo = gameType === "turbo";
   const from = turbo ? LOTUS_FROM / 2 : LOTUS_FROM;
   const every = turbo ? LOTUS_EVERY / 2 : LOTUS_EVERY;
-
-  const secs = clock < from ? from - clock : nextEvery(clock, every, from);
-  if (secs <= 0 || secs > LEAD) return "";
-  return chip("Lotus", countdown(secs), secs <= 5 ? "urgent" : "soon");
+  return [["Lotus", clock < from ? from - clock : nextEvery(clock, every, from)]];
 }
 
-function stackChip(clock) {
-  const intoMinute = clock % 60;
-  const until = intoMinute <= STACK_AT ? STACK_AT - intoMinute : 60 + STACK_AT - intoMinute;
-  if (until > LEAD) return "";
-  return chip("Stack", countdown(until), until <= 5 ? "urgent" : "soon");
+function stackEvents(clock) {
+  const into = clock % 60;
+  return [["Stack", into <= STACK_AT ? STACK_AT - into : 60 + STACK_AT - into]];
 }
 
-function dayNightChip(clock, isDaytime) {
-  const until = DAY_CYCLE - (clock % DAY_CYCLE);
-  if (until > LEAD) return "";
-  const next = isDaytime === false ? "Day" : "Night";
-  return chip(next, countdown(until), "soon");
+function dayNightEvents(clock, isDaytime) {
+  return [[isDaytime === false ? "Day" : "Night", DAY_CYCLE - (clock % DAY_CYCLE)]];
+}
+
+/// Roshan has two moments worth warning about — the earliest he can be up
+/// and the point past which he certainly is. Everything between those is a
+/// maybe, and a maybe is not an event.
+function roshanEvents(roshan, clock) {
+  const died = roshan && roshan.lastDeathClock;
+  if (died === null || died === undefined) return [];
+  return [
+    ["Rosh window", died + ROSHAN_MIN - clock],
+    ["Rosh up", died + ROSHAN_MAX - clock],
+  ];
 }
 
 // ---------- Render ----------
@@ -161,80 +144,59 @@ function dayNightChip(clock, isDaytime) {
 function renderMatch(m) {
   const d = SETTINGS.dota || {};
   const clock = m.lastClockTime || 0;
-  const parts = [];
-
-  // The player's own line stays up, because it is the one thing that is
-  // always relevant while playing.
-  if (d.stats) {
-    parts.push(
-      chip("KDA", `${m.kills} / ${m.deaths.length}`) +
-        chip("LH", `${m.lastHits}`) +
-        (totalGoldLost(m.deaths) > 0 ? chip("Lost", `${totalGoldLost(m.deaths)}g`, "urgent") : "")
-    );
-  }
 
   // GSI reports a clock during hero selection and strategy time as well, so
   // every timer below would otherwise count down to events in a match that
-  // has not started. Only draw them once the horn has actually gone.
-  if (m.inProgress && clock > 0) {
-    if (d.roshan) parts.push(roshanChip(m.roshan, clock));
-    if (d.runes) parts.push(runeChips(clock));
-    if (d.lotus) parts.push(lotusChip(clock, m.gameType));
-    if (d.stacks) parts.push(stackChip(clock));
-    if (d.daynight) parts.push(dayNightChip(clock, m.daytime));
-  } else if (!m.inProgress) {
-    parts.push(chip("Drafting", "timers start at the horn"));
-  }
-
-  document.getElementById("overlay").innerHTML = parts.join("");
-}
-
-/// Shown when the overlay is open outside a match.
-///
-/// This is only reached by opening the overlay by hand, since it hides
-/// itself when a game ends. The obvious thing to put here is "waiting for a
-/// match" — but that is a dead end: it tells you nothing you did not
-/// already know, and gives you nothing to judge position, opacity or size
-/// against, which is the only reason to open the overlay outside a game.
-///
-/// So it renders sample chips instead, drawn from the panels actually
-/// enabled. Adjusting settings then shows a real result immediately. The
-/// leading chip marks it as a preview so it is never mistaken for live data.
-function renderPreview() {
-  const d = SETTINGS.dota || {};
-  const parts = [`<div class="chip good"><span class="value">Preview</span></div>`];
-
-  if (d.stats) parts.push(chip("KDA", "7 / 2") + chip("LH", "148"));
-  if (d.roshan) parts.push(chip("Roshan", "4:12", "urgent"));
-  if (d.runes) parts.push(chip("Bounty", "0:22", "soon"));
-  if (d.lotus) parts.push(chip("Lotus", "0:08", "soon"));
-  if (d.stacks) parts.push(chip("Stack", "0:06", "urgent"));
-  if (d.daynight) parts.push(chip("Night", "0:18", "soon"));
-
-  parts.push(
-    `<div class="hint">Sample values. Real timers appear when a Dota 2 match starts, and this closes itself when it ends.</div>`
-  );
-
-  document.getElementById("overlay").innerHTML = parts.join("");
-}
-
-async function tick() {
-  if (!invoke) {
-    renderPreview();
+  // has not started.
+  if (!m.inProgress || clock <= 0) {
+    paint("");
     return;
   }
 
-  try {
-    const live = await invoke("get_live_state");
-    if (live && live.current && !live.current.ended) {
-      renderMatch(live.current);
-      return;
-    }
-  } catch (_) {
-    // The GSI listener may not be up yet; the preview below is honest either way.
+  const events = [];
+  if (d.roshan) events.push(...roshanEvents(m.roshan, clock));
+  if (d.runes) events.push(...runeEvents(clock));
+  if (d.lotus) events.push(...lotusEvents(clock, m.gameType));
+  if (d.stacks) events.push(...stackEvents(clock));
+  if (d.daynight) events.push(...dayNightEvents(clock, m.daytime));
+
+  paint(
+    events
+      .filter(([, secs]) => secs > 0 && secs <= LEAD)
+      .sort((a, b) => a[1] - b[1])
+      .map(([label, secs]) => chip(label, secs))
+      .join("")
+  );
+}
+
+async function tick() {
+  // Unlocked for positioning: a transparent empty window cannot be dragged
+  // to a corner you can see, so one marker stands in until it is locked
+  // again. This is the only thing that ever shows outside the last five
+  // seconds before an event.
+  if (SETTINGS.clickThrough === false) {
+    paint(`<div class="chip good"><span class="value">Drag to place, then lock</span></div>`);
+    return;
   }
 
-  renderPreview();
+  if (!invoke) {
+    paint("");
+    return;
+  }
+
+  let live;
+  try {
+    live = await invoke("get_live_state");
+  } catch (_) {
+    paint("");
+    return;
+  }
+
+  if (live && live.current && !live.current.ended) {
+    renderMatch(live.current);
+  } else {
+    paint("");
+  }
 }
 
 refreshSettings();
