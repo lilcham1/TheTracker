@@ -79,6 +79,35 @@ function roshanBlock(roshan, clockTime) {
     </div>`;
 }
 
+// Appearance and panel choices, refreshed from the backend so changes made
+// in Overlay Settings appear without reopening the window.
+let OV_SETTINGS = {
+  opacity: 0.85,
+  scale: 1,
+  showStats: true,
+  showRoshan: true,
+  showCheckpoints: true,
+  showItems: false,
+  showDeaths: false,
+};
+
+async function refreshOverlaySettings() {
+  if (!invoke) return;
+  try {
+    const p = await invoke("get_prefs");
+    if (p && p.overlay) {
+      OV_SETTINGS = { ...OV_SETTINGS, ...p.overlay };
+      const card = document.getElementById("overlay");
+      if (card) {
+        card.style.opacity = String(OV_SETTINGS.opacity);
+        card.style.fontSize = (13 * (OV_SETTINGS.scale || 1)).toFixed(1) + "px";
+      }
+    }
+  } catch (_) {
+    // Keep the last known settings rather than snapping back to defaults.
+  }
+}
+
 function renderDota(m) {
   document.getElementById("ovDot").classList.add("live");
   document.getElementById("ovTitle").textContent = heroDisplayName(m.heroName);
@@ -92,22 +121,49 @@ function renderDota(m) {
       </div>`;
   }).join("");
 
-  document.getElementById("ovBody").innerHTML = `
-    <div class="ov-row">
-      <span class="ov-label">Last hits / denies</span>
-      <span class="ov-value">${m.lastHits} / ${m.denies}</span>
-    </div>
-    <div class="ov-row">
-      <span class="ov-label">Deaths / gold lost</span>
-      <span class="ov-value danger">${m.deaths.length} / ${totalGoldLost(m.deaths)}g</span>
-    </div>
-    <div class="ov-row">
-      <span class="ov-label">Kills</span>
-      <span class="ov-value">${m.kills}</span>
-    </div>
-    ${roshanBlock(m.roshan, m.lastClockTime)}
-    <div class="ov-checkpoints">${cps}</div>
-  `;
+  const parts = [];
+
+  if (OV_SETTINGS.showStats) {
+    parts.push(`
+      <div class="ov-row">
+        <span class="ov-label">Last hits / denies</span>
+        <span class="ov-value">${m.lastHits} / ${m.denies}</span>
+      </div>
+      <div class="ov-row">
+        <span class="ov-label">Deaths / gold lost</span>
+        <span class="ov-value danger">${m.deaths.length} / ${totalGoldLost(m.deaths)}g</span>
+      </div>
+      <div class="ov-row">
+        <span class="ov-label">Kills</span>
+        <span class="ov-value">${m.kills}</span>
+      </div>`);
+  }
+
+  if (OV_SETTINGS.showRoshan) parts.push(roshanBlock(m.roshan, m.lastClockTime));
+  if (OV_SETTINGS.showCheckpoints) parts.push(`<div class="ov-checkpoints">${cps}</div>`);
+
+  if (OV_SETTINGS.showItems && m.keyItemLog && m.keyItemLog.length) {
+    const items = m.keyItemLog
+      .slice(-6)
+      .map((i) => `<span class="ov-hero-chip">${esc(i.item.replace(/_/g, " "))} ${esc(i.clock)}</span>`)
+      .join("");
+    parts.push(`<div class="ov-heroes">${items}</div>`);
+  }
+
+  if (OV_SETTINGS.showDeaths && m.deaths.length) {
+    const deaths = m.deaths
+      .slice(-5)
+      .map((d) => `<span class="ov-hero-chip">${esc(d.clock)} −${d.goldLost ?? "?"}g</span>`)
+      .join("");
+    parts.push(`<div class="ov-heroes">${deaths}</div>`);
+  }
+
+  // Everything switched off would leave a bare title bar looking broken.
+  if (!parts.length) {
+    parts.push(`<div class="ov-hint">All panels are hidden — enable some in Overlay Settings.</div>`);
+  }
+
+  document.getElementById("ovBody").innerHTML = parts.join("");
 }
 
 function renderDeadlock(live) {
@@ -192,5 +248,9 @@ async function tick() {
   renderIdle("Start a Dota 2 match (with GSI enabled) or a Deadlock match and this fills in automatically.");
 }
 
+refreshOverlaySettings();
 tick();
 setInterval(tick, 1000);
+// Settings change rarely, so a slow refresh keeps the window in sync
+// without hammering the backend.
+setInterval(refreshOverlaySettings, 3000);

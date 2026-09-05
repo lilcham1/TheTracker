@@ -23,6 +23,7 @@ mod gsi;
 mod heroes;
 mod model;
 mod overlay;
+mod prefs;
 mod state;
 mod steam;
 mod storage;
@@ -337,6 +338,37 @@ fn steam_accounts() -> Vec<steam::SteamAccount> {
     steam::detect()
 }
 
+// ---------- Preferences: favourites, builds, overlay ----------
+
+#[tauri::command]
+fn get_prefs() -> prefs::Prefs {
+    prefs::load()
+}
+
+#[tauri::command]
+fn set_favorite_hero(game: String, hero: Option<String>) -> prefs::Prefs {
+    prefs::set_favorite(&game, hero)
+}
+
+#[tauri::command]
+fn save_build(build: prefs::Build) -> prefs::Prefs {
+    prefs::upsert_build(build)
+}
+
+#[tauri::command]
+fn delete_build(id: String) -> prefs::Prefs {
+    prefs::delete_build(&id)
+}
+
+/// Persists overlay appearance and applies it to the live window, so the
+/// change is visible immediately rather than after a restart.
+#[tauri::command]
+fn save_overlay_settings(settings: prefs::OverlaySettings, app: tauri::AppHandle) -> prefs::Prefs {
+    let p = prefs::save_overlay(settings);
+    overlay::apply_settings(&app, &p.overlay);
+    p
+}
+
 // ---------- Overlay ----------
 
 #[tauri::command]
@@ -421,6 +453,11 @@ fn main() {
             deadlock_overview,
             deadlock_live,
             steam_accounts,
+            get_prefs,
+            set_favorite_hero,
+            save_build,
+            delete_build,
+            save_overlay_settings,
             overlay_show,
             overlay_hide,
             overlay_visible,

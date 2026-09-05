@@ -5,14 +5,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 ## What this is
 
 **TheTracker** — a desktop match tracker for Dota 2 and Deadlock, in
-`rust-tracker/`. Built with **Tauri**: a Rust backend (`src-tauri/`) holding
+`TheTracker/`. Built with **Tauri**: a Rust backend (`src-tauri/`) holding
 the GSI listener, match-tracking logic and all API clients, plus an
 HTML/CSS/JS frontend (`ui/`) rendered in the OS WebView. One compiled
-binary — no Electron, no bundled Node runtime. See `rust-tracker/README.md`
+binary — no Electron, no bundled Node runtime. See `TheTracker/README.md`
 for build and run instructions.
 
-The folder is still named `rust-tracker/` for historical reasons; it is the
-only implementation. An earlier Electron/Node version was removed once the
+An earlier Electron/Node version was removed once the
 Tauri app superseded it — recover it from git history (commit `c8c1192`) if
 it is ever needed.
 
@@ -45,7 +44,7 @@ This machine builds with the **GNU** Rust toolchain, not MSVC — there are no
 Visual Studio Build Tools installed. Two consequences worth knowing before
 touching the build:
 
-- A `rustup override` pins `rust-tracker/` to
+- A `rustup override` pins `TheTracker/` to
   `stable-x86_64-pc-windows-gnu`, and MinGW-w64
   (`%USERPROFILE%\mingw64-winlibs\mingw64\bin`) must be on `PATH` when
   building — it supplies the `as`/`dlltool` binaries that rustup's own

@@ -13,6 +13,7 @@ pub const KEY_ITEMS: &[&str] = &[
     "daedalus", "butterfly", "silver_edge", "nullifier", "abyssal_blade",
     "monkey_king_bar", "linkens_sphere", "sheepstick", "rod_of_atos",
     "eye_of_skadi", "octarine_core", "bloodthorn", "dagon", "dagon_5",
+    "mage_slayer",
 ];
 
 pub fn is_key_item(name: &str) -> bool {

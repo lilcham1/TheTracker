@@ -229,6 +229,8 @@ function wireSteamDetect(root, rerender, onPick) {
 
 const state = {
   view: "live",
+  game: "dota",
+  prefs: { favorites: {}, builds: [], overlay: {} },
   dlTab: "dloverview",
   overlay: { visible: false, clickThrough: true },
   tab: "live",
@@ -939,28 +941,56 @@ function renderSyncPill() {
 
 // ---------- Top-level wiring ----------
 
-// Every view the sidebar can show, with the heading shown in the top bar.
+// Every view, its heading, and which game tab owns it.
 const VIEWS = {
-  live: { title: "Live", sub: "Real-time Dota 2 match tracking via GSI" },
-  dotamatches: { title: "Match History", sub: "Full results and scoreboards from OpenDota" },
-  history: { title: "Tracked Sessions", sub: "Matches this app recorded locally from the live feed" },
-  leaderboard: { title: "Leaderboard", sub: "Your personal bests and the shared board" },
-  dloverview: { title: "Deadlock Overview", sub: "Post-match stats via the community Deadlock API" },
-  dlmatches: { title: "Deadlock Matches", sub: "Recent games for your linked account" },
-  dlheroes: { title: "Deadlock Heroes", sub: "Per-hero breakdown of your recent games" },
-  profile: { title: "Profile", sub: "Your display name, rank and role" },
-  accounts: { title: "Accounts", sub: "Cloud sync and linked game accounts" },
+  live: { game: "dota", title: "Live", sub: "Real-time Dota 2 tracking via Valve's GSI feed" },
+  dotamatches: { game: "dota", title: "Match History", sub: "Results, modes and scoreboards from OpenDota" },
+  dotaheroes: { game: "dota", title: "Heroes", sub: "Per-hero performance across your recent games" },
+  favorite: { game: "dota", title: "Favorite Hero", sub: "Deep dive and improvement trend for your pick" },
+  builds: { game: "dota", title: "Builds", sub: "Your saved item builds, stored on this PC" },
+  history: { game: "dota", title: "Tracked Sessions", sub: "Matches this app recorded live" },
+  leaderboard: { game: "dota", title: "Leaderboard", sub: "Your personal bests and the shared board" },
+
+  dloverview: { game: "deadlock", title: "Overview", sub: "Post-match stats via the community Deadlock API" },
+  dlmatches: { game: "deadlock", title: "Matches", sub: "Recent games for your linked account" },
+  dlheroes: { game: "deadlock", title: "Heroes", sub: "Per-hero breakdown of your recent games" },
+  dlfavorite: { game: "deadlock", title: "Favorite Hero", sub: "Deep dive on your most-played pick" },
+  dlbuilds: { game: "deadlock", title: "Builds", sub: "Saved builds for Deadlock heroes" },
+
+  overlaysettings: { game: null, title: "Overlay Settings", sub: "Position, opacity and what the overlay shows" },
+  profile: { game: null, title: "Profile", sub: "Your display name, rank and role" },
+  accounts: { game: null, title: "Accounts", sub: "Cloud sync and linked game accounts" },
 };
+
+/// Switches the top-level game tab. Views belonging to the other game are
+/// hidden rather than removed, so state (scroll, filters, loaded matches)
+/// survives flipping back and forth.
+function setGame(game) {
+  state.game = game;
+  document.querySelectorAll(".game-tab").forEach((t) => t.classList.toggle("active", t.dataset.game === game));
+  document.querySelectorAll("[data-game-group]").forEach((g) => {
+    g.hidden = g.dataset.gameGroup !== game;
+  });
+
+  // Clicking a game tab should show that game. Anything not already one of
+  // its views — including the global ones like Accounts — jumps to its home
+  // view, otherwise the click appears to do nothing.
+  const meta = VIEWS[state.view];
+  if (!meta || meta.game !== game) {
+    setView(game === "deadlock" ? "dloverview" : "live");
+  }
+}
 
 function setView(view) {
   if (!VIEWS[view]) view = "live";
   state.view = view;
-  state.tab = view; // kept so existing render helpers keep working
+  state.tab = view; // older helpers still read state.tab
+
+  const meta = VIEWS[view];
+  if (meta.game && meta.game !== state.game) setGame(meta.game);
 
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   document.querySelectorAll(".view").forEach((p) => p.classList.toggle("active", p.id === `tab-${view}`));
-
-  const meta = VIEWS[view];
   document.getElementById("viewTitle").textContent = meta.title;
   document.getElementById("viewSub").textContent = meta.sub;
 
@@ -977,14 +1007,34 @@ function setView(view) {
         dtLoad();
       });
       break;
+    case "dotaheroes":
+      dtRefreshLink().then(() => {
+        renderDotaHeroes();
+        dtLoad().then(renderDotaHeroes);
+      });
+      break;
+    case "favorite":
+      dtRefreshLink().then(() => {
+        renderFavoriteHero();
+        dtLoad().then(renderFavoriteHero);
+      });
+      break;
+    case "builds":
+      renderBuilds();
+      break;
     case "dloverview":
     case "dlmatches":
     case "dlheroes":
+    case "dlfavorite":
+    case "dlbuilds":
       state.dlTab = view;
       dlRefreshLink().then(() => {
         dlRender();
         dlLoad();
       });
+      break;
+    case "overlaysettings":
+      renderOverlaySettings();
       break;
     case "profile":
       renderProfile();
@@ -1012,6 +1062,8 @@ function refreshLive() {
     const wasEnded = state.live && state.live.current && state.live.current.ended;
     state.live = live;
     renderLive();
+    const liveNav = document.querySelector('.nav-item[data-view="live"]');
+    if (liveNav) liveNav.classList.toggle("is-live", !!(live.current && !live.current.ended));
 
     const trackBtn = document.getElementById("trackingToggle");
     trackBtn.classList.toggle("on", live.trackingEnabled);
@@ -1085,6 +1137,11 @@ function wireShell() {
   document.getElementById("trackingToggle").addEventListener("click", () => {
     const nowOn = !document.getElementById("trackingToggle").classList.contains("on");
     invoke("set_tracking", { enabled: nowOn }).then(refreshLive);
+  });
+
+  document.getElementById("gameTabs").addEventListener("click", (e) => {
+    const t = e.target.closest(".game-tab");
+    if (t) setGame(t.dataset.game);
   });
 
   document.getElementById("nav").addEventListener("click", (e) => {
@@ -1234,6 +1291,7 @@ function renderAccounts() {
 
 async function boot() {
   wireShell();
+  state.prefs = (await invoke("get_prefs").catch(() => null)) || state.prefs;
   state.profile = await invoke("get_profile");
   state.profileDraft = { ...state.profile };
   state.deviceId = await invoke("device_identity").catch(() => null);

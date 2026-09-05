@@ -38,7 +38,9 @@ pub fn show(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| format!("Couldn't create the overlay window: {e}"))?;
 
     // Start click-through so it never steals input from the game.
-    win.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
+    let settings = crate::prefs::load().overlay;
+    win.set_ignore_cursor_events(settings.click_through).map_err(|e| e.to_string())?;
+    apply_settings(app, &settings);
     Ok(())
 }
 
@@ -68,4 +70,34 @@ pub fn set_click_through(app: &AppHandle, click_through: bool) -> Result<(), Str
         let _ = win.set_focus();
     }
     Ok(())
+}
+
+/// Applies saved appearance settings to the overlay window if it's open.
+/// Opacity and scale are handled by the overlay page itself (CSS), so this
+/// only deals with what the window manager owns: size, corner, and whether
+/// the window swallows clicks.
+pub fn apply_settings(app: &AppHandle, settings: &crate::prefs::OverlaySettings) {
+    let Some(win) = app.get_webview_window(OVERLAY_LABEL) else { return };
+
+    let _ = win.set_ignore_cursor_events(settings.click_through);
+    let _ = win.set_focusable(!settings.click_through);
+
+    let width = 320.0 * settings.scale;
+    let height = 420.0 * settings.scale;
+    let _ = win.set_size(tauri::LogicalSize::new(width, height));
+
+    // Corner placement is computed against the monitor the overlay is on,
+    // so it lands correctly on multi-monitor setups.
+    if let Ok(Some(monitor)) = win.current_monitor() {
+        let scale_factor = monitor.scale_factor();
+        let screen = monitor.size().to_logical::<f64>(scale_factor);
+        let margin = 24.0;
+        let (x, y) = match settings.corner.as_str() {
+            "top-right" => (screen.width - width - margin, margin),
+            "bottom-left" => (margin, screen.height - height - margin),
+            "bottom-right" => (screen.width - width - margin, screen.height - height - margin),
+            _ => (margin, margin),
+        };
+        let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+    }
 }

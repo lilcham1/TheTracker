@@ -1,9 +1,9 @@
 # Rust / Tauri
-rust-tracker/src-tauri/target/
-rust-tracker/src-tauri/gen/schemas/
+TheTracker/src-tauri/target/
+TheTracker/src-tauri/gen/schemas/
 
 # Node (Tauri CLI)
-rust-tracker/node_modules/
+TheTracker/node_modules/
 
 # OS cruft
 .DS_Store

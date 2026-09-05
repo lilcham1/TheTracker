@@ -68,9 +68,16 @@ button {
 /* ---------- Shell ---------- */
 
 .shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.body {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ---------- Sidebar ---------- */
@@ -1192,3 +1199,150 @@ button {
 
 .save-flash { color: var(--win); font-size: 12.5px; font-weight: 600; opacity: 0; transition: opacity 0.2s; }
 .save-flash.show { opacity: 1; }
+
+/* ---------- Game tabs (the primary split) ---------- */
+
+.game-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.game-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  padding: 7px 20px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+
+.game-tab:hover { color: var(--text); }
+
+.game-tab.active {
+  background: var(--brand);
+  color: #201304;
+  font-weight: 700;
+}
+
+/* The topbar is now full width above the sidebar. */
+.topbar .brand { flex-shrink: 0; }
+.topbar { gap: 20px; }
+.topbar-right { margin-left: auto; }
+
+.view-head {
+  padding: 16px 22px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* ---------- Hero rows ---------- */
+
+.hero-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 10px 13px;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+}
+
+.hero-row.fav { box-shadow: inset 0 0 0 1px rgba(240, 161, 60, 0.35); }
+.hero-row:hover { background: var(--panel-2); }
+.hero-main { flex: 1; min-width: 0; }
+.hero-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.hero-name { font-size: 13px; font-weight: 600; }
+
+.fav-btn {
+  padding: 4px 10px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Recent-form strip: newest first, one dot per game. */
+.form-strip { display: flex; gap: 3px; flex-shrink: 0; }
+
+.form-dot {
+  width: 8px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.form-dot.win { background: var(--win); }
+.form-dot.loss { background: var(--loss); }
+
+/* ---------- Builds ---------- */
+
+.build-card {
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.build-head { display: flex; align-items: center; gap: 10px; }
+.build-name { font-size: 13.5px; font-weight: 600; }
+
+.build-items { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.build-items img {
+  width: 42px;
+  height: 31px;
+  object-fit: contain;
+  border-radius: 4px;
+  background: #0a0c10;
+  border: 1px solid var(--line-soft);
+}
+
+.build-items.editable img { cursor: pointer; }
+.build-items.editable img:hover { border-color: var(--loss); }
+
+.item-picker { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.item-picker img {
+  width: 40px;
+  height: 30px;
+  object-fit: contain;
+  border-radius: 4px;
+  background: #0a0c10;
+  border: 1px solid var(--line-soft);
+  cursor: pointer;
+  transition: border-color 0.12s, transform 0.1s;
+}
+
+.item-picker img:hover { border-color: var(--brand); transform: translateY(-1px); }
+
+textarea.text-input { resize: vertical; font-family: inherit; }
+select.text-input { cursor: pointer; }
+
+/* ---------- Overlay settings ---------- */
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 3px 0;
+}
+
+.switch-row input { accent-color: var(--brand); width: 15px; height: 15px; cursor: pointer; }
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
