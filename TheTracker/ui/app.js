@@ -13,25 +13,6 @@ const GAME_TYPES = [
   { id: "other", label: "Other" },
 ];
 
-const RANKS = [
-  { id: "herald", label: "Herald", color: "#a0a0a0" },
-  { id: "guardian", label: "Guardian", color: "#5fa85f" },
-  { id: "crusader", label: "Crusader", color: "#4fa8c9" },
-  { id: "archon", label: "Archon", color: "#4f8fd1" },
-  { id: "legend", label: "Legend", color: "#8f6fd1" },
-  { id: "ancient", label: "Ancient", color: "#d14f6f" },
-  { id: "divine", label: "Divine", color: "#4fd1c9" },
-  { id: "immortal", label: "Immortal", color: "#f0a020" },
-];
-
-const ROLES = [
-  { id: "carry", label: "Carry", color: "#e05b5b" },
-  { id: "mid", label: "Mid", color: "#e0c05b" },
-  { id: "offlane", label: "Offlane", color: "#a05be0" },
-  { id: "soft_support", label: "Soft Support", color: "#5be0a0" },
-  { id: "hard_support", label: "Hard Support", color: "#5b9be0" },
-];
-
 const LB_METRICS = [
   { key: "last_hits_25", label: "Most LH @25m", higherBetter: true },
   { key: "fewest_deaths", label: "Fewest Deaths", higherBetter: false },
@@ -167,7 +148,7 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.5.0";
+const APP_VERSION = "0.6.0";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 
@@ -968,7 +949,7 @@ const VIEWS = {
   history: { game: "dota", title: "Tracked Sessions", sub: "Matches this app recorded live" },
   leaderboard: { game: "dota", title: "Leaderboard", sub: "Your personal bests and the shared board" },
 
-  dloverview: { game: "deadlock", title: "Overview", sub: "Post-match stats via the community Deadlock API" },
+  dloverview: { game: "deadlock", title: "Overview", sub: "Your Deadlock account at a glance" },
   dlmatches: { game: "deadlock", title: "Matches", sub: "Recent games for your linked account" },
   dlheroes: { game: "deadlock", title: "Heroes", sub: "Per-hero breakdown of your recent games" },
   dlfavorite: { game: "deadlock", title: "Favorite Hero", sub: "Deep dive on your most-played pick" },
@@ -1014,7 +995,7 @@ function setView(view) {
 
   switch (view) {
     case "dotaoverview":
-      loadDotaHome();
+      loadDotaOverview();
       break;
     case "history":
       loadHistory().then(renderHistory);

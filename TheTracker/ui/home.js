@@ -1,9 +1,12 @@
-// Account Overview — the landing page.
+// Account overviews — one per game, each the landing page for its tab.
 //
-// One screen that answers "how am I doing?" for both games at once: rank,
-// recent form, the headline rates, and what to fix. Deliberately built from
-// data already loaded elsewhere so opening the app costs at most one request
-// per linked game.
+// Deliberately not combined. The two games have different shapes (Dota has a
+// live feed and GPM; Deadlock has souls and no live stats), and a merged page
+// forces the reader to keep sorting out which half they are looking at. Each
+// game tab opens on its own overview instead.
+//
+// Both are built from data already loaded elsewhere, so opening a tab costs
+// at most one request.
 //
 // Layout note: this page avoids the card-grid look on purpose. Numbers sit
 // on a divided rail, trends are drawn as sparklines, and sections are
@@ -284,25 +287,25 @@ function deadlockSectionHtml() {
     </section>`;
 }
 
-function renderHome() {
+function renderDotaOverview() {
   const root = document.getElementById("tab-dotaoverview");
   if (!root) return;
 
   const p = state.profile || {};
-  const name = p.username || (state.auth && state.auth.email) || "Player";
+  const name = DOTA.link.personaname || p.username || "Dota 2";
 
   root.innerHTML = `
     <header class="home-hero">
       <div>
         <h1 class="home-hero-name">${escapeHtml(name)}</h1>
         <div class="home-hero-sub">
-          ${state.auth && state.auth.signedIn ? "Signed in &middot; syncing to cloud" : "Local only &middot; not signed in"}
+          ${DOTA.link.accountId ? `Steam account ${DOTA.link.accountId}` : "No account linked"}
         </div>
       </div>
       ${
         state.live && state.live.current && !state.live.current.ended
           ? `<button class="live-banner" data-goto="live">
-              <span class="live-pulse"></span> Dota match in progress &rsaquo;
+              <span class="live-pulse"></span> Match in progress &rsaquo;
              </button>`
           : ""
       }
@@ -315,11 +318,55 @@ function renderHome() {
   );
 }
 
-/// The home page reads from both games, so it pulls whichever links exist.
-/// Each loader caches, so revisiting home doesn't re-hit either API.
-async function loadDotaHome() {
+function renderDeadlockOverview() {
+  const root = document.getElementById("tab-dloverview");
+  if (!root) return;
+
+  // Linking lives on this page when there is no account yet.
+  if (!DL.link.accountId) {
+    root.innerHTML = dlNotLinkedHtml();
+    dlWireNotLinked(root);
+    return;
+  }
+
+  const name = DL.link.personaname || "Deadlock";
+
+  root.innerHTML = `
+    <header class="home-hero">
+      <div>
+        <h1 class="home-hero-name">${escapeHtml(name)}</h1>
+        <div class="home-hero-sub">
+          ${DL.rank ? escapeHtml(DL.rank.label) + " &middot; " : ""}Steam account ${DL.link.accountId}
+        </div>
+      </div>
+      ${
+        DL.live
+          ? `<div class="live-banner">
+              <span class="live-pulse"></span>
+              In a match as <b>${escapeHtml(DL.live.heroName)}</b>
+             </div>`
+          : ""
+      }
+    </header>
+
+    ${deadlockSectionHtml()}`;
+
+  root.querySelectorAll("[data-goto]").forEach((el) =>
+    el.addEventListener("click", () => setView(el.dataset.goto))
+  );
+}
+
+/// Each overview pulls only its own game.
+async function loadDotaOverview() {
   await dtRefreshLink();
-  renderHome();
+  renderDotaOverview();
   if (DOTA.link.accountId) await dtLoad();
-  renderHome();
+  renderDotaOverview();
+}
+
+async function loadDeadlockOverview() {
+  await dlRefreshLink();
+  renderDeadlockOverview();
+  if (DL.link.accountId) await dlLoad();
+  renderDeadlockOverview();
 }

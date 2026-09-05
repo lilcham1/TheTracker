@@ -170,94 +170,35 @@ function dlLiveCardHtml(live) {
 
 // ---------- Matches ----------
 
-function dlRenderMatches() {
-  const root = document.getElementById("tab-dlmatches");
-  if (!DL.link.accountId) {
-    root.innerHTML = dlNotLinkedHtml();
-    dlWireNotLinked(root);
-    return;
-  }
-  if (DL.error) {
-    root.innerHTML = dlErrorHtml(DL.error);
-    dlWireRetry(root);
-    return;
-  }
-  const list = DL.heroFilter ? DL.matches.filter((m) => m.heroName === DL.heroFilter) : DL.matches;
-  if (!list.length) {
-    root.innerHTML = `<div class="empty-state">${DL.loading ? "Loading…" : "No matches found for this account."}</div>`;
-    return;
-  }
+const DL_COLUMNS = [
+  { key: "heroName", label: "Hero", type: "text" },
+  { key: "outcome", label: "Result", type: "text" },
+  { key: "kills", label: "K", type: "num" },
+  { key: "deaths", label: "D", type: "num" },
+  { key: "assists", label: "A", type: "num" },
+  { key: "netWorth", label: "Souls", type: "num" },
+  { key: "lastHits", label: "LH", type: "num" },
+  { key: "heroLevel", label: "Lvl", type: "num" },
+  { key: "durationSeconds", label: "Length", type: "num" },
+  { key: "startTime", label: "When", type: "num" },
+];
 
-  // Same table language as the Dota match list: aligned columns beat a stack
-  // of cards for comparing one metric down the page, and the win/loss colour
-  // rides the leading edge instead of a pill.
-  root.innerHTML = `
-    ${DL.heroFilter ? `<div class="chip-row"><button class="chip selected" data-dl-clearfilter>${escapeHtml(DL.heroFilter)} ✕</button></div>` : ""}
-    <table class="dtable">
-      <thead>
-        <tr>
-          <th>Hero</th>
-          <th>Result</th>
-          <th class="num">KDA</th>
-          <th class="num">K</th>
-          <th class="num">D</th>
-          <th class="num">A</th>
-          <th class="num">Souls</th>
-          <th class="num">LH</th>
-          <th class="num">Lvl</th>
-          <th class="num">Length</th>
-          <th class="num">When</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${list
-          .map((m) => {
-            const cls = m.outcome === "win" ? "win" : m.outcome === "loss" ? "loss" : "other";
-            const label =
-              m.outcome === "win" ? "Win" : m.outcome === "loss" ? "Loss" : m.outcome === "abandoned" ? "Left" : "—";
-            const kda = (m.kills + m.assists) / Math.max(1, m.deaths);
-            const kdaCls = kda >= 4 ? "kda-good" : kda < 1.5 ? "kda-bad" : "";
-            return `
-              <tr class="${cls}" data-dl-toggle="${m.matchId}">
-                <td>
-                  <div class="cell-hero">
-                    ${m.heroImage ? `<img src="${m.heroImage}" alt="" onerror="this.style.visibility='hidden'" />` : ""}
-                    <div style="min-width:0"><div class="cell-hero-name">${escapeHtml(m.heroName)}</div></div>
-                  </div>
-                </td>
-                <td><span class="res ${cls}">${label}</span></td>
-                <td class="num ${kdaCls}">${kda.toFixed(2)}</td>
-                <td class="num">${m.kills}</td>
-                <td class="num">${m.deaths}</td>
-                <td class="num">${m.assists}</td>
-                <td class="num">${dlFmtSouls(m.netWorth)}</td>
-                <td class="num">${m.lastHits}</td>
-                <td class="num">${m.heroLevel}</td>
-                <td class="num">${dlFmtDuration(m.durationSeconds)}</td>
-                <td class="num cell-sub">${dlFmtWhen(m.startTime)}</td>
-              </tr>
-              ${DL.open.has(m.matchId) ? `<tr class="detail-row"><td colspan="11">${dlDetailHtml(m.matchId)}</td></tr>` : ""}`;
-          })
-          .join("")}
-      </tbody>
-    </table>`;
-
-  root.querySelectorAll("[data-dl-toggle]").forEach((el) =>
-    el.addEventListener("click", () => dlToggleMatch(Number(el.dataset.dlToggle)))
-  );
-
-  const clear = root.querySelector("[data-dl-clearfilter]");
-  if (clear)
-    clear.addEventListener("click", () => {
-      DL.heroFilter = null;
-      dlRender();
-    });
+function dlSortValue(m, key) {
+  if (key === "outcome") return m.outcome === "win" ? 0 : m.outcome === "loss" ? 1 : 2;
+  return m[key];
 }
 
+function dlSorted(list) {
+  const dir = DL.sortDir === "asc" ? 1 : -1;
+  return [...list].sort((a, b) => {
+    const av = dlSortValue(a, DL.sortKey);
+    const bv = dlSortValue(b, DL.sortKey);
+    if (typeof av === "string") return av.localeCompare(bv) * dir;
+    return (av - bv) * dir;
+  });
+}
 
-/// Scoreboard for one Deadlock match. The metadata payload is around a
-/// megabyte, so it is only fetched when a row is actually expanded, and the
-/// result is cached for the session.
+/// Scoreboard for one Deadlock match, fetched on expand.
 function dlDetailHtml(matchId) {
   if (DL.detailLoading.has(matchId)) return `<div class="hint">Loading scoreboard…</div>`;
   const d = DL.details.get(matchId);
@@ -265,27 +206,26 @@ function dlDetailHtml(matchId) {
   if (d.error) return `<div class="note err">${escapeHtml(d.error)}</div>`;
 
   const side = (team, label) => {
-    const players = d.players.filter((p) => p.team === team);
-    if (!players.length) return "";
-    const won = d.winningTeam === team;
+    const rows = d.players.filter((p) => p.team === team);
+    if (!rows.length) return "";
     return `
       <div class="board">
-        <div class="board-team ${won ? "radiant" : "dire"}">${label} ${won ? "· Won" : "· Lost"}</div>
-        <div class="board-row head" style="grid-template-columns:30px minmax(90px,1.2fr) 74px repeat(4,minmax(48px,0.7fr))">
-          <span></span><span>Hero</span><span>K / D / A</span>
-          <span class="board-num">Souls</span><span class="board-num">LH</span>
-          <span class="board-num">DN</span><span class="board-num">Lvl</span>
+        <div class="board-team ${team === d.winningTeam ? "radiant" : "dire"}">
+          ${label}${team === d.winningTeam ? " · won" : ""}
         </div>
-        ${players
+        <div class="board-row head" style="grid-template-columns:30px minmax(90px,1.2fr) 74px repeat(3,minmax(48px,.7fr))">
+          <span></span><span>Hero</span><span>K / D / A</span>
+          <span class="board-num">Souls</span><span class="board-num">LH</span><span class="board-num">Lvl</span>
+        </div>
+        ${rows
           .map(
             (p) => `
-          <div class="board-row ${p.isMe ? "me" : ""}" style="grid-template-columns:30px minmax(90px,1.2fr) 74px repeat(4,minmax(48px,0.7fr))">
+          <div class="board-row ${p.isMe ? "me" : ""}" style="grid-template-columns:30px minmax(90px,1.2fr) 74px repeat(3,minmax(48px,.7fr))">
             ${p.heroImage ? `<img class="board-hero" src="${p.heroImage}" alt="" onerror="this.style.visibility='hidden'" />` : `<span class="board-hero"></span>`}
             <span class="board-name">${escapeHtml(p.heroName)}</span>
             <span>${p.kills} / ${p.deaths} / ${p.assists}</span>
             <span class="board-num">${dlFmtSouls(p.netWorth)}</span>
             <span class="board-num">${p.lastHits}</span>
-            <span class="board-num">${p.denies}</span>
             <span class="board-num">${p.level}</span>
           </div>`
           )
@@ -294,7 +234,7 @@ function dlDetailHtml(matchId) {
   };
 
   return `
-    <div class="row" style="gap:14px;margin-bottom:10px">
+    <div class="row" style="gap:14px">
       <span class="hint">${dlFmtDuration(d.durationSeconds)} · match ${d.matchId}</span>
     </div>
     ${side(0, "Team 0")}
@@ -309,6 +249,8 @@ async function dlToggleMatch(matchId) {
   }
   DL.open.add(matchId);
 
+  // The metadata payload is around a megabyte, so it is fetched once per
+  // match and then kept.
   if (!DL.details.has(matchId)) {
     DL.detailLoading.add(matchId);
     dlRenderMatches();
@@ -322,7 +264,90 @@ async function dlToggleMatch(matchId) {
   dlRenderMatches();
 }
 
-// ---------- Heroes ----------
+function dlRowHtml(m) {
+  const open = DL.open.has(m.matchId);
+  const cls = m.outcome === "win" ? "win" : m.outcome === "loss" ? "loss" : "other";
+  const label = m.outcome === "win" ? "Win" : m.outcome === "loss" ? "Loss" : m.outcome === "abandoned" ? "Left" : "—";
+
+  return `
+    <tr class="${cls}" data-dl-toggle="${m.matchId}">
+      <td>
+        <div class="cell-hero">
+          ${m.heroImage ? `<img src="${m.heroImage}" alt="" onerror="this.style.visibility='hidden'" />` : ""}
+          <div style="min-width:0"><div class="cell-hero-name">${escapeHtml(m.heroName)}</div></div>
+        </div>
+      </td>
+      <td><span class="res ${cls}">${label}</span></td>
+      <td class="num">${m.kills}</td>
+      <td class="num">${m.deaths}</td>
+      <td class="num">${m.assists}</td>
+      <td class="num">${dlFmtSouls(m.netWorth)}</td>
+      <td class="num">${m.lastHits}</td>
+      <td class="num">${m.heroLevel}</td>
+      <td class="num">${dlFmtDuration(m.durationSeconds)}</td>
+      <td class="num cell-sub">${dlFmtWhen(m.startTime)}</td>
+    </tr>
+    ${open ? `<tr class="detail-row"><td colspan="${DL_COLUMNS.length}">${dlDetailHtml(m.matchId)}</td></tr>` : ""}`;
+}
+
+function dlRenderMatches() {
+  const root = document.getElementById("tab-dlmatches");
+  if (!root) return;
+
+  if (!DL.link.accountId) {
+    root.innerHTML = dlNotLinkedHtml();
+    dlWireNotLinked(root);
+    return;
+  }
+  if (DL.error) {
+    root.innerHTML = dlErrorHtml(DL.error);
+    dlWireRetry(root);
+    return;
+  }
+
+  const list = DL.heroFilter ? DL.matches.filter((m) => m.heroName === DL.heroFilter) : DL.matches;
+  if (!list.length) {
+    root.innerHTML = `<div class="empty-state">${DL.loading ? "Loading…" : "No matches found for this account."}</div>`;
+    return;
+  }
+
+  root.innerHTML = `
+    ${DL.heroFilter ? `<div class="chip-row"><button class="chip selected" data-dl-clearfilter>${escapeHtml(DL.heroFilter)} ✕</button></div>` : ""}
+    <table class="dtable">
+      <thead>
+        <tr>
+          ${DL_COLUMNS.map(
+            (c) =>
+              `<th class="${DL.sortKey === c.key ? "sorted" : ""}" data-dl-sort="${c.key}">
+                 ${c.label}${DL.sortKey === c.key ? (DL.sortDir === "asc" ? " ▲" : " ▼") : ""}
+               </th>`
+          ).join("")}
+        </tr>
+      </thead>
+      <tbody>${dlSorted(list).map(dlRowHtml).join("")}</tbody>
+    </table>`;
+
+  root.querySelectorAll("[data-dl-toggle]").forEach((el) =>
+    el.addEventListener("click", () => dlToggleMatch(Number(el.dataset.dlToggle)))
+  );
+  root.querySelectorAll("[data-dl-sort]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const key = el.dataset.dlSort;
+      if (DL.sortKey === key) DL.sortDir = DL.sortDir === "asc" ? "desc" : "asc";
+      else {
+        DL.sortKey = key;
+        DL.sortDir = "desc";
+      }
+      dlRenderMatches();
+    })
+  );
+  const clear = root.querySelector("[data-dl-clearfilter]");
+  if (clear)
+    clear.addEventListener("click", () => {
+      DL.heroFilter = null;
+      dlRenderMatches();
+    });
+}
 
 function dlRenderHeroes() {
   const root = document.getElementById("tab-dlheroes");
@@ -567,6 +592,6 @@ function dlRender() {
       dlRenderBuilds();
       break;
     default:
-      dlRenderOverview();
+      renderDeadlockOverview();
   }
 }
