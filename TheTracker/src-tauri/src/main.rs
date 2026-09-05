@@ -23,6 +23,7 @@ mod gsi;
 mod heroes;
 mod model;
 mod overlay;
+mod popular;
 mod prefs;
 mod state;
 mod steam;
@@ -46,6 +47,7 @@ struct AppState {
     auth: SharedAuth,
     heroes: deadlock::SharedHeroes,
     dota_heroes: dota_api::SharedDotaHeroes,
+    items: popular::SharedItemNames,
 }
 
 #[derive(Serialize)]
@@ -392,6 +394,22 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
     updates::install(&app).await
 }
 
+// ---------- Popular builds ----------
+
+#[tauri::command]
+async fn dota_popular_builds(
+    hero_id: u32,
+    app_state: tauri::State<'_, AppState>,
+) -> Result<Vec<popular::PopularBuild>, String> {
+    let cache = app_state.items.clone();
+    popular::dota_builds(hero_id, &cache, 6).await
+}
+
+#[tauri::command]
+async fn deadlock_popular_items(hero_id: u32) -> Result<Vec<popular::DeadlockPopularItem>, String> {
+    popular::deadlock_builds(hero_id, 12).await
+}
+
 // ---------- Overlay ----------
 
 #[tauri::command]
@@ -450,6 +468,7 @@ fn main() {
                 auth,
                 heroes: Arc::new(Mutex::new(deadlock::HeroCache::default())),
                 dota_heroes: Arc::new(Mutex::new(dota_api::DotaHeroCache::default())),
+                items: Arc::new(Mutex::new(popular::ItemNameCache::default())),
             });
             Ok(())
         })
@@ -485,6 +504,8 @@ fn main() {
             save_overlay_settings,
             check_for_update,
             install_update,
+            dota_popular_builds,
+            deadlock_popular_items,
             overlay_show,
             overlay_hide,
             overlay_visible,

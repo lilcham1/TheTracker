@@ -113,9 +113,14 @@ function dlRenderFavorite() {
 
     ${improvementHtml(h.recent)}
 
+    <section class="home-section">
+      <div class="home-head"><h2 class="home-title">Popular items on ${escapeHtml(h.name)}</h2></div>
+      <div id="dlPopularHost">${deadlockPopularHtml(h.recent[0] && h.recent[0].heroId)}</div>
+    </section>
+
     <div class="card col">
       <div class="section-head">
-        <h3 class="section-title">Builds for ${escapeHtml(h.name)}</h3>
+        <h3 class="section-title">Your builds for ${escapeHtml(h.name)}</h3>
         <button class="chip" id="dlNewBuild" type="button">New build</button>
       </div>
       ${
@@ -124,6 +129,14 @@ function dlRenderFavorite() {
           : `<p class="hint">No saved builds for this hero yet.</p>`
       }
     </div>`;
+
+  const heroId = h.recent[0] && h.recent[0].heroId;
+  if (heroId && !POPULAR.deadlock.has(heroId)) {
+    loadDeadlockPopular(heroId).then(() => {
+      const host = document.getElementById("dlPopularHost");
+      if (host) host.innerHTML = deadlockPopularHtml(heroId);
+    });
+  }
 
   const nb = root.querySelector("#dlNewBuild");
   if (nb) {

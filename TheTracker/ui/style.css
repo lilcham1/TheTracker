@@ -1657,3 +1657,351 @@ input[type="range"] {
 }
 
 .fav-btn.is-fav:hover { color: var(--brand-2); }
+
+/* ============================================================
+   Polish pass
+   ============================================================ */
+
+/* ---------- Icons ---------- */
+
+.ico {
+  display: block;
+  flex-shrink: 0;
+}
+
+.nav-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-3);
+  transition: color 0.14s ease;
+}
+
+.nav-item:hover .nav-ico { color: var(--text-2); }
+.nav-item.active .nav-ico { color: var(--brand); }
+
+/* ---------- Sidebar refinement ---------- */
+
+.sidebar { padding: 14px 10px 12px; gap: 14px; }
+.nav-group { gap: 1px; }
+
+.nav-item {
+  padding: 8px 10px;
+  gap: 11px;
+  border-radius: 9px;
+  letter-spacing: -0.1px;
+}
+
+/* The active bar grows from the centre rather than snapping in. */
+.nav-item.active::before {
+  animation: growBar 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@keyframes growBar {
+  from { transform: scaleY(0.2); opacity: 0; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+
+.nav-group-label {
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  padding: 10px 10px 5px;
+  color: #4e5769;
+}
+
+/* ---------- Topbar ---------- */
+
+.topbar {
+  padding: 11px 20px;
+  border-bottom: 1px solid var(--line-soft);
+  background: linear-gradient(180deg, #10131b, var(--bg-2));
+}
+
+.brand-name { letter-spacing: -0.35px; font-size: 15.5px; }
+.brand-mark { width: 30px; height: 30px; border-radius: 8px; }
+
+.game-tab { letter-spacing: -0.1px; transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease; }
+
+.game-tab.active {
+  box-shadow: 0 2px 10px rgba(240, 161, 60, 0.32);
+}
+
+.pill { transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease; }
+.pill-toggle:hover { border-color: var(--text-3); color: var(--text); }
+
+/* Overlay button reads as engaged when the overlay is up. */
+#overlayBtn.on {
+  color: var(--brand-2);
+  border-color: rgba(240, 161, 60, 0.5);
+  background: rgba(240, 161, 60, 0.12);
+}
+
+.user-chip { transition: border-color 0.14s ease; }
+.user-chip:hover { border-color: var(--text-3); }
+
+/* ---------- View header ---------- */
+
+.view-head { padding: 18px 24px 0; }
+.view-title { font-size: 19px; letter-spacing: -0.45px; }
+.content { padding: 16px 24px 40px; }
+
+/* ---------- Numerals ---------- */
+
+.rail-value,
+.stat-value,
+.col-value,
+.lb-value,
+.board-num,
+.dtable td.num,
+.cp-val {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.rail-value { letter-spacing: -1px; }
+
+/* ---------- Tables ---------- */
+
+.dtable tbody tr { transition: background 0.12s ease; }
+.dtable thead th { transition: color 0.12s ease; }
+
+/* Zebra banding is too heavy here; a hairline reads cleaner at this density. */
+.dtable tbody tr:last-child { border-bottom: none; }
+
+.detail-row td {
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 0 6px 12px -8px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------- Buttons ---------- */
+
+.btn,
+.chip,
+.link-btn,
+.ghost-btn {
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, transform 0.1s ease,
+    filter 0.14s ease;
+}
+
+.btn:active,
+.chip:active { transform: translateY(1px); }
+
+.btn:focus-visible,
+.chip:focus-visible,
+.nav-item:focus-visible,
+.game-tab:focus-visible,
+.text-input:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* A row of related buttons should read as one control, not scattered pills. */
+.btn-row {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.btn-row button {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border-right: 1px solid var(--line);
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.btn-row button:last-child { border-right: none; }
+.btn-row button:hover { background: var(--panel-2); color: var(--text); }
+
+.btn-row button.selected {
+  background: rgba(240, 161, 60, 0.16);
+  color: var(--brand-2);
+}
+
+/* ---------- Loading skeletons ----------
+   A shimmering placeholder of the right shape reads as "arriving" — plain
+   "Loading…" text reads as "nothing here". */
+
+.skeleton {
+  background: linear-gradient(90deg, var(--panel) 25%, var(--panel-hi) 37%, var(--panel) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.skel-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 18px;
+}
+
+.skel-line { height: 11px; margin-bottom: 9px; }
+.skel-line.lg { height: 26px; width: 62%; }
+.skel-line.sm { width: 45%; }
+.skel-row { height: 40px; margin-bottom: 7px; }
+
+/* ---------- Empty states ---------- */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 60px 20px;
+}
+
+.empty-ico {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text-3);
+}
+
+.empty-title { font-size: 14px; font-weight: 600; color: var(--text-2); }
+.empty-sub { font-size: 12.5px; color: var(--text-3); max-width: 46ch; line-height: 1.6; }
+
+/* ---------- Forms ---------- */
+
+.text-input {
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.text-input::placeholder { color: #4e5769; }
+.text-input:hover { border-color: var(--text-3); }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-hint { font-size: 11px; color: var(--text-3); }
+
+/* Range inputs, styled rather than left to the browser default. */
+input[type="range"] {
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--brand);
+  cursor: pointer;
+  border: 2px solid var(--bg-2);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  transition: transform 0.12s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+
+/* Checkbox rows read as switches in a settings list. */
+.switch-row {
+  padding: 9px 11px;
+  border-radius: 8px;
+  transition: background 0.13s ease;
+}
+
+.switch-row:hover { background: var(--panel); }
+
+/* ---------- Sparklines ---------- */
+
+.spark { opacity: 0.9; }
+.rail-item:hover .spark { opacity: 1; }
+
+/* ---------- Scroll ---------- */
+
+.content { scroll-behavior: smooth; }
+
+/* ---------- Popular builds ---------- */
+
+.pop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0;
+}
+
+.pop-phase { padding: 0 18px; border-left: 1px solid var(--line-soft); }
+.pop-phase:first-child { border-left: none; padding-left: 0; }
+
+.pop-phase-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-3);
+  margin-bottom: 10px;
+}
+
+.pop-items { display: flex; flex-direction: column; gap: 8px; }
+
+.pop-item {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 9px;
+  align-items: center;
+}
+
+.pop-item img {
+  grid-row: 1 / 3;
+  width: 34px;
+  height: 25px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: #0a0c10;
+  border: 1px solid var(--line-soft);
+}
+
+.pop-name {
+  font-size: 11.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Bars are relative to the most-bought item in the phase, so "everyone
+   builds this" is visually distinct from "some people do". */
+.pop-bar {
+  height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 3px;
+}
+
+.pop-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand), var(--brand-2));
+}
+
+.pop-list { display: flex; flex-direction: column; gap: 7px; }
+
+.pop-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 2fr 44px;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+}
+
+.pop-row-name { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pop-row-count { text-align: right; color: var(--text-3); font-variant-numeric: tabular-nums; }

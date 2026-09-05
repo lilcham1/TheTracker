@@ -259,9 +259,14 @@ function renderFavoriteHero() {
 
     ${improvementHtml(h.recent)}
 
+    <section class="home-section">
+      <div class="home-head"><h2 class="home-title">Popular items on ${escapeHtml(h.name)}</h2></div>
+      <div id="popularHost">${dotaPopularHtml(h.slug, h.recent[0] && h.recent[0].heroId)}</div>
+    </section>
+
     <div class="card col">
       <div class="section-head">
-        <h3 class="section-title">Builds for ${escapeHtml(h.name)}</h3>
+        <h3 class="section-title">Your builds for ${escapeHtml(h.name)}</h3>
         <button class="chip" id="favNewBuild" type="button">New build</button>
       </div>
       ${
@@ -279,6 +284,15 @@ function renderFavoriteHero() {
   root.querySelectorAll("[data-dt-toggle]").forEach((el) =>
     el.addEventListener("click", () => dtToggleMatch(Number(el.dataset.dtToggle)))
   );
+  // Pulled after first paint so the page appears immediately.
+  const heroId = h.recent[0] && h.recent[0].heroId;
+  if (heroId && !POPULAR.dota.has(heroId)) {
+    loadDotaPopular(heroId).then(() => {
+      const host = document.getElementById("popularHost");
+      if (host) host.innerHTML = dotaPopularHtml(h.slug, heroId);
+    });
+  }
+
   const nb = root.querySelector("#favNewBuild");
   if (nb)
     nb.addEventListener("click", () => {

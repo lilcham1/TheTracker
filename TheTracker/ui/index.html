@@ -27,7 +27,7 @@
           <span class="dot"></span><span class="label">Tracking</span>
         </button>
         <button class="pill pill-toggle" id="overlayBtn" type="button">
-          <span class="nav-ico">▣</span><span class="ghost-label">Overlay</span>
+          <span class="nav-ico" data-icon="overlay"></span><span class="ghost-label">Overlay</span>
         </button>
         <div class="user-chip" id="userChip">
           <div class="user-avatar" id="userAvatar"></div>
@@ -44,33 +44,33 @@
         <nav class="nav" id="nav">
           <div class="nav-group" data-game-group="dota">
             <span class="nav-group-label">Dota 2</span>
-            <button class="nav-item active" data-view="dotaoverview"><span class="nav-ico">⌂</span><span class="nav-label">Overview</span></button>
+            <button class="nav-item active" data-view="dotaoverview"><span class="nav-ico" data-icon="overview"></span><span class="nav-label">Overview</span></button>
             <button class="nav-item" data-view="live">
               <span class="nav-ico live-ico"></span><span class="nav-label">Live</span>
             </button>
-            <button class="nav-item" data-view="dotamatches"><span class="nav-ico">▤</span><span class="nav-label">Match History</span></button>
-            <button class="nav-item" data-view="dotaheroes"><span class="nav-ico">✦</span><span class="nav-label">Heroes</span></button>
-            <button class="nav-item" data-view="favorite"><span class="nav-ico">★</span><span class="nav-label">Favorite Hero</span></button>
-            <button class="nav-item" data-view="builds"><span class="nav-ico">⚒</span><span class="nav-label">Builds</span></button>
-            <button class="nav-item" data-view="history"><span class="nav-ico">◷</span><span class="nav-label">Tracked Sessions</span></button>
-            <button class="nav-item" data-view="leaderboard"><span class="nav-ico">▲</span><span class="nav-label">Leaderboard</span></button>
+            <button class="nav-item" data-view="dotamatches"><span class="nav-ico" data-icon="matches"></span><span class="nav-label">Match History</span></button>
+            <button class="nav-item" data-view="dotaheroes"><span class="nav-ico" data-icon="heroes"></span><span class="nav-label">Heroes</span></button>
+            <button class="nav-item" data-view="favorite"><span class="nav-ico" data-icon="star"></span><span class="nav-label">Favorite Hero</span></button>
+            <button class="nav-item" data-view="builds"><span class="nav-ico" data-icon="builds"></span><span class="nav-label">Builds</span></button>
+            <button class="nav-item" data-view="history"><span class="nav-ico" data-icon="sessions"></span><span class="nav-label">Tracked Sessions</span></button>
+            <button class="nav-item" data-view="leaderboard"><span class="nav-ico" data-icon="leaderboard"></span><span class="nav-label">Leaderboard</span></button>
           </div>
 
           <div class="nav-group" data-game-group="deadlock" hidden>
             <span class="nav-group-label">Deadlock</span>
-            <button class="nav-item" data-view="dloverview"><span class="nav-ico">⌂</span><span class="nav-label">Overview</span></button>
-            <button class="nav-item" data-view="dlmatches"><span class="nav-ico">▤</span><span class="nav-label">Matches</span></button>
-            <button class="nav-item" data-view="dlheroes"><span class="nav-ico">✦</span><span class="nav-label">Heroes</span></button>
-            <button class="nav-item" data-view="dlfavorite"><span class="nav-ico">★</span><span class="nav-label">Favorite Hero</span></button>
-            <button class="nav-item" data-view="dlbuilds"><span class="nav-ico">⚒</span><span class="nav-label">Builds</span></button>
+            <button class="nav-item" data-view="dloverview"><span class="nav-ico" data-icon="overview"></span><span class="nav-label">Overview</span></button>
+            <button class="nav-item" data-view="dlmatches"><span class="nav-ico" data-icon="matches"></span><span class="nav-label">Matches</span></button>
+            <button class="nav-item" data-view="dlheroes"><span class="nav-ico" data-icon="heroes"></span><span class="nav-label">Heroes</span></button>
+            <button class="nav-item" data-view="dlfavorite"><span class="nav-ico" data-icon="star"></span><span class="nav-label">Favorite Hero</span></button>
+            <button class="nav-item" data-view="dlbuilds"><span class="nav-ico" data-icon="builds"></span><span class="nav-label">Builds</span></button>
           </div>
 
           <div class="nav-group">
             <span class="nav-group-label">App</span>
-            <button class="nav-item" data-view="overlaysettings"><span class="nav-ico">▣</span><span class="nav-label">Overlay Settings</span></button>
-            <button class="nav-item" data-view="profile"><span class="nav-ico">◎</span><span class="nav-label">Profile</span></button>
-            <button class="nav-item" data-view="accounts"><span class="nav-ico">⚿</span><span class="nav-label">Accounts</span></button>
-          <button class="nav-item" data-view="about"><span class="nav-ico">↻</span><span class="nav-label">About &amp; Updates</span></button>
+            <button class="nav-item" data-view="overlaysettings"><span class="nav-ico" data-icon="overlay"></span><span class="nav-label">Overlay Settings</span></button>
+            <button class="nav-item" data-view="profile"><span class="nav-ico" data-icon="profile"></span><span class="nav-label">Profile</span></button>
+            <button class="nav-item" data-view="accounts"><span class="nav-ico" data-icon="accounts"></span><span class="nav-label">Accounts</span></button>
+          <button class="nav-item" data-view="about"><span class="nav-ico" data-icon="about"></span><span class="nav-label">About &amp; Updates</span></button>
           </div>
         </nav>
 
@@ -114,6 +114,7 @@
     </div>
   </div>
 
+  <script src="icons.js"></script>
   <script src="app.js"></script>
   <script src="home.js"></script>
   <script src="updates.js"></script>
@@ -121,6 +122,7 @@
   <script src="dotamatches.js"></script>
   <script src="heroes.js"></script>
   <script src="builds.js"></script>
+  <script src="popular.js"></script>
   <script src="dlextras.js"></script>
   <script src="overlaysettings.js"></script>
   <script src="boot.js"></script>

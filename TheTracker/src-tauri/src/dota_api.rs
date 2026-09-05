@@ -54,6 +54,11 @@ pub fn save_link(link: &DotaLink) {
 
 // ---------- HTTP ----------
 
+/// Shared with popular.rs so the two modules use one HTTP path.
+pub async fn get_json_public(path: &str) -> Result<serde_json::Value, String> {
+    get_json(path).await
+}
+
 async fn get_json(path: &str) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
         .user_agent(UA)

@@ -148,7 +148,7 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.7.0";
+const APP_VERSION = "0.8.0";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 
@@ -1141,6 +1141,16 @@ function refreshSyncStatus() {
     .catch(() => {});
 }
 
+/// Fills every [data-icon] placeholder with its SVG. Done once at boot
+/// rather than inlining the markup, so the icon set lives in one file.
+function paintIcons(root = document) {
+  root.querySelectorAll("[data-icon]").forEach((el) => {
+    if (el.dataset.painted) return;
+    el.innerHTML = icon(el.dataset.icon, 16);
+    el.dataset.painted = "1";
+  });
+}
+
 function wireShell() {
   document.getElementById("trackingToggle").addEventListener("click", () => {
     const nowOn = !document.getElementById("trackingToggle").classList.contains("on");
@@ -1295,6 +1305,7 @@ function renderAccounts() {
 
 async function boot() {
   wireShell();
+  paintIcons();
   state.prefs = (await invoke("get_prefs").catch(() => null)) || state.prefs;
   state.profile = await invoke("get_profile");
   state.profileDraft = { ...state.profile };
