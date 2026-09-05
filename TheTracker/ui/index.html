@@ -70,6 +70,7 @@
             <button class="nav-item" data-view="overlaysettings"><span class="nav-ico">▣</span><span class="nav-label">Overlay Settings</span></button>
             <button class="nav-item" data-view="profile"><span class="nav-ico">◎</span><span class="nav-label">Profile</span></button>
             <button class="nav-item" data-view="accounts"><span class="nav-ico">⚿</span><span class="nav-label">Accounts</span></button>
+          <button class="nav-item" data-view="about"><span class="nav-ico">↻</span><span class="nav-label">About &amp; Updates</span></button>
           </div>
         </nav>
 
@@ -81,6 +82,8 @@
       </aside>
 
       <div class="main">
+        <div class="upd-banner" id="updateBanner" hidden></div>
+
         <div class="view-head">
           <h1 class="view-title" id="viewTitle">Live</h1>
           <span class="view-sub" id="viewSub"></span>
@@ -105,6 +108,7 @@
           <section id="tab-overlaysettings" class="view"></section>
           <section id="tab-profile" class="view"></section>
           <section id="tab-accounts" class="view"></section>
+          <section id="tab-about" class="view"></section>
         </main>
       </div>
     </div>
@@ -112,6 +116,7 @@
 
   <script src="app.js"></script>
   <script src="home.js"></script>
+  <script src="updates.js"></script>
   <script src="deadlock.js"></script>
   <script src="dotamatches.js"></script>
   <script src="heroes.js"></script>

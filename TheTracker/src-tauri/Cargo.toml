@@ -1,6 +1,6 @@
 [package]
 name = "thetracker"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 description = "TheTracker — desktop match tracker for Dota 2 and Deadlock."
 
@@ -23,6 +23,10 @@ uuid = { version = "1", features = ["v4"] }
 # Deadlock data comes from the community REST API (see deadlock.rs) — there
 # is no official Valve feed for it the way Dota has GSI.
 reqwest = { version = "0.12", features = ["json"] }
+
+# In-app updates. Desktop only — there is no mobile build.
+[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
+tauri-plugin-updater = "2"
 
 # Reads only the Steam account id / display name from the registry.
 # See steam.rs for exactly what is and is not read.

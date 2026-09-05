@@ -1620,3 +1620,29 @@ input[type="range"] {
 .ov-sep { height: 1px; background: rgba(255, 255, 255, 0.1); margin: 3px 0; }
 .ov-value.good { color: #6fd18a; }
 .ov-value.warn { color: #e0c05b; }
+
+/* ---------- Update banner ----------
+   A slim bar rather than a modal: an update is worth mentioning, not worth
+   blocking the app over. */
+
+.upd-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 22px;
+  background: linear-gradient(90deg, rgba(240, 161, 60, 0.14), transparent 70%);
+  border-bottom: 1px solid rgba(240, 161, 60, 0.3);
+  font-size: 12.5px;
+}
+
+.upd-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand);
+  flex-shrink: 0;
+  animation: pulse 1.8s infinite;
+}
+
+.upd-text { flex: 1; color: var(--text); }
+.upd-btn { padding: 6px 14px; font-size: 12px; }

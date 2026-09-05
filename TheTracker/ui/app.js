@@ -167,6 +167,8 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
+const APP_VERSION = "0.5.0";
+
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 
 async function steamDetect(onDone) {
@@ -975,6 +977,7 @@ const VIEWS = {
   overlaysettings: { game: null, title: "Overlay Settings", sub: "Position, opacity and what the overlay shows" },
   profile: { game: null, title: "Profile", sub: "Your display name, rank and role" },
   accounts: { game: null, title: "Accounts", sub: "Cloud sync and linked game accounts" },
+  about: { game: null, title: "About & Updates", sub: "Version, update checks and data sources" },
 };
 
 /// Switches the top-level game tab. Views belonging to the other game are
@@ -1059,6 +1062,9 @@ function setView(view) {
       break;
     case "accounts":
       renderAccounts();
+      break;
+    case "about":
+      renderAbout();
       break;
     default:
       break;
@@ -1327,6 +1333,10 @@ async function boot() {
   renderLeaderboard();
 
   setView("dotaoverview");
+
+  // Let the app settle before touching the network, then check quietly.
+  setTimeout(() => checkForUpdate({ quiet: true }), 4000);
+  setInterval(() => checkForUpdate({ quiet: true }), 6 * 60 * 60 * 1000);
 
   setInterval(refreshLive, 700);
   setInterval(refreshSyncStatus, 1500);

@@ -27,6 +27,7 @@ mod prefs;
 mod state;
 mod steam;
 mod storage;
+mod updates;
 
 use std::sync::{Arc, Mutex};
 
@@ -379,6 +380,18 @@ async fn deadlock_match_detail(
     deadlock::match_detail(match_id, me, &cache).await
 }
 
+// ---------- Updates ----------
+
+#[tauri::command]
+async fn check_for_update(app: tauri::AppHandle) -> Result<updates::UpdateInfo, String> {
+    updates::check(&app).await
+}
+
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    updates::install(&app).await
+}
+
 // ---------- Overlay ----------
 
 #[tauri::command]
@@ -420,6 +433,7 @@ fn main() {
 
     let tracker_for_setup = tracker.clone();
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             // The sync worker runs on Tauri's async runtime, so it can only
             // start once the app is being set up — not before the builder.
@@ -469,6 +483,8 @@ fn main() {
             save_build,
             delete_build,
             save_overlay_settings,
+            check_for_update,
+            install_update,
             overlay_show,
             overlay_hide,
             overlay_visible,

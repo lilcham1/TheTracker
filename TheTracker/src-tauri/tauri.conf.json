@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "TheTracker",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "identifier": "dev.lilcham1.thetracker",
   "build": {
     "frontendDist": "../ui"
@@ -35,6 +35,15 @@
     ],
     "resources": [
       "WebView2Loader.dll"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk5MEE1M0QwRDc0MzIwMjAKUldRZ0lFUFgwRk1LbWJUazJIcW55cENpYjc0d1Q5bGdYMVBDVDZ1ZHhYTDdPMXpSckdhUjBIZ2wK",
+      "endpoints": [
+        "https://github.com/lilcham1/TheTracker/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
