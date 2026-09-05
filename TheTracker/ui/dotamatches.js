@@ -16,6 +16,8 @@ const DOTA = {
   details: new Map(), // matchId -> scoreboard, fetched on first expand
   detailLoading: new Set(),
   filter: "all", // all | ranked | all_pick | turbo | other
+  sortKey: "startTime",
+  sortDir: "desc",
   results: [],
   searching: false,
   searchError: null,
@@ -79,31 +81,34 @@ async function dtLoad(force = false) {
 function dtStatsHtml() {
   const s = DOTA.summary;
   if (!s) return "";
-  const wr = s.winRate;
-  return `
-    <div class="stat-row">
-      <div class="stat">
-        <div class="stat-label">Win rate</div>
-        <div class="stat-value ${wr >= 50 ? "win" : "loss"}">${wr.toFixed(0)}%</div>
-        <div class="stat-sub">${s.wins}W · ${s.losses}L of ${s.matches}</div>
-        <div class="meter"><div class="meter-fill ${wr >= 50 ? "" : "low"}" style="width:${Math.min(100, wr)}%"></div></div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Avg KDA</div>
-        <div class="stat-value">${s.kda.toFixed(2)}</div>
-        <div class="stat-sub">${(s.kills / Math.max(1, s.matches)).toFixed(1)} / ${(s.deaths / Math.max(1, s.matches)).toFixed(1)} / ${(s.assists / Math.max(1, s.matches)).toFixed(1)} per game</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Avg GPM</div>
-        <div class="stat-value brand">${s.avgGpm}</div>
-        <div class="stat-sub">${s.avgXpm} XPM</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Avg last hits</div>
-        <div class="stat-value">${s.avgLastHits}</div>
-        <div class="stat-sub">per match</div>
-      </div>
-    </div>`;
+
+  // Oldest-first so the sparklines read left to right like a timeline.
+  const chrono = [...DOTA.matches].reverse();
+  const kdaSeries = chrono.map((m) => (m.kills + m.assists) / Math.max(1, m.deaths));
+  const gpmSeries = chrono.map((m) => m.goldPerMin);
+  const lhSeries = chrono.map((m) => m.lastHits);
+  const winSeries = chrono.map((_, i) => {
+    const w = chrono.slice(Math.max(0, i - 9), i + 1);
+    return (w.filter((m) => m.won).length / w.length) * 100;
+  });
+
+  return railHtml([
+    {
+      label: "Win rate",
+      value: `${s.winRate.toFixed(0)}%`,
+      tone: s.winRate >= 50 ? "win" : "loss",
+      sub: `${s.wins}W – ${s.losses}L of ${s.matches}`,
+      spark: sparkline(winSeries),
+    },
+    {
+      label: "Avg KDA",
+      value: s.kda.toFixed(2),
+      sub: `${(s.kills / Math.max(1, s.matches)).toFixed(1)} / ${(s.deaths / Math.max(1, s.matches)).toFixed(1)} / ${(s.assists / Math.max(1, s.matches)).toFixed(1)}`,
+      spark: sparkline(kdaSeries),
+    },
+    { label: "Avg GPM", value: s.avgGpm, sub: `${s.avgXpm} XPM`, spark: sparkline(gpmSeries) },
+    { label: "Avg last hits", value: s.avgLastHits, sub: "per match", spark: sparkline(lhSeries) },
+  ]);
 }
 
 function dtBoardSideHtml(players, radiant, label) {
@@ -157,39 +162,87 @@ function dtDetailHtml(matchId) {
     ${dtBoardSideHtml(d.players, false, "Dire")}`;
 }
 
-function dtMatchRowHtml(m) {
+// Columns the table can sort by. Keeping this declarative means the header
+// and the comparator can never drift apart.
+const DT_COLUMNS = [
+  { key: "heroName", label: "Hero", type: "text" },
+  { key: "result", label: "Result", type: "text" },
+  { key: "kda", label: "KDA", type: "num" },
+  { key: "kills", label: "K", type: "num" },
+  { key: "deaths", label: "D", type: "num" },
+  { key: "assists", label: "A", type: "num" },
+  { key: "lastHits", label: "LH", type: "num" },
+  { key: "goldPerMin", label: "GPM", type: "num" },
+  { key: "xpPerMin", label: "XPM", type: "num" },
+  { key: "heroDamage", label: "DMG", type: "num" },
+  { key: "durationSeconds", label: "Length", type: "num" },
+  { key: "startTime", label: "When", type: "num" },
+];
+
+function dtSortValue(m, key) {
+  if (key === "result") return m.abandoned ? 2 : m.won ? 0 : 1;
+  return m[key];
+}
+
+function dtSorted(list) {
+  const { sortKey, sortDir } = DOTA;
+  const dir = sortDir === "asc" ? 1 : -1;
+  return [...list].sort((a, b) => {
+    const av = dtSortValue(a, sortKey);
+    const bv = dtSortValue(b, sortKey);
+    if (typeof av === "string") return av.localeCompare(bv) * dir;
+    return (av - bv) * dir;
+  });
+}
+
+function dtRowHtml(m) {
   const img = dtHeroImg(m.heroSlug);
   const open = DOTA.open.has(m.matchId);
-  const kdaCls = m.kda >= 4 ? "kda-good" : m.kda < 1.5 ? "kda-bad" : "";
   const result = m.abandoned ? "other" : m.won ? "win" : "loss";
   const resultText = m.abandoned ? "Left" : m.won ? "Win" : "Loss";
+  const kdaCls = m.kda >= 4 ? "kda-good" : m.kda < 1.5 ? "kda-bad" : "";
 
   return `
-    <div class="match ${result} ${open ? "open" : ""}" data-dt-match="${m.matchId}">
-      <div class="match-head" data-dt-toggle="${m.matchId}">
-        ${img ? `<img class="hero-portrait" src="${img}" alt="" />` : `<span class="hero-portrait"></span>`}
-        <div class="match-hero">
-          <span class="match-hero-name">${escapeHtml(m.heroName)}</span>
-          <span class="match-mode">${escapeHtml(m.modeName)} · ${escapeHtml(m.lobbyName)}${m.partySize && m.partySize > 1 ? ` · party of ${m.partySize}` : ""}</span>
+    <tr class="${result}" data-dt-toggle="${m.matchId}">
+      <td>
+        <div class="cell-hero">
+          ${img ? `<img src="${img}" alt="" onerror="this.style.visibility='hidden'" />` : ""}
+          <div style="min-width:0">
+            <div class="cell-hero-name">${escapeHtml(m.heroName)}</div>
+            <div class="cell-sub">${escapeHtml(m.modeName)}${m.partySize && m.partySize > 1 ? ` · party ${m.partySize}` : ""}</div>
+          </div>
         </div>
-        <span class="match-result ${result}">${resultText}</span>
-        <div class="match-col">
-          <span class="col-value ${kdaCls}">${m.kills} / ${m.deaths} / ${m.assists}</span>
-          <span class="col-label">KDA ${m.kda.toFixed(2)}</span>
-        </div>
-        <div class="match-col col-hide">
-          <span class="col-value">${m.goldPerMin}</span>
-          <span class="col-label">GPM</span>
-        </div>
-        <div class="match-col col-hide">
-          <span class="col-value">${m.lastHits}</span>
-          <span class="col-label">Last hits</span>
-        </div>
-        <div class="match-when">${dtDuration(m.durationSeconds)}<br />${dtAgo(m.startTime)}</div>
-        <span class="chev">▸</span>
-      </div>
-      <div class="match-body">${open ? dtDetailHtml(m.matchId) : ""}</div>
-    </div>`;
+      </td>
+      <td><span class="res ${result}">${resultText}</span></td>
+      <td class="num ${kdaCls}">${m.kda.toFixed(2)}</td>
+      <td class="num">${m.kills}</td>
+      <td class="num">${m.deaths}</td>
+      <td class="num">${m.assists}</td>
+      <td class="num">${m.lastHits}</td>
+      <td class="num">${m.goldPerMin}</td>
+      <td class="num">${m.xpPerMin}</td>
+      <td class="num">${dtNum(m.heroDamage)}</td>
+      <td class="num">${dtDuration(m.durationSeconds)}</td>
+      <td class="num cell-sub">${dtAgo(m.startTime)}</td>
+    </tr>
+    ${open ? `<tr class="detail-row"><td colspan="${DT_COLUMNS.length}">${dtDetailHtml(m.matchId)}</td></tr>` : ""}`;
+}
+
+function dtTableHtml(list) {
+  return `
+    <table class="dtable">
+      <thead>
+        <tr>
+          ${DT_COLUMNS.map(
+            (c) =>
+              `<th class="${DOTA.sortKey === c.key ? "sorted" : ""}${c.type === "num" ? " num" : ""}" data-dt-sort="${c.key}">
+                 ${c.label}${DOTA.sortKey === c.key ? (DOTA.sortDir === "asc" ? " ▲" : " ▼") : ""}
+               </th>`
+          ).join("")}
+        </tr>
+      </thead>
+      <tbody>${dtSorted(list).map(dtRowHtml).join("")}</tbody>
+    </table>`;
 }
 
 function dtNotLinkedHtml() {
@@ -357,9 +410,7 @@ function dtRender() {
       </div>
       <button class="chip" id="dtRefresh" type="button">${DOTA.loading ? "Refreshing…" : "Refresh"}</button>
     </div>
-    <div class="match-list">
-      ${shown.length ? shown.map(dtMatchRowHtml).join("") : `<div class="empty-state">No ${DOTA.filter} matches in the last ${DOTA.matches.length}.</div>`}
-    </div>`;
+    ${shown.length ? dtTableHtml(shown) : `<div class="empty-state">No ${DOTA.filter} matches in the last ${DOTA.matches.length}.</div>`}`;
 
   root.querySelectorAll("[data-dt-filter]").forEach((el) =>
     el.addEventListener("click", () => {
@@ -370,6 +421,20 @@ function dtRender() {
   root.querySelectorAll("[data-dt-toggle]").forEach((el) =>
     el.addEventListener("click", () => dtToggleMatch(Number(el.dataset.dtToggle)))
   );
+  root.querySelectorAll("[data-dt-sort]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const key = el.dataset.dtSort;
+      // Clicking the active column flips direction; a new column starts
+      // descending, which is what you want for every metric here.
+      if (DOTA.sortKey === key) DOTA.sortDir = DOTA.sortDir === "asc" ? "desc" : "asc";
+      else {
+        DOTA.sortKey = key;
+        DOTA.sortDir = "desc";
+      }
+      dtRender();
+    })
+  );
+
   const refresh = root.querySelector("#dtRefresh");
   if (refresh) refresh.addEventListener("click", () => dtLoad(true));
 }

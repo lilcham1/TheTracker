@@ -1,14 +1,18 @@
-// Overlay controls: open/close, click-through, appearance, and which
-// panels the overlay draws.
+// Overlay controls: open/close, click-through, appearance, and which panels
+// each game's overlay draws.
 //
-// Changes are saved and applied to the live window immediately, so what you
-// see while adjusting is what you get in game.
+// Panels are per-game on purpose. Dota's overlay names Dota's objectives —
+// Roshan, last hits, denies — none of which exist in Deadlock, whose
+// objectives are the Mid-Boss, Urn, Guardians, Walkers and Patron. One
+// shared list would put a Roshan toggle on a game with no Roshan.
 
 function renderOverlaySettings() {
   const root = document.getElementById("tab-overlaysettings");
   if (!root) return;
 
   const o = (state.prefs && state.prefs.overlay) || {};
+  const dota = o.dota || {};
+  const dl = o.deadlock || {};
   const open = state.overlay.visible;
 
   const corners = [
@@ -18,79 +22,121 @@ function renderOverlaySettings() {
     ["bottom-right", "Bottom right"],
   ];
 
-  const panels = [
-    ["showStats", "Stats (last hits, deaths, gold lost)"],
-    ["showRoshan", "Roshan timer"],
-    ["showCheckpoints", "Last-hit checkpoints"],
-    ["showItems", "Key items"],
-    ["showDeaths", "Death log"],
+  const dotaPanels = [
+    ["stats", "Last hits, denies, deaths and gold lost"],
+    ["roshan", "Roshan respawn timer"],
+    ["checkpoints", "Last-hit checkpoints (5/10/15/20/25 min)"],
+    ["items", "Key items as you buy them"],
+    ["deaths", "Death log"],
+  ];
+
+  const dlPanels = [
+    ["matchInfo", "Match id and elapsed time"],
+    ["sessionRecord", "Your win/loss record today"],
+    ["lineup", "Hero lineups for both teams"],
   ];
 
   root.innerHTML = `
-    <div class="card col">
-      <div class="section-head">
-        <h3 class="section-title">Overlay</h3>
-        <span class="badge ${open ? "badge-win" : "badge-neutral"}">${open ? "Open" : "Closed"}</span>
+    <section class="home-section" style="padding-top:0">
+      <div class="home-head">
+        <h2 class="home-title">Overlay</h2>
+        <div class="home-meta">${open ? "Open" : "Closed"}</div>
+        <button class="link-btn" id="ovToggle" type="button">${open ? "Close overlay" : "Open overlay"}</button>
       </div>
-      <p class="hint">
+      <p class="hint" style="max-width:70ch">
         A separate always-on-top window that floats over the game. It is an
-        ordinary desktop window — nothing is injected into Dota or Deadlock,
-        and it only shows data you already have.
+        ordinary desktop window &mdash; nothing is injected into either game,
+        no game memory is read, and it only ever draws information you
+        already have.
       </p>
-      <div class="row">
-        <button class="btn" id="ovToggle" type="button">${open ? "Close overlay" : "Open overlay"}</button>
+      <div class="row" style="margin-top:12px">
         <button class="btn btn-secondary" id="ovReposition" type="button" ${open ? "" : "disabled"}>
           ${o.clickThrough ? "Unlock to move" : "Lock in place"}
         </button>
+        <span class="hint">
+          ${
+            o.clickThrough
+              ? "Click-through is <b>on</b> &mdash; the overlay cannot take mouse input from the game."
+              : "Click-through is <b>off</b> &mdash; you can drag it, but it will intercept clicks. Lock it before playing."
+          }
+        </span>
       </div>
-      <p class="hint">
-        ${
-          o.clickThrough
-            ? "Click-through is <b>on</b> — the overlay can't steal mouse input from the game. Unlock it to drag the overlay somewhere else."
-            : "Click-through is <b>off</b> — you can drag the overlay, but it will intercept clicks. Lock it again before playing."
-        }
-      </p>
-    </div>
+    </section>
 
-    <div class="card col">
-      <div class="section-head"><h3 class="section-title">Appearance</h3></div>
-
-      <div>
-        <label class="form-label">Opacity — ${Math.round((o.opacity ?? 0.85) * 100)}%</label>
-        <input type="range" id="ovOpacity" min="25" max="100" step="5" value="${Math.round((o.opacity ?? 0.85) * 100)}" />
-      </div>
-
-      <div>
-        <label class="form-label">Size — ${Math.round((o.scale ?? 1) * 100)}%</label>
-        <input type="range" id="ovScale" min="75" max="150" step="5" value="${Math.round((o.scale ?? 1) * 100)}" />
-      </div>
-
-      <div>
-        <label class="form-label">Corner</label>
-        <div class="chip-row">
-          ${corners
-            .map(
-              ([id, label]) =>
-                `<button class="chip ${o.corner === id ? "selected" : ""}" data-ov-corner="${id}" type="button">${label}</button>`
-            )
-            .join("")}
+    <section class="home-section">
+      <div class="home-head"><h2 class="home-title">Appearance</h2></div>
+      <div class="split">
+        <div class="split-item">
+          <label class="form-label">Opacity &mdash; ${Math.round((o.opacity ?? 0.85) * 100)}%</label>
+          <input type="range" id="ovOpacity" min="25" max="100" step="5" value="${Math.round((o.opacity ?? 0.85) * 100)}" />
+        </div>
+        <div class="split-item">
+          <label class="form-label">Size &mdash; ${Math.round((o.scale ?? 1) * 100)}%</label>
+          <input type="range" id="ovScale" min="75" max="150" step="5" value="${Math.round((o.scale ?? 1) * 100)}" />
+        </div>
+        <div class="split-item">
+          <label class="form-label">Corner</label>
+          <div class="chip-row">
+            ${corners
+              .map(
+                ([id, label]) =>
+                  `<button class="chip ${o.corner === id ? "selected" : ""}" data-ov-corner="${id}" type="button">${label}</button>`
+              )
+              .join("")}
+          </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="card col">
-      <div class="section-head"><h3 class="section-title">Panels</h3></div>
-      <p class="hint">Trim the overlay down to only what you want on screen mid-game.</p>
-      ${panels
+    <section class="home-section">
+      <div class="home-head">
+        <h2 class="home-title">Dota 2 panels</h2>
+        <div class="home-meta">live from Valve's GSI feed</div>
+      </div>
+      ${dotaPanels
         .map(
           ([key, label]) => `
         <label class="switch-row">
-          <input type="checkbox" data-ov-panel="${key}" ${o[key] ? "checked" : ""} />
+          <input type="checkbox" data-ov-dota="${key}" ${dota[key] ? "checked" : ""} />
           <span>${label}</span>
         </label>`
         )
         .join("")}
-    </div>`;
+      <p class="hint" style="margin-top:10px">
+        Valve ships Game State Integration specifically so tools can read this,
+        and it only ever exposes your own state &mdash; never an opponent's. That
+        is what makes a GSI overlay safe to run.
+      </p>
+    </section>
+
+    <section class="home-section">
+      <div class="home-head">
+        <h2 class="home-title">Deadlock panels</h2>
+        <div class="home-meta">post-match API &mdash; no live feed exists</div>
+      </div>
+      ${dlPanels
+        .map(
+          ([key, label]) => `
+        <label class="switch-row">
+          <input type="checkbox" data-ov-dl="${key}" ${dl[key] ? "checked" : ""} />
+          <span>${label}</span>
+        </label>`
+        )
+        .join("")}
+      <p class="hint" style="margin-top:10px;max-width:70ch">
+        Deadlock has no Game State Integration, so there is no live feed of
+        your own stats &mdash; and no live source for its objectives (Mid-Boss,
+        Urn, Guardians, Walkers, Patron) either. Only match presence is
+        available.
+      </p>
+      <div class="note warn" style="margin-top:10px;max-width:70ch">
+        <b>Why lineups are off by default.</b> The game already shows you every
+        hero in the match, so displaying them grants no advantage &mdash; but
+        Valve has published no position on Deadlock overlays, unlike Dota where
+        GSI is an official, documented feature. The cautious default is to show
+        less. Nothing here ever shows opponent names, ranks or stats.
+      </div>
+    </section>`;
 
   // ----- wiring -----
 
@@ -100,13 +146,14 @@ function renderOverlaySettings() {
   });
 
   const repo = root.querySelector("#ovReposition");
-  if (repo)
+  if (repo) {
     repo.addEventListener("click", async () => {
-      await saveOverlay({ clickThrough: !o.clickThrough });
-      // Reflect the flip on the live window straight away.
-      await invoke("overlay_click_through", { clickThrough: !o.clickThrough }).catch(() => {});
+      const next = !o.clickThrough;
+      await saveOverlay({ clickThrough: next });
+      await invoke("overlay_click_through", { clickThrough: next }).catch(() => {});
       renderOverlaySettings();
     });
+  }
 
   root.querySelector("#ovOpacity").addEventListener("change", (e) =>
     saveOverlay({ opacity: Number(e.target.value) / 100 }).then(renderOverlaySettings)
@@ -117,8 +164,16 @@ function renderOverlaySettings() {
   root.querySelectorAll("[data-ov-corner]").forEach((el) =>
     el.addEventListener("click", () => saveOverlay({ corner: el.dataset.ovCorner }).then(renderOverlaySettings))
   );
-  root.querySelectorAll("[data-ov-panel]").forEach((el) =>
-    el.addEventListener("change", () => saveOverlay({ [el.dataset.ovPanel]: el.checked }).then(renderOverlaySettings))
+
+  root.querySelectorAll("[data-ov-dota]").forEach((el) =>
+    el.addEventListener("change", () =>
+      saveOverlay({ dota: { ...dota, [el.dataset.ovDota]: el.checked } }).then(renderOverlaySettings)
+    )
+  );
+  root.querySelectorAll("[data-ov-dl]").forEach((el) =>
+    el.addEventListener("change", () =>
+      saveOverlay({ deadlock: { ...dl, [el.dataset.ovDl]: el.checked } }).then(renderOverlaySettings)
+    )
   );
 }
 

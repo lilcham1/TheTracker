@@ -96,58 +96,61 @@ function dlRenderOverview() {
     })
     .join("");
 
+  // Rebuilt on the shared rail/divider language. The previous markup leaned
+  // on card classes that no longer exist, so it rendered as unstyled text.
+  const recentAll = DL.matches.map((m) => ({ ...m, won: m.outcome === "win" }));
+  const chrono = [...recentAll].reverse();
+  const kdaSeries = chrono.map((m) => (m.kills + m.assists) / Math.max(1, m.deaths));
+  const soulSeries = chrono.map((m) => m.netWorth);
+
   root.innerHTML = `
     ${DL.live ? dlLiveCardHtml(DL.live) : ""}
 
-    <div class="card dl-rank-card">
-      <div class="dl-rank-main">
-        <div>
-          <p class="card-title" style="margin-bottom:4px">Current rank</p>
-          <div class="dl-rank-label">${rank ? escapeHtml(rank.label) : "Unranked"}</div>
-        </div>
-        <div class="dl-rank-right">
-          <div class="stat-label">Win rate</div>
-          <div class="stat-value ${s && s.winRate >= 50 ? "good" : "danger"}">${s ? s.winRate.toFixed(0) : 0}%</div>
-        </div>
+    <section class="home-section" style="padding-top:0">
+      <div class="home-head">
+        <h2 class="home-title">${rank ? escapeHtml(rank.label) : "Unranked"}</h2>
+        <div class="home-meta">${escapeHtml(DL.link.personaname || "Linked")} · last ${s ? s.matches : 0} matches</div>
+        <button class="link-btn" data-dl-refresh>Refresh</button>
       </div>
-      <div class="dl-form">
-        <span class="stat-label" style="margin-right:6px">Recent</span>${form || "<span class='ov-hint'>No games yet</span>"}
-      </div>
-    </div>
 
-    <div class="stat-grid">
-      <div class="stat-tile">
-        <div class="stat-label">Record</div>
-        <div class="stat-value">${s ? s.wins : 0}<span class="dl-dim">W</span> ${s ? s.losses : 0}<span class="dl-dim">L</span></div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">KDA</div>
-        <div class="stat-value">${s ? s.kda.toFixed(2) : "0.00"}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Avg souls</div>
-        <div class="stat-value">${s ? dlFmtSouls(s.avgSouls) : 0}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Best hero</div>
-        <div class="stat-value dl-small">${s && s.bestHero ? escapeHtml(s.bestHero) : "—"}</div>
-      </div>
-    </div>
+      ${railHtml([
+        {
+          label: "Win rate",
+          value: `${s ? s.winRate.toFixed(0) : 0}%`,
+          tone: s && s.winRate >= 50 ? "win" : "loss",
+          sub: `${s ? s.wins : 0}W – ${s ? s.losses : 0}L`,
+        },
+        { label: "KDA", value: s ? s.kda.toFixed(2) : "0.00", sub: "avg per match", spark: sparkline(kdaSeries) },
+        {
+          label: "Avg souls",
+          value: s ? dlFmtSouls(s.avgSouls) : 0,
+          sub: "net worth",
+          spark: sparkline(soulSeries),
+        },
+        { label: "Best hero", value: s && s.bestHero ? escapeHtml(s.bestHero) : "—", sub: "most wins" },
+      ])}
 
-    <div class="card">
-      <p class="card-title">Totals across ${s ? s.matches : 0} matches</p>
-      <div class="dl-kda-row">
-        <div><span class="dl-k">${s ? s.kills : 0}</span><div class="stat-label">Kills</div></div>
-        <div><span class="dl-d">${s ? s.deaths : 0}</span><div class="stat-label">Deaths</div></div>
-        <div><span class="dl-a">${s ? s.assists : 0}</span><div class="stat-label">Assists</div></div>
+      <div class="form-row">
+        <span class="form-caption">Recent form · newest first</span>
+        ${formStripHtml(recentAll, 20)}
       </div>
-    </div>
+    </section>
 
-    <p class="cloud-note">
+    <section class="home-section">
+      <div class="home-head"><h2 class="home-title">Totals</h2>
+        <div class="home-meta">across ${s ? s.matches : 0} matches</div>
+      </div>
+      ${railHtml([
+        { label: "Kills", value: s ? s.kills : 0 },
+        { label: "Deaths", value: s ? s.deaths : 0 },
+        { label: "Assists", value: s ? s.assists : 0 },
+      ])}
+    </section>
+
+    <p class="hint" style="margin-top:18px;max-width:72ch">
       Deadlock has no live stats feed from Valve, so these come from the
-      community Deadlock API after each match ends — a game can take a
-      little while to appear, and some may be missing entirely.
-      <button class="link-btn" data-dl-refresh>Refresh now</button>
+      community Deadlock API after each match ends — a game can take a little
+      while to appear, and some may be missing entirely.
     </p>
   `;
   dlWireRetry(root);
@@ -156,22 +159,9 @@ function dlRenderOverview() {
 function dlLiveCardHtml(live) {
   const elapsed = live.startTime ? Math.floor(Date.now() / 1000 - live.startTime) : 0;
   return `
-    <div class="card dl-live-card">
-      <div class="dl-live-head">
-        <span class="live-dot"></span>
-        <span class="dl-live-title">In a match as ${escapeHtml(live.heroName)}</span>
-        <span class="hero-clock">${dlFmtDuration(elapsed)}</span>
-      </div>
-      <div class="dl-live-teams">
-        <div>
-          <div class="stat-label">Your team</div>
-          <div class="ov-heroes">${live.allyHeroes.map((h) => `<span class="ov-hero-chip">${escapeHtml(h)}</span>`).join("")}</div>
-        </div>
-        <div>
-          <div class="stat-label">Opponents</div>
-          <div class="ov-heroes">${live.enemyHeroes.map((h) => `<span class="ov-hero-chip">${escapeHtml(h)}</span>`).join("")}</div>
-        </div>
-      </div>
+    <div class="live-banner" style="margin-bottom:14px">
+      <span class="live-pulse"></span>
+      In a match as <b>${escapeHtml(live.heroName)}</b> · ${dlFmtDuration(elapsed)}
     </div>`;
 }
 
@@ -195,33 +185,58 @@ function dlRenderMatches() {
     return;
   }
 
+  // Same table language as the Dota match list: aligned columns beat a stack
+  // of cards for comparing one metric down the page, and the win/loss colour
+  // rides the leading edge instead of a pill.
   root.innerHTML = `
     ${DL.heroFilter ? `<div class="chip-row"><button class="chip selected" data-dl-clearfilter>${escapeHtml(DL.heroFilter)} ✕</button></div>` : ""}
-    ${list
-      .map((m) => {
-        const cls = m.outcome === "win" ? "win" : m.outcome === "loss" ? "loss" : "neutral";
-        const label = m.outcome === "win" ? "Win" : m.outcome === "loss" ? "Loss" : m.outcome === "abandoned" ? "Abandon" : "—";
-        return `
-        <div class="dl-match ${cls}">
-          ${m.heroImage ? `<img class="dl-hero-img" src="${m.heroImage}" alt="" />` : `<div class="dl-hero-img"></div>`}
-          <div class="dl-match-main">
-            <div class="dl-match-top">
-              <span class="dl-hero-name">${escapeHtml(m.heroName)}</span>
-              <span class="dl-outcome ${cls}">${label}</span>
-            </div>
-            <div class="dl-match-sub">
-              <span class="dl-kda">${m.kills} / <span class="dl-d">${m.deaths}</span> / ${m.assists}</span>
-              <span>${dlFmtSouls(m.netWorth)} souls</span>
-              <span>${dlFmtDuration(m.durationSeconds)}</span>
-            </div>
-            <div class="dl-match-meta">
-              Lvl ${m.heroLevel} · ${m.lastHits} LH · ${m.denies} DN · ${dlFmtWhen(m.startTime)}
-            </div>
-          </div>
-        </div>`;
-      })
-      .join("")}
-  `;
+    <table class="dtable">
+      <thead>
+        <tr>
+          <th>Hero</th>
+          <th>Result</th>
+          <th class="num">KDA</th>
+          <th class="num">K</th>
+          <th class="num">D</th>
+          <th class="num">A</th>
+          <th class="num">Souls</th>
+          <th class="num">LH</th>
+          <th class="num">Lvl</th>
+          <th class="num">Length</th>
+          <th class="num">When</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${list
+          .map((m) => {
+            const cls = m.outcome === "win" ? "win" : m.outcome === "loss" ? "loss" : "other";
+            const label =
+              m.outcome === "win" ? "Win" : m.outcome === "loss" ? "Loss" : m.outcome === "abandoned" ? "Left" : "—";
+            const kda = (m.kills + m.assists) / Math.max(1, m.deaths);
+            const kdaCls = kda >= 4 ? "kda-good" : kda < 1.5 ? "kda-bad" : "";
+            return `
+              <tr class="${cls}">
+                <td>
+                  <div class="cell-hero">
+                    ${m.heroImage ? `<img src="${m.heroImage}" alt="" onerror="this.style.visibility='hidden'" />` : ""}
+                    <div style="min-width:0"><div class="cell-hero-name">${escapeHtml(m.heroName)}</div></div>
+                  </div>
+                </td>
+                <td><span class="res ${cls}">${label}</span></td>
+                <td class="num ${kdaCls}">${kda.toFixed(2)}</td>
+                <td class="num">${m.kills}</td>
+                <td class="num">${m.deaths}</td>
+                <td class="num">${m.assists}</td>
+                <td class="num">${dlFmtSouls(m.netWorth)}</td>
+                <td class="num">${m.lastHits}</td>
+                <td class="num">${m.heroLevel}</td>
+                <td class="num">${dlFmtDuration(m.durationSeconds)}</td>
+                <td class="num cell-sub">${dlFmtWhen(m.startTime)}</td>
+              </tr>`;
+          })
+          .join("")}
+      </tbody>
+    </table>`;
 
   const clear = root.querySelector("[data-dl-clearfilter]");
   if (clear)

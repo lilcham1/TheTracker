@@ -84,12 +84,32 @@ function roshanBlock(roshan, clockTime) {
 let OV_SETTINGS = {
   opacity: 0.85,
   scale: 1,
-  showStats: true,
-  showRoshan: true,
-  showCheckpoints: true,
-  showItems: false,
-  showDeaths: false,
+  // Panels are per game: Dota's name Dota objectives (Roshan, last hits),
+  // which have no counterpart in Deadlock.
+  dota: { stats: true, roshan: true, checkpoints: true, items: false, deaths: false },
+  deadlock: { matchInfo: true, lineup: false, sessionRecord: true },
 };
+
+// Win/loss so far today, for the Deadlock session panel. Deadlock gives no
+// live feed, so this comes from already-synced match history.
+let OV_SESSION = null;
+
+async function refreshSession() {
+  if (!invoke) return;
+  try {
+    const data = await invoke("deadlock_overview", { limit: 50 });
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const cutoff = midnight.getTime() / 1000;
+    const today = (data.matches || []).filter((m) => m.startTime >= cutoff);
+    OV_SESSION = {
+      wins: today.filter((m) => m.outcome === "win").length,
+      losses: today.filter((m) => m.outcome === "loss").length,
+    };
+  } catch (_) {
+    // Leave the last known record rather than flashing zeros.
+  }
+}
 
 async function refreshOverlaySettings() {
   if (!invoke) return;
@@ -123,7 +143,7 @@ function renderDota(m) {
 
   const parts = [];
 
-  if (OV_SETTINGS.showStats) {
+  if (OV_SETTINGS.dota.stats) {
     parts.push(`
       <div class="ov-row">
         <span class="ov-label">Last hits / denies</span>
@@ -139,10 +159,10 @@ function renderDota(m) {
       </div>`);
   }
 
-  if (OV_SETTINGS.showRoshan) parts.push(roshanBlock(m.roshan, m.lastClockTime));
-  if (OV_SETTINGS.showCheckpoints) parts.push(`<div class="ov-checkpoints">${cps}</div>`);
+  if (OV_SETTINGS.dota.roshan) parts.push(roshanBlock(m.roshan, m.lastClockTime));
+  if (OV_SETTINGS.dota.checkpoints) parts.push(`<div class="ov-checkpoints">${cps}</div>`);
 
-  if (OV_SETTINGS.showItems && m.keyItemLog && m.keyItemLog.length) {
+  if (OV_SETTINGS.dota.items && m.keyItemLog && m.keyItemLog.length) {
     const items = m.keyItemLog
       .slice(-6)
       .map((i) => `<span class="ov-hero-chip">${esc(i.item.replace(/_/g, " "))} ${esc(i.clock)}</span>`)
@@ -150,7 +170,7 @@ function renderDota(m) {
     parts.push(`<div class="ov-heroes">${items}</div>`);
   }
 
-  if (OV_SETTINGS.showDeaths && m.deaths.length) {
+  if (OV_SETTINGS.dota.deaths && m.deaths.length) {
     const deaths = m.deaths
       .slice(-5)
       .map((d) => `<span class="ov-hero-chip">${esc(d.clock)} −${d.goldLost ?? "?"}g</span>`)
@@ -172,24 +192,47 @@ function renderDeadlock(live) {
   const elapsed = live.startTime ? Math.floor(Date.now() / 1000 - live.startTime) : null;
   document.getElementById("ovClock").textContent = elapsed !== null ? fmtClock(elapsed) : "";
 
-  document.getElementById("ovBody").innerHTML = `
-    <div class="ov-row">
-      <span class="ov-label">Match</span>
-      <span class="ov-value">#${live.matchId}</span>
-    </div>
-    <div>
-      <div class="ov-label" style="margin-bottom:4px">Your team</div>
-      <div class="ov-heroes">${live.allyHeroes.map((h) => `<span class="ov-hero-chip">${esc(h)}</span>`).join("")}</div>
-    </div>
-    <div>
-      <div class="ov-label" style="margin-bottom:4px">Opponents</div>
-      <div class="ov-heroes">${live.enemyHeroes.map((h) => `<span class="ov-hero-chip">${esc(h)}</span>`).join("")}</div>
-    </div>
+  const dl = OV_SETTINGS.deadlock || {};
+  const parts = [];
+
+  if (dl.matchInfo) {
+    parts.push(`
+      <div class="ov-row">
+        <span class="ov-label">Match</span>
+        <span class="ov-value">#${live.matchId}</span>
+      </div>`);
+  }
+
+  if (dl.sessionRecord && OV_SESSION) {
+    parts.push(`
+      <div class="ov-row">
+        <span class="ov-label">Today</span>
+        <span class="ov-value">${OV_SESSION.wins}–${OV_SESSION.losses}</span>
+      </div>`);
+  }
+
+  // Off by default. The game already shows every hero in the match, so this
+  // grants no advantage — but Valve has published no position on Deadlock
+  // overlays, so it stays opt-in. Never shows names, ranks or stats.
+  if (dl.lineup) {
+    parts.push(`
+      <div>
+        <div class="ov-label" style="margin-bottom:4px">Your team</div>
+        <div class="ov-heroes">${live.allyHeroes.map((h) => `<span class="ov-hero-chip">${esc(h)}</span>`).join("")}</div>
+      </div>
+      <div>
+        <div class="ov-label" style="margin-bottom:4px">Opponents</div>
+        <div class="ov-heroes">${live.enemyHeroes.map((h) => `<span class="ov-hero-chip">${esc(h)}</span>`).join("")}</div>
+      </div>`);
+  }
+
+  parts.push(`
     <div class="ov-hint">
       Deadlock has no live stats feed, so in-match numbers aren't available —
-      this match's stats appear in the app once it ends.
-    </div>
-  `;
+      this match appears in the app once it ends.
+    </div>`);
+
+  document.getElementById("ovBody").innerHTML = parts.join("");
 }
 
 function renderIdle(message) {
@@ -254,3 +297,7 @@ setInterval(tick, 1000);
 // Settings change rarely, so a slow refresh keeps the window in sync
 // without hammering the backend.
 setInterval(refreshOverlaySettings, 3000);
+// Session record only changes between games; the slow cadence also keeps
+// load off the community API.
+refreshSession();
+setInterval(refreshSession, 120000);

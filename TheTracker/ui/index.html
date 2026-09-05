@@ -42,9 +42,13 @@
     <div class="body">
       <aside class="sidebar">
         <nav class="nav" id="nav">
-          <div class="nav-group" data-game-group="dota">
+          <div class="nav-group">
+          <button class="nav-item active" data-view="home"><span class="nav-ico">⌂</span><span class="nav-label">Account Overview</span></button>
+        </div>
+
+        <div class="nav-group" data-game-group="dota">
             <span class="nav-group-label">Dota 2</span>
-            <button class="nav-item active" data-view="live">
+            <button class="nav-item" data-view="live">
               <span class="nav-ico live-ico"></span><span class="nav-label">Live</span>
             </button>
             <button class="nav-item" data-view="dotamatches"><span class="nav-ico">▤</span><span class="nav-label">Match History</span></button>
@@ -86,7 +90,8 @@
         </div>
 
         <main class="content" id="content">
-          <section id="tab-live" class="view active"></section>
+          <section id="tab-home" class="view active"></section>
+          <section id="tab-live" class="view"></section>
           <section id="tab-dotamatches" class="view"></section>
           <section id="tab-dotaheroes" class="view"></section>
           <section id="tab-favorite" class="view"></section>
@@ -109,6 +114,7 @@
   </div>
 
   <script src="app.js"></script>
+  <script src="home.js"></script>
   <script src="deadlock.js"></script>
   <script src="dotamatches.js"></script>
   <script src="heroes.js"></script>

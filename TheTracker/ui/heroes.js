@@ -104,31 +104,15 @@ function renderDotaHeroes() {
   const worst = [...rows].filter((h) => h.played >= 2).sort((a, b) => a.winRate - b.winRate)[0];
 
   root.innerHTML = `
-    <div class="stat-row">
-      <div class="stat">
-        <div class="stat-label">Heroes played</div>
-        <div class="stat-value">${rows.length}</div>
-        <div class="stat-sub">across ${DOTA.matches.length} matches</div>
-      </div>
-      ${
-        best
-          ? `<div class="stat">
-               <div class="stat-label">Best hero</div>
-               <div class="stat-value win">${escapeHtml(best.name)}</div>
-               <div class="stat-sub">${best.winRate.toFixed(0)}% over ${best.played} games</div>
-             </div>`
-          : ""
-      }
-      ${
-        worst && best && worst.slug !== best.slug
-          ? `<div class="stat">
-               <div class="stat-label">Needs work</div>
-               <div class="stat-value loss">${escapeHtml(worst.name)}</div>
-               <div class="stat-sub">${worst.winRate.toFixed(0)}% over ${worst.played} games</div>
-             </div>`
-          : ""
-      }
-    </div>
+    ${railHtml([
+      { label: "Heroes played", value: rows.length, sub: `across ${DOTA.matches.length} matches` },
+      ...(best
+        ? [{ label: "Best hero", value: escapeHtml(best.name), tone: "win", sub: `${best.winRate.toFixed(0)}% over ${best.played} games` }]
+        : []),
+      ...(worst && best && worst.slug !== best.slug
+        ? [{ label: "Needs work", value: escapeHtml(worst.name), tone: "loss", sub: `${worst.winRate.toFixed(0)}% over ${worst.played} games` }]
+        : []),
+    ])}
 
     <div class="chip-row">
       ${[
@@ -289,7 +273,7 @@ function renderFavoriteHero() {
 
     <div class="card col">
       <div class="section-head"><h3 class="section-title">Recent games on ${escapeHtml(h.name)}</h3></div>
-      <div class="match-list">${h.recent.slice(0, 10).map(dtMatchRowHtml).join("")}</div>
+      ${dtTableHtml(h.recent.slice(0, 10))}
     </div>`;
 
   root.querySelectorAll("[data-dt-toggle]").forEach((el) =>

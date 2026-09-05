@@ -943,6 +943,7 @@ function renderSyncPill() {
 
 // Every view, its heading, and which game tab owns it.
 const VIEWS = {
+  home: { game: null, title: "Account Overview", sub: "Both games at a glance" },
   live: { game: "dota", title: "Live", sub: "Real-time Dota 2 tracking via Valve's GSI feed" },
   dotamatches: { game: "dota", title: "Match History", sub: "Results, modes and scoreboards from OpenDota" },
   dotaheroes: { game: "dota", title: "Heroes", sub: "Per-hero performance across your recent games" },
@@ -982,7 +983,7 @@ function setGame(game) {
 }
 
 function setView(view) {
-  if (!VIEWS[view]) view = "live";
+  if (!VIEWS[view]) view = "home";
   state.view = view;
   state.tab = view; // older helpers still read state.tab
 
@@ -995,6 +996,9 @@ function setView(view) {
   document.getElementById("viewSub").textContent = meta.sub;
 
   switch (view) {
+    case "home":
+      loadHome();
+      break;
     case "history":
       loadHistory().then(renderHistory);
       break;
@@ -1312,7 +1316,7 @@ async function boot() {
   renderHistory();
   renderLeaderboard();
 
-  setView("live");
+  setView("home");
 
   setInterval(refreshLive, 700);
   setInterval(refreshSyncStatus, 1500);
@@ -1334,6 +1338,114 @@ async function boot() {
 
 // ---------- Mock backend (only used outside Tauri, for visual preview) ----------
 
+
+// ---- preview-only fixtures for the newer views ----
+
+function mockDotaApi() {
+  const heroes = [
+    ["juggernaut", "Juggernaut"],
+    ["queenofpain", "Queen of Pain"],
+    ["rattletrap", "Clockwerk"],
+    ["lina", "Lina"],
+    ["pudge", "Pudge"],
+  ];
+  const now = Math.floor(Date.now() / 1000);
+  const matches = Array.from({ length: 24 }, (_, i) => {
+    const [slug, name] = heroes[i % heroes.length];
+    const won = Math.random() > 0.45;
+    const kills = 2 + Math.floor(Math.random() * 14);
+    const deaths = 1 + Math.floor(Math.random() * 11);
+    const assists = 3 + Math.floor(Math.random() * 18);
+    return {
+      matchId: 9000000 + i,
+      heroId: i,
+      heroName: name,
+      heroSlug: slug,
+      startTime: now - i * 7200,
+      durationSeconds: 1800 + Math.floor(Math.random() * 1800),
+      won,
+      radiant: i % 2 === 0,
+      kills,
+      deaths,
+      assists,
+      kda: (kills + assists) / Math.max(1, deaths),
+      lastHits: 80 + Math.floor(Math.random() * 320),
+      denies: Math.floor(Math.random() * 25),
+      goldPerMin: 380 + Math.floor(Math.random() * 320),
+      xpPerMin: 400 + Math.floor(Math.random() * 400),
+      heroDamage: 12000 + Math.floor(Math.random() * 40000),
+      towerDamage: Math.floor(Math.random() * 8000),
+      heroHealing: Math.floor(Math.random() * 3000),
+      gameType: ["ranked", "all_pick", "turbo"][i % 3],
+      modeName: "All Pick",
+      lobbyName: i % 3 === 0 ? "Ranked" : "Unranked",
+      partySize: 1 + (i % 3),
+      abandoned: false,
+    };
+  });
+  const wins = matches.filter((m) => m.won).length;
+  const sum = (pick) => matches.reduce((t, m) => t + pick(m), 0);
+  return {
+    matches,
+    summary: {
+      matches: matches.length,
+      wins,
+      losses: matches.length - wins,
+      winRate: (wins / matches.length) * 100,
+      kills: sum((m) => m.kills),
+      deaths: sum((m) => m.deaths),
+      assists: sum((m) => m.assists),
+      kda: (sum((m) => m.kills) + sum((m) => m.assists)) / Math.max(1, sum((m) => m.deaths)),
+      avgGpm: Math.round(sum((m) => m.goldPerMin) / matches.length),
+      avgXpm: Math.round(sum((m) => m.xpPerMin) / matches.length),
+      avgLastHits: Math.round(sum((m) => m.lastHits) / matches.length),
+    },
+  };
+}
+
+function mockDeadlock() {
+  const names = ["Yamato", "Infernus", "Seven", "Haze", "Abrams"];
+  const now = Math.floor(Date.now() / 1000);
+  const matches = Array.from({ length: 18 }, (_, i) => {
+    const kills = 2 + Math.floor(Math.random() * 12);
+    const deaths = 2 + Math.floor(Math.random() * 12);
+    return {
+      matchId: 103000000 + i,
+      heroId: i,
+      heroName: names[i % names.length],
+      heroImage: null,
+      startTime: now - i * 9000,
+      durationSeconds: 1500 + Math.floor(Math.random() * 1500),
+      kills,
+      deaths,
+      assists: 2 + Math.floor(Math.random() * 12),
+      netWorth: 20000 + Math.floor(Math.random() * 30000),
+      lastHits: 60 + Math.floor(Math.random() * 200),
+      denies: Math.floor(Math.random() * 20),
+      heroLevel: 20 + Math.floor(Math.random() * 20),
+      outcome: Math.random() > 0.5 ? "win" : "loss",
+      abandoned: false,
+    };
+  });
+  const wins = matches.filter((m) => m.outcome === "win").length;
+  return {
+    matches,
+    summary: {
+      matches: matches.length,
+      wins,
+      losses: matches.length - wins,
+      winRate: (wins / matches.length) * 100,
+      kills: 0,
+      deaths: 0,
+      assists: 0,
+      kda: 2.4,
+      avgSouls: 31000,
+      bestHero: "Yamato",
+    },
+    rank: { badge: 26, tier: 2, subrank: 6, tierName: "Seeker", label: "Seeker 6" },
+  };
+}
+
 function mockInvoke(cmd, args) {
   const mock = (window.__mockState ||= {
     history: mockHistory(),
@@ -1341,6 +1453,74 @@ function mockInvoke(cmd, args) {
     current: mockCurrentMatch(),
   });
   switch (cmd) {
+    case "dota_link_status":
+      return Promise.resolve({ accountId: 850402858, personaname: "lilcham", avatar: null });
+    case "deadlock_link_status":
+      return Promise.resolve({ accountId: 850402858, personaname: "lilcham", avatar: null });
+    case "dota_api_history":
+      return Promise.resolve((window.__mockDota ||= mockDotaApi()));
+    case "deadlock_overview":
+      return Promise.resolve((window.__mockDl ||= mockDeadlock()));
+    case "deadlock_live":
+      return Promise.resolve(null);
+    case "get_prefs":
+      return Promise.resolve(
+        (window.__mockPrefs ||= {
+          favorites: { dota: "juggernaut", deadlock: "Yamato" },
+          builds: [],
+          overlay: {
+            opacity: 0.85,
+            scale: 1,
+            corner: "top-left",
+            clickThrough: true,
+            dota: { stats: true, roshan: true, checkpoints: true, items: false, deaths: false },
+            deadlock: { matchInfo: true, lineup: false, sessionRecord: true },
+          },
+        })
+      );
+    case "set_favorite_hero":
+      window.__mockPrefs.favorites[args.game] = args.hero;
+      return Promise.resolve(window.__mockPrefs);
+    case "save_overlay_settings":
+      window.__mockPrefs.overlay = { ...window.__mockPrefs.overlay, ...args.settings };
+      return Promise.resolve(window.__mockPrefs);
+    case "save_build":
+      window.__mockPrefs.builds.push({ ...args.build, id: args.build.id || String(Date.now()) });
+      return Promise.resolve(window.__mockPrefs);
+    case "delete_build":
+      window.__mockPrefs.builds = window.__mockPrefs.builds.filter((b) => b.id !== args.id);
+      return Promise.resolve(window.__mockPrefs);
+    case "dota_match_detail":
+      return Promise.resolve({
+        matchId: args.matchId,
+        durationSeconds: 2400,
+        startTime: 0,
+        radiantWin: true,
+        radiantScore: 34,
+        direScore: 21,
+        modeName: "All Pick",
+        lobbyName: "Ranked",
+        gameType: "ranked",
+        players: Array.from({ length: 10 }, (_, i) => ({
+          accountId: i,
+          name: "Player " + (i + 1),
+          heroName: "Juggernaut",
+          heroSlug: "juggernaut",
+          radiant: i < 5,
+          kills: i,
+          deaths: 10 - i,
+          assists: i * 2,
+          lastHits: 100 + i * 20,
+          denies: i,
+          goldPerMin: 400 + i * 30,
+          xpPerMin: 450 + i * 25,
+          heroDamage: 15000 + i * 2000,
+          netWorth: 18000 + i * 1500,
+          level: 20 + i,
+          isMe: i === 2,
+          items: [],
+        })),
+      });
     case "get_live_state":
       return Promise.resolve({ current: mock.current, trackingEnabled: true, serverError: null });
     case "get_history":

@@ -3,49 +3,107 @@
 //!
 //! Kept in one `prefs.json` beside the history rather than scattered across
 //! files, since it's all small, all read at startup, and all written by the
-//! same settings screens. Unknown fields survive a round trip through serde
-//! defaults, so an older build won't wipe settings a newer one wrote.
+//! same settings screens. Serde defaults mean an older build won't wipe
+//! settings a newer one wrote.
 
 use serde::{Deserialize, Serialize};
 
 use crate::storage::log_dir;
 
+/// Panels the Dota overlay can draw. These map onto Dota's own objectives
+/// and stats — Roshan, last hits, denies — which is why they can't be
+/// shared with Deadlock, whose objectives are different things entirely.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DotaPanels {
+    #[serde(default = "yes")]
+    pub stats: bool,
+    #[serde(default = "yes")]
+    pub roshan: bool,
+    #[serde(default = "yes")]
+    pub checkpoints: bool,
+    #[serde(default)]
+    pub items: bool,
+    #[serde(default)]
+    pub deaths: bool,
+}
+
+impl Default for DotaPanels {
+    fn default() -> Self {
+        DotaPanels { stats: true, roshan: true, checkpoints: true, items: false, deaths: false }
+    }
+}
+
+/// Panels the Deadlock overlay can draw.
+///
+/// Deliberately short. Deadlock has no Game State Integration, so there is
+/// no live feed of your own stats to show — only whether you are in a match.
+/// Deadlock's objectives (Mid-Boss/Rejuvenator, Urn, Guardians, Walkers,
+/// Patron) have no live data source either, so there is nothing honest to
+/// put behind a timer panel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeadlockPanels {
+    /// Match id and elapsed time.
+    #[serde(rename = "matchInfo", default = "yes")]
+    pub match_info: bool,
+    /// Hero lineups. Off by default: the game already shows you these, so it
+    /// grants no advantage, but Valve has published no stance on Deadlock
+    /// overlays, so the cautious default is to show less.
+    #[serde(default)]
+    pub lineup: bool,
+    /// Your win/loss record so far today, from synced match history.
+    #[serde(rename = "sessionRecord", default = "yes")]
+    pub session_record: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Default for DeadlockPanels {
+    fn default() -> Self {
+        DeadlockPanels { match_info: true, lineup: false, session_record: true }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlaySettings {
     /// 0.25–1.0. Below a quarter the overlay is effectively invisible, which
     /// reads as a bug rather than a setting.
+    #[serde(default = "default_opacity")]
     pub opacity: f64,
-    /// 0.75–1.5 — lets the overlay stay legible on a 1440p/4K screen.
+    /// 0.75–1.5 — keeps the overlay legible on a 1440p/4K screen.
+    #[serde(default = "default_scale")]
     pub scale: f64,
     /// "top-left" | "top-right" | "bottom-left" | "bottom-right"
+    #[serde(default = "default_corner")]
     pub corner: String,
-    #[serde(rename = "clickThrough")]
+    #[serde(rename = "clickThrough", default = "yes")]
     pub click_through: bool,
-    /// Panels the overlay draws, so it can be trimmed to just what's wanted.
-    #[serde(rename = "showStats")]
-    pub show_stats: bool,
-    #[serde(rename = "showRoshan")]
-    pub show_roshan: bool,
-    #[serde(rename = "showCheckpoints")]
-    pub show_checkpoints: bool,
-    #[serde(rename = "showItems")]
-    pub show_items: bool,
-    #[serde(rename = "showDeaths")]
-    pub show_deaths: bool,
+    #[serde(default)]
+    pub dota: DotaPanels,
+    #[serde(default)]
+    pub deadlock: DeadlockPanels,
+}
+
+fn default_opacity() -> f64 {
+    0.85
+}
+fn default_scale() -> f64 {
+    1.0
+}
+fn default_corner() -> String {
+    "top-left".to_string()
 }
 
 impl Default for OverlaySettings {
     fn default() -> Self {
         OverlaySettings {
-            opacity: 0.85,
-            scale: 1.0,
-            corner: "top-left".to_string(),
+            opacity: default_opacity(),
+            scale: default_scale(),
+            corner: default_corner(),
             click_through: true,
-            show_stats: true,
-            show_roshan: true,
-            show_checkpoints: true,
-            show_items: false,
-            show_deaths: false,
+            dota: DotaPanels::default(),
+            deadlock: DeadlockPanels::default(),
         }
     }
 }
@@ -57,20 +115,20 @@ impl OverlaySettings {
         self.opacity = self.opacity.clamp(0.25, 1.0);
         self.scale = self.scale.clamp(0.75, 1.5);
         if !matches!(self.corner.as_str(), "top-left" | "top-right" | "bottom-left" | "bottom-right") {
-            self.corner = "top-left".to_string();
+            self.corner = default_corner();
         }
         self
     }
 }
 
-/// A saved item build for one hero. Items are stored by their internal name
-/// (e.g. "mage_slayer") so icons resolve from Valve's CDN without a lookup
-/// table, and the same string works for the key-item matcher.
+/// A saved item build for one hero. Dota items are stored by their internal
+/// name ("mage_slayer"), which is what Valve's icon CDN is keyed on and what
+/// the live key-item matcher compares against. Deadlock builds are free text
+/// because Deadlock has no equivalent public icon set.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Build {
     pub id: String,
     pub game: String,
-    /// Dota hero slug ("juggernaut") or Deadlock hero name.
     pub hero: String,
     pub name: String,
     #[serde(default)]
@@ -83,15 +141,13 @@ pub struct Build {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Favorites {
-    /// Dota hero slug, e.g. "juggernaut".
     #[serde(default)]
     pub dota: Option<String>,
-    /// Deadlock hero name, e.g. "Yamato".
     #[serde(default)]
     pub deadlock: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Prefs {
     #[serde(default)]
     pub favorites: Favorites,
@@ -99,12 +155,6 @@ pub struct Prefs {
     pub builds: Vec<Build>,
     #[serde(default)]
     pub overlay: OverlaySettings,
-}
-
-impl Default for Prefs {
-    fn default() -> Self {
-        Prefs { favorites: Favorites::default(), builds: Vec::new(), overlay: OverlaySettings::default() }
-    }
 }
 
 fn prefs_file() -> std::path::PathBuf {
@@ -182,6 +232,32 @@ mod tests {
     fn defaults_are_sane() {
         let d = OverlaySettings::default();
         assert!(d.click_through, "click-through must default on, or the overlay eats game input");
-        assert_eq!(d.clone().sanitized().opacity, d.opacity);
+        assert!(d.dota.roshan, "Roshan timer is the point of the Dota overlay");
+        assert!(
+            !d.deadlock.lineup,
+            "Deadlock lineup stays off by default — Valve has published no stance on Deadlock overlays"
+        );
+    }
+
+    #[test]
+    fn panels_are_per_game() {
+        // Dota's panels name Dota objectives; Deadlock's name different
+        // things. Sharing one set would put a Roshan toggle on a game that
+        // has no Roshan.
+        let d = OverlaySettings::default();
+        assert!(d.dota.checkpoints);
+        assert!(d.deadlock.match_info);
+    }
+
+    #[test]
+    fn older_prefs_files_still_load() {
+        // A prefs.json written before per-game panels existed must not wipe
+        // the user's opacity/corner just because the panel keys moved.
+        let old = r#"{"favorites":{"dota":"juggernaut"},"builds":[],"overlay":{"opacity":0.5,"corner":"bottom-right"}}"#;
+        let p: Prefs = serde_json::from_str(old).expect("old prefs should still parse");
+        assert_eq!(p.favorites.dota.as_deref(), Some("juggernaut"));
+        assert_eq!(p.overlay.opacity, 0.5);
+        assert_eq!(p.overlay.corner, "bottom-right");
+        assert!(p.overlay.dota.roshan, "missing panel block falls back to defaults");
     }
 }

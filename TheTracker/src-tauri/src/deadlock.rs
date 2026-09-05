@@ -280,16 +280,38 @@ pub async fn match_history(
         let hero = hero_map.get(&hero_id);
         let abandoned = m.get("team_abandoned").and_then(|v| v.as_bool()).unwrap_or(false);
 
-        // Documented as: 0 invalid, 1 win, 2 loss, 3/4 penalized, 5 not
-        // scored. Preferred over comparing player_team to match_result
-        // because it already accounts for abandons and penalties.
-        let outcome = match m.get("player_match_outcome").and_then(|v| v.as_u64()) {
-            Some(1) => "win",
-            Some(2) => "loss",
-            Some(3) | Some(4) => "abandoned",
-            _ => "unscored",
-        }
-        .to_string();
+        // Win/loss comes from comparing the player's team to the winning
+        // team, NOT from `player_match_outcome`.
+        //
+        // The docs describe player_match_outcome as authoritative (0 invalid,
+        // 1 win, 2 loss, 3/4 penalized, 5 not scored) — and it is, when it's
+        // populated. Across a real 232-match history it was 0 on 173 of them,
+        // so trusting it left three quarters of a player's games showing no
+        // result at all. `match_result` and `player_team` were present on
+        // every record, and where both signals existed they agreed 56 out
+        // of 56.
+        //
+        // So the team comparison decides win/loss, and player_match_outcome
+        // is consulted only for the penalty cases it uniquely reports.
+        let outcome_code = m.get("player_match_outcome").and_then(|v| v.as_u64());
+        let player_team = m.get("player_team").and_then(|v| v.as_u64());
+        let match_result = m.get("match_result").and_then(|v| v.as_u64());
+
+        let outcome = match outcome_code {
+            // An abandon is the one thing the team comparison can't express.
+            Some(3) | Some(4) => "abandoned".to_string(),
+            _ => match (player_team, match_result) {
+                (Some(team), Some(winner)) => {
+                    if team == winner { "win".to_string() } else { "loss".to_string() }
+                }
+                // Neither signal available — genuinely unknown.
+                _ => match outcome_code {
+                    Some(1) => "win".to_string(),
+                    Some(2) => "loss".to_string(),
+                    _ => "unscored".to_string(),
+                },
+            },
+        };
 
         out.push(DeadlockMatch {
             match_id: m.get("match_id").and_then(|v| v.as_u64()).unwrap_or(0),
