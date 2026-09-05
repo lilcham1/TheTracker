@@ -36,9 +36,11 @@ const DAY_CYCLE = 300;
 const LOTUS_FROM = 180;
 const LOTUS_EVERY = 180;
 
-// Roshan's respawn window opens 8 minutes after he dies and closes at 11.
-const ROSHAN_MIN = 480;
-const ROSHAN_MAX = 660;
+// Roshan is deliberately absent. His respawn window can only be timed from
+// a death the player happened to see, so the countdown would be missing
+// whenever it mattered most and wrong whenever the death was mistimed —
+// which is worse than no countdown at all. The History tab still records
+// Roshan deaths.
 
 // How long before an event its countdown appears. Five seconds: long
 // enough to react, short enough that nothing is ever on screen that isn't
@@ -49,7 +51,7 @@ let SETTINGS = {
   opacity: 0.85,
   scale: 1,
   clickThrough: true,
-  dota: { roshan: true, runes: true, lotus: true, stacks: true, daynight: true },
+  dota: { runes: true, lotus: true, stacks: true, daynight: true },
 };
 
 function countdown(seconds) {
@@ -127,18 +129,6 @@ function dayNightEvents(clock, isDaytime) {
   return [[isDaytime === false ? "Day" : "Night", DAY_CYCLE - (clock % DAY_CYCLE)]];
 }
 
-/// Roshan has two moments worth warning about — the earliest he can be up
-/// and the point past which he certainly is. Everything between those is a
-/// maybe, and a maybe is not an event.
-function roshanEvents(roshan, clock) {
-  const died = roshan && roshan.lastDeathClock;
-  if (died === null || died === undefined) return [];
-  return [
-    ["Rosh window", died + ROSHAN_MIN - clock],
-    ["Rosh up", died + ROSHAN_MAX - clock],
-  ];
-}
-
 // ---------- Render ----------
 
 function renderMatch(m) {
@@ -154,7 +144,6 @@ function renderMatch(m) {
   }
 
   const events = [];
-  if (d.roshan) events.push(...roshanEvents(m.roshan, clock));
   if (d.runes) events.push(...runeEvents(clock));
   if (d.lotus) events.push(...lotusEvents(clock, m.gameType));
   if (d.stacks) events.push(...stackEvents(clock));

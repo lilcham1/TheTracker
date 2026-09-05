@@ -13,23 +13,23 @@ use crate::storage::log_dir;
 /// Which events the Dota overlay counts down to.
 ///
 /// All of them are arithmetic on the game clock the player can already see
-/// — Roshan's respawn window, rune spawns, lotuses, the :53 stack pull and
-/// the day/night flip. None of it reveals an opponent's state.
+/// — rune spawns, lotuses, the :53 stack pull and the day/night flip. None
+/// of it reveals an opponent's state.
 ///
-/// There is deliberately no panel for the player's own scoreboard line. The
-/// overlay shows a countdown in the last five seconds before an event and
-/// nothing at any other time; a line pinned there permanently is exactly
-/// the sort of thing you stop seeing. A prefs.json written before this has
-/// its extra key ignored.
+/// Two things are deliberately absent. There is no panel for the player's
+/// own scoreboard line: the overlay shows a countdown in the last five
+/// seconds before an event and nothing at any other time, and a line pinned
+/// there permanently is exactly the sort of thing you stop seeing. And
+/// there is no Roshan timer, because it can only be started from a death
+/// the player happened to see — so it would be missing whenever it mattered
+/// most. Roshan deaths are still recorded in match history.
+///
+/// A prefs.json written before either removal has its extra keys ignored.
 ///
 /// The overlay is Dota-only: Deadlock publishes no live feed, so there is
 /// nothing to drive a timer from.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DotaPanels {
-    /// The moment Roshan's respawn window opens, and the moment past which
-    /// he is certainly up.
-    #[serde(default = "yes")]
-    pub roshan: bool,
     /// Bounty / water / power / wisdom rune countdowns.
     #[serde(default = "yes")]
     pub runes: bool,
@@ -45,7 +45,7 @@ pub struct DotaPanels {
 
 impl Default for DotaPanels {
     fn default() -> Self {
-        DotaPanels { roshan: true, runes: true, lotus: true, stacks: true, daynight: true }
+        DotaPanels { runes: true, lotus: true, stacks: true, daynight: true }
     }
 }
 
@@ -234,7 +234,6 @@ mod tests {
     fn defaults_are_sane() {
         let d = OverlaySettings::default();
         assert!(d.click_through, "click-through must default on, or the overlay eats game input");
-        assert!(d.dota.roshan, "Roshan timer is the point of the Dota overlay");
         assert!(d.dota.lotus, "lotus warnings are on by default like every other timer");
     }
 
@@ -256,7 +255,19 @@ mod tests {
         assert_eq!(p.favorites.dota.as_deref(), Some("juggernaut"));
         assert_eq!(p.overlay.opacity, 0.5);
         assert_eq!(p.overlay.corner, "bottom-right");
-        assert!(p.overlay.dota.roshan, "missing panel block falls back to defaults");
+        assert!(p.overlay.dota.stacks, "missing panel block falls back to defaults");
         assert!(p.overlay.dota.runes, "new panels default on for existing users");
+    }
+
+    #[test]
+    fn removed_panel_keys_do_not_break_an_existing_prefs_file() {
+        // Both `stats` and `roshan` were panels once. Anyone who used the app
+        // before they were dropped has them sitting in prefs.json, and serde
+        // must ignore them rather than refuse the whole file and reset every
+        // other setting.
+        let old = r#"{"overlay":{"opacity":0.5,"dota":{"stats":true,"roshan":false,"runes":true,"stacks":true,"daynight":true}}}"#;
+        let p: Prefs = serde_json::from_str(old).expect("prefs with removed keys should still parse");
+        assert_eq!(p.overlay.opacity, 0.5);
+        assert!(p.overlay.dota.runes);
     }
 }

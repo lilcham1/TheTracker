@@ -35,7 +35,6 @@ function renderOverlaySettings() {
   ];
 
   const dotaPanels = [
-    ["roshan", "Roshan — respawn window opening, and when he is certainly up"],
     ["runes", "Runes — bounty, water, power, wisdom"],
     ["lotus", "Healing lotus spawns"],
     ["stacks", "Neutral camp stack pull (:53)"],
