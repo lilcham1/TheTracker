@@ -24,6 +24,7 @@ mod heroes;
 mod model;
 mod overlay;
 mod state;
+mod steam;
 mod storage;
 
 use std::sync::{Arc, Mutex};
@@ -328,6 +329,14 @@ async fn dota_match_detail(
     dota_api::match_detail(match_id, me, &cache).await
 }
 
+/// Steam accounts known to this PC, for one-click linking. Reads only the
+/// account id and display name — never credentials or auth tokens. See
+/// steam.rs for the specifics.
+#[tauri::command]
+fn steam_accounts() -> Vec<steam::SteamAccount> {
+    steam::detect()
+}
+
 // ---------- Overlay ----------
 
 #[tauri::command]
@@ -411,6 +420,7 @@ fn main() {
             deadlock_unlink,
             deadlock_overview,
             deadlock_live,
+            steam_accounts,
             overlay_show,
             overlay_hide,
             overlay_visible,

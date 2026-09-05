@@ -161,6 +161,70 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// ---------- Steam auto-detect ----------
+//
+// Reads only the signed-in Steam account's id and display name (see
+// steam.rs for exactly what is and isn't touched — no credentials, no
+// tokens). Shared by both link screens.
+
+const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
+
+async function steamDetect(onDone) {
+  STEAM_DETECT.busy = true;
+  STEAM_DETECT.error = null;
+  if (onDone) onDone();
+  try {
+    STEAM_DETECT.accounts = await invoke("steam_accounts");
+    if (!STEAM_DETECT.accounts.length) {
+      STEAM_DETECT.error =
+        "No Steam account found on this PC. Sign in to Steam once, or search by name instead.";
+    }
+  } catch (e) {
+    STEAM_DETECT.error = String(e);
+  }
+  STEAM_DETECT.tried = true;
+  STEAM_DETECT.busy = false;
+  if (onDone) onDone();
+}
+
+function steamDetectHtml() {
+  const rows = STEAM_DETECT.accounts
+    .map(
+      (a) => `
+      <div class="result-row" data-steam-pick="${a.accountId}" data-steam-name="${escapeHtml(a.personaname || "")}">
+        <div class="grow">
+          <div class="result-name">${escapeHtml(a.personaname || `Account ${a.accountId}`)}</div>
+          <div class="result-id">${a.accountId} · ${escapeHtml(a.source)}</div>
+        </div>
+        <span class="badge badge-brand">Use this</span>
+      </div>`
+    )
+    .join("");
+
+  return `
+    <div class="row">
+      <button class="btn btn-secondary" id="steamDetectBtn" type="button" ${STEAM_DETECT.busy ? "disabled" : ""}>
+        ${STEAM_DETECT.busy ? "Checking…" : "Detect from Steam"}
+      </button>
+      <span class="hint">Reads your Steam account ID only — never passwords or tokens.</span>
+    </div>
+    ${STEAM_DETECT.error ? `<div class="note warn">${escapeHtml(STEAM_DETECT.error)}</div>` : ""}
+    ${rows ? `<div class="col">${rows}</div>` : ""}`;
+}
+
+/// `onPick(accountId, personaname)` links the account for whichever game
+/// the calling screen belongs to.
+function wireSteamDetect(root, rerender, onPick) {
+  const btn = root.querySelector("#steamDetectBtn");
+  if (btn) btn.addEventListener("click", () => steamDetect(rerender));
+
+  root.querySelectorAll("[data-steam-pick]").forEach((el) =>
+    el.addEventListener("click", () =>
+      onPick(Number(el.dataset.steamPick), el.dataset.steamName || `Account ${el.dataset.steamPick}`)
+    )
+  );
+}
+
 // ---------- App state ----------
 
 const state = {

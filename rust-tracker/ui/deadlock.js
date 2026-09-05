@@ -349,6 +349,8 @@ function dlNotLinkedHtml() {
         account through the community Deadlock API. Search for your Steam
         profile name to link it.
       </p>
+      ${steamDetectHtml()}
+      <div class="hint" style="text-align:center;margin:10px 0">— or search by name —</div>
       <input class="text-input" id="dlSearchInput" type="text" placeholder="Steam profile name" value="${escapeHtml(r.query)}" />
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
         <button class="save-btn" id="dlSearchBtn" ${r.busy ? "disabled" : ""}>${r.busy ? "Searching…" : "Search"}</button>
@@ -374,7 +376,17 @@ function dlNotLinkedHtml() {
     </div>`;
 }
 
+async function dlLinkAccount(accountId, personaname, avatar) {
+  DL.link = await invoke("deadlock_link", { accountId, personaname, avatar: avatar || null });
+  DL.search.results = [];
+  DL.loadedAt = 0;
+  renderUserChip();
+  await dlLoad(true);
+}
+
 function dlWireNotLinked(root) {
+  wireSteamDetect(root, dlRender, (id, name) => dlLinkAccount(id, name, null));
+
   const input = root.querySelector("#dlSearchInput");
   const btn = root.querySelector("#dlSearchBtn");
   if (!input || !btn) return;

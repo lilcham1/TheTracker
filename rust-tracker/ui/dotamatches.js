@@ -204,6 +204,8 @@ function dtNotLinkedHtml() {
           scoreboard. Public data, no API key, nothing read from your PC.
         </p>
       </div>
+      ${steamDetectHtml()}
+      <div class="hint" style="text-align:center">— or search by name —</div>
       <div class="row">
         <input class="text-input grow" id="dtSearchInput" type="text" placeholder="Steam display name…" value="" />
         <button class="btn" id="dtSearchBtn" type="button">Search</button>
@@ -231,7 +233,17 @@ function dtNotLinkedHtml() {
     </div>`;
 }
 
+async function dtLinkAccount(accountId, personaname, avatar) {
+  DOTA.link = await invoke("dota_link", { accountId, personaname, avatar: avatar || null });
+  DOTA.results = [];
+  DOTA.loadedAt = 0;
+  renderUserChip();
+  await dtLoad(true);
+}
+
 function dtWireNotLinked(root) {
+  wireSteamDetect(root, dtRender, (id, name) => dtLinkAccount(id, name, null));
+
   const input = root.querySelector("#dtSearchInput");
   const btn = root.querySelector("#dtSearchBtn");
   if (!input || !btn) return;
@@ -269,16 +281,9 @@ function dtWireNotLinked(root) {
   });
 
   root.querySelectorAll("[data-dt-pick]").forEach((el) =>
-    el.addEventListener("click", async () => {
-      DOTA.link = await invoke("dota_link", {
-        accountId: Number(el.dataset.dtPick),
-        personaname: el.dataset.dtName,
-        avatar: el.dataset.dtAvatar || null,
-      });
-      DOTA.results = [];
-      DOTA.loadedAt = 0;
-      await dtLoad(true);
-    })
+    el.addEventListener("click", () =>
+      dtLinkAccount(Number(el.dataset.dtPick), el.dataset.dtName, el.dataset.dtAvatar || null)
+    )
   );
 }
 

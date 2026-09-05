@@ -24,6 +24,11 @@ uuid = { version = "1", features = ["v4"] }
 # is no official Valve feed for it the way Dota has GSI.
 reqwest = { version = "0.12", features = ["json"] }
 
+# Reads only the Steam account id / display name from the registry.
+# See steam.rs for exactly what is and is not read.
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
+
 [dev-dependencies]
 # The Deadlock integration tests are async and hit the live community API.
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
