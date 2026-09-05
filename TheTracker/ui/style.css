@@ -1646,3 +1646,14 @@ input[type="range"] {
 
 .upd-text { flex: 1; color: var(--text); }
 .upd-btn { padding: 6px 14px; font-size: 12px; }
+
+/* A favourited hero's star is gold and filled, so it reads at a glance in a
+   long list rather than being a subtly different grey glyph. */
+.fav-btn.is-fav {
+  color: var(--brand);
+  border-color: rgba(240, 161, 60, 0.55);
+  background: rgba(240, 161, 60, 0.14);
+  text-shadow: 0 0 10px rgba(240, 161, 60, 0.55);
+}
+
+.fav-btn.is-fav:hover { color: var(--brand-2); }

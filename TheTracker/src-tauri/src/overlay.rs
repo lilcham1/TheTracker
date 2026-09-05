@@ -86,18 +86,33 @@ pub fn apply_settings(app: &AppHandle, settings: &crate::prefs::OverlaySettings)
     let height = 420.0 * settings.scale;
     let _ = win.set_size(tauri::LogicalSize::new(width, height));
 
-    // Corner placement is computed against the monitor the overlay is on,
-    // so it lands correctly on multi-monitor setups.
-    if let Ok(Some(monitor)) = win.current_monitor() {
-        let scale_factor = monitor.scale_factor();
-        let screen = monitor.size().to_logical::<f64>(scale_factor);
-        let margin = 24.0;
-        let (x, y) = match settings.corner.as_str() {
-            "top-right" => (screen.width - width - margin, margin),
-            "bottom-left" => (margin, screen.height - height - margin),
-            "bottom-right" => (screen.width - width - margin, screen.height - height - margin),
-            _ => (margin, margin),
-        };
-        let _ = win.set_position(tauri::LogicalPosition::new(x, y));
-    }
+    // Place the overlay on whichever monitor the main window is on. Using the
+    // overlay's own monitor would pin it to wherever it happened to be
+    // created — in practice the primary screen — so on a multi-monitor setup
+    // it would appear on a display the player isn't looking at, which reads
+    // exactly like the button doing nothing.
+    let monitor = app
+        .get_webview_window("main")
+        .and_then(|main| main.current_monitor().ok().flatten())
+        .or_else(|| win.current_monitor().ok().flatten());
+
+    let Some(monitor) = monitor else { return };
+
+    let scale_factor = monitor.scale_factor();
+    let screen = monitor.size().to_logical::<f64>(scale_factor);
+    // Monitor coordinates are relative to the whole virtual desktop, so the
+    // monitor's own origin has to be added — without it every position is
+    // computed as though that screen started at 0,0, which lands the window
+    // on the primary display no matter which monitor was chosen.
+    let origin = monitor.position().to_logical::<f64>(scale_factor);
+
+    let margin = 24.0;
+    let (dx, dy) = match settings.corner.as_str() {
+        "top-right" => (screen.width - width - margin, margin),
+        "bottom-left" => (margin, screen.height - height - margin),
+        "bottom-right" => (screen.width - width - margin, screen.height - height - margin),
+        _ => (margin, margin),
+    };
+
+    let _ = win.set_position(tauri::LogicalPosition::new(origin.x + dx, origin.y + dy));
 }

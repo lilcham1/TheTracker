@@ -71,7 +71,7 @@ function heroRowHtml(h, favSlug) {
         </div>
       </div>
       ${formStripHtml(h.recent, 8)}
-      <button class="chip fav-btn" data-fav-slug="${escapeHtml(h.slug)}" title="Set as favourite hero">${isFav ? "★" : "☆"}</button>
+      <button class="chip fav-btn${isFav ? " is-fav" : ""}" data-fav-slug="${escapeHtml(h.slug)}" title="${isFav ? "Your favourite hero" : "Set as favourite hero"}">${isFav ? "★" : "☆"}</button>
     </div>`;
 }
 

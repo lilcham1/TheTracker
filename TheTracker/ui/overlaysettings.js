@@ -1,10 +1,9 @@
 // Overlay controls: open/close, click-through, appearance, and which panels
 // each game's overlay draws.
 //
-// Panels are per-game on purpose. Dota's overlay names Dota's objectives —
-// Roshan, last hits, denies — none of which exist in Deadlock, whose
-// objectives are the Mid-Boss, Urn, Guardians, Walkers and Patron. One
-// shared list would put a Roshan toggle on a game with no Roshan.
+// The overlay covers Dota only. Deadlock publishes no live feed, so a
+// Deadlock overlay could show nothing beyond "you are in a match", which
+// isn't worth a window floating over the game.
 
 function renderOverlaySettings() {
   const root = document.getElementById("tab-overlaysettings");
@@ -12,7 +11,6 @@ function renderOverlaySettings() {
 
   const o = (state.prefs && state.prefs.overlay) || {};
   const dota = o.dota || {};
-  const dl = o.deadlock || {};
   const open = state.overlay.visible;
 
   const corners = [
@@ -30,11 +28,6 @@ function renderOverlaySettings() {
     ["daynight", "Day / night countdown"],
   ];
 
-  const dlPanels = [
-    ["matchInfo", "Match id and elapsed time"],
-    ["sessionRecord", "Your win/loss record today"],
-    ["lineup", "Hero lineups for both teams"],
-  ];
 
   root.innerHTML = `
     <section class="home-section" style="padding-top:0">
@@ -111,34 +104,7 @@ function renderOverlaySettings() {
       </p>
     </section>
 
-    <section class="home-section">
-      <div class="home-head">
-        <h2 class="home-title">Deadlock panels</h2>
-        <div class="home-meta">post-match API &mdash; no live feed exists</div>
-      </div>
-      ${dlPanels
-        .map(
-          ([key, label]) => `
-        <label class="switch-row">
-          <input type="checkbox" data-ov-dl="${key}" ${dl[key] ? "checked" : ""} />
-          <span>${label}</span>
-        </label>`
-        )
-        .join("")}
-      <p class="hint" style="margin-top:10px;max-width:70ch">
-        Deadlock has no Game State Integration, so there is no live feed of
-        your own stats &mdash; and no live source for its objectives (Mid-Boss,
-        Urn, Guardians, Walkers, Patron) either. Only match presence is
-        available.
-      </p>
-      <div class="note warn" style="margin-top:10px;max-width:70ch">
-        <b>Why lineups are off by default.</b> The game already shows you every
-        hero in the match, so displaying them grants no advantage &mdash; but
-        Valve has published no position on Deadlock overlays, unlike Dota where
-        GSI is an official, documented feature. The cautious default is to show
-        less. Nothing here ever shows opponent names, ranks or stats.
-      </div>
-    </section>`;
+`;
 
   // ----- wiring -----
 
@@ -170,11 +136,6 @@ function renderOverlaySettings() {
   root.querySelectorAll("[data-ov-dota]").forEach((el) =>
     el.addEventListener("change", () =>
       saveOverlay({ dota: { ...dota, [el.dataset.ovDota]: el.checked } }).then(renderOverlaySettings)
-    )
-  );
-  root.querySelectorAll("[data-ov-dl]").forEach((el) =>
-    el.addEventListener("change", () =>
-      saveOverlay({ deadlock: { ...dl, [el.dataset.ovDl]: el.checked } }).then(renderOverlaySettings)
     )
   );
 }

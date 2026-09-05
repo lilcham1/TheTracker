@@ -17,8 +17,8 @@ use crate::storage::log_dir;
 /// Roshan's respawn window, rune spawns, the :53 stack pull, and the
 /// day/night flip. None of it reveals an opponent's state.
 ///
-/// They can't be shared with Deadlock, whose objectives are different
-/// things entirely and which has no live feed to drive a timer from.
+/// The overlay is Dota-only: Deadlock publishes no live feed, so there is
+/// nothing to drive a timer or a stats line from.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DotaPanels {
     /// Your own scoreboard line: kills, deaths, last hits, gold lost.
@@ -42,36 +42,8 @@ impl Default for DotaPanels {
     }
 }
 
-/// Panels the Deadlock overlay can draw.
-///
-/// Deliberately short. Deadlock has no Game State Integration, so there is
-/// no live feed of your own stats to show — only whether you are in a match.
-/// Deadlock's objectives (Mid-Boss/Rejuvenator, Urn, Guardians, Walkers,
-/// Patron) have no live data source either, so there is nothing honest to
-/// put behind a timer panel.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeadlockPanels {
-    /// Match id and elapsed time.
-    #[serde(rename = "matchInfo", default = "yes")]
-    pub match_info: bool,
-    /// Hero lineups. Off by default: the game already shows you these, so it
-    /// grants no advantage, but Valve has published no stance on Deadlock
-    /// overlays, so the cautious default is to show less.
-    #[serde(default)]
-    pub lineup: bool,
-    /// Your win/loss record so far today, from synced match history.
-    #[serde(rename = "sessionRecord", default = "yes")]
-    pub session_record: bool,
-}
-
 fn yes() -> bool {
     true
-}
-
-impl Default for DeadlockPanels {
-    fn default() -> Self {
-        DeadlockPanels { match_info: true, lineup: false, session_record: true }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,8 +62,6 @@ pub struct OverlaySettings {
     pub click_through: bool,
     #[serde(default)]
     pub dota: DotaPanels,
-    #[serde(default)]
-    pub deadlock: DeadlockPanels,
 }
 
 fn default_opacity() -> f64 {
@@ -112,7 +82,6 @@ impl Default for OverlaySettings {
             corner: default_corner(),
             click_through: true,
             dota: DotaPanels::default(),
-            deadlock: DeadlockPanels::default(),
         }
     }
 }
@@ -242,20 +211,16 @@ mod tests {
         let d = OverlaySettings::default();
         assert!(d.click_through, "click-through must default on, or the overlay eats game input");
         assert!(d.dota.roshan, "Roshan timer is the point of the Dota overlay");
-        assert!(
-            !d.deadlock.lineup,
-            "Deadlock lineup stays off by default — Valve has published no stance on Deadlock overlays"
-        );
+
     }
 
     #[test]
-    fn panels_are_per_game() {
-        // Dota's panels name Dota objectives; Deadlock's name different
-        // things. Sharing one set would put a Roshan toggle on a game that
-        // has no Roshan.
+    fn overlay_is_dota_only() {
+        // The overlay covers Dota alone. Deadlock publishes no live feed, so
+        // there was nothing honest to put behind a Deadlock panel.
         let d = OverlaySettings::default();
         assert!(d.dota.runes);
-        assert!(d.deadlock.match_info);
+        assert!(d.dota.stacks);
     }
 
     #[test]

@@ -148,7 +148,7 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.6.0";
+const APP_VERSION = "0.7.0";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 
@@ -215,7 +215,7 @@ const state = {
   game: "dota",
   prefs: { favorites: {}, builds: [], overlay: {} },
   dlTab: "dloverview",
-  overlay: { visible: false, clickThrough: true },
+  overlay: { visible: false, clickThrough: true, error: null },
   tab: "live",
   live: null,
   history: [],
@@ -1106,11 +1106,14 @@ async function toggleOverlay() {
       state.overlay.clickThrough = true;
       await invoke("overlay_click_through", { clickThrough: true });
     }
+    state.overlay.error = null;
   } catch (e) {
-    console.error("overlay toggle failed", e);
+    // Swallowing this was the reason a failed overlay looked like a dead
+    // button — there was nothing on screen to explain it.
+    state.overlay.error = String(e);
   }
   renderOverlayToggle();
-  if (state.view === "profile") renderProfile();
+  if (state.view === "overlaysettings") renderOverlaySettings();
 }
 
 function renderOverlayToggle() {
