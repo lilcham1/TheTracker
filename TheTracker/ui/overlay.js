@@ -167,17 +167,37 @@ function renderMatch(m) {
   document.getElementById("overlay").innerHTML = parts.join("");
 }
 
-function renderIdle() {
-  // With auto-show on, this is only reached if the overlay was opened by
-  // hand outside a match. Say why it is empty rather than showing nothing.
-  document.getElementById("overlay").innerHTML =
-    `<div class="hint">TheTracker — waiting for a Dota 2 match. This hides itself when no game is running.</div>`;
+/// Shown when the overlay is open outside a match.
+///
+/// This is only reached by opening the overlay by hand, since it hides
+/// itself when a game ends. The obvious thing to put here is "waiting for a
+/// match" — but that is a dead end: it tells you nothing you did not
+/// already know, and gives you nothing to judge position, opacity or size
+/// against, which is the only reason to open the overlay outside a game.
+///
+/// So it renders sample chips instead, drawn from the panels actually
+/// enabled. Adjusting settings then shows a real result immediately. The
+/// leading chip marks it as a preview so it is never mistaken for live data.
+function renderPreview() {
+  const d = SETTINGS.dota || {};
+  const parts = [`<div class="chip good"><span class="value">Preview</span></div>`];
+
+  if (d.stats) parts.push(chip("KDA", "7 / 2") + chip("LH", "148"));
+  if (d.roshan) parts.push(chip("Roshan", "4:12", "urgent"));
+  if (d.runes) parts.push(chip("Bounty", "0:22", "soon"));
+  if (d.stacks) parts.push(chip("Stack", "0:06", "urgent"));
+  if (d.daynight) parts.push(chip("Night", "0:18", "soon"));
+
+  parts.push(
+    `<div class="hint">Sample values. Real timers appear when a Dota 2 match starts, and this closes itself when it ends.</div>`
+  );
+
+  document.getElementById("overlay").innerHTML = parts.join("");
 }
 
 async function tick() {
   if (!invoke) {
-    document.getElementById("overlay").innerHTML =
-      `<div class="hint">Overlay preview — not running inside the app.</div>`;
+    renderPreview();
     return;
   }
 
@@ -188,10 +208,10 @@ async function tick() {
       return;
     }
   } catch (_) {
-    // The GSI listener may not be up yet; idle is honest either way.
+    // The GSI listener may not be up yet; the preview below is honest either way.
   }
 
-  renderIdle();
+  renderPreview();
 }
 
 refreshSettings();
