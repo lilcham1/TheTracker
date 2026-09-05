@@ -1614,3 +1614,9 @@ input[type="range"] {
 .roshan-btn:hover { background: var(--panel-hi); border-color: var(--brand); }
 
 .small { font-size: 11.5px; }
+
+/* Overlay: a rule between the stats line and the timer block reads better
+   than another boxed section at overlay size. */
+.ov-sep { height: 1px; background: rgba(255, 255, 255, 0.1); margin: 3px 0; }
+.ov-value.good { color: #6fd18a; }
+.ov-value.warn { color: #e0c05b; }

@@ -104,6 +104,10 @@ pub struct MatchState {
     pub checkpoints: BTreeMap<u32, Option<Checkpoint>>,
     #[serde(rename = "lastClockTime")]
     pub last_clock_time: f64,
+    /// Day/night, straight from GSI. The overlay shows the flip countdown,
+    /// and computing it from the clock alone would drift after a pause.
+    #[serde(default)]
+    pub daytime: Option<bool>,
     #[serde(rename = "lastHits")]
     pub last_hits: i64,
     pub denies: i64,
@@ -133,6 +137,7 @@ impl MatchState {
             key_item_log: Vec::new(),
             checkpoints,
             last_clock_time: 0.0,
+            daytime: None,
             last_hits: 0,
             denies: 0,
             kills: 0,

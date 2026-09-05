@@ -10,26 +10,35 @@ use serde::{Deserialize, Serialize};
 
 use crate::storage::log_dir;
 
-/// Panels the Dota overlay can draw. These map onto Dota's own objectives
-/// and stats — Roshan, last hits, denies — which is why they can't be
-/// shared with Deadlock, whose objectives are different things entirely.
+/// Panels the Dota overlay can draw.
+///
+/// These are the timers every established Dota overlay shows, and all of
+/// them are arithmetic on the game clock the player can already see —
+/// Roshan's respawn window, rune spawns, the :53 stack pull, and the
+/// day/night flip. None of it reveals an opponent's state.
+///
+/// They can't be shared with Deadlock, whose objectives are different
+/// things entirely and which has no live feed to drive a timer from.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DotaPanels {
+    /// Your own scoreboard line: kills, deaths, last hits, gold lost.
     #[serde(default = "yes")]
     pub stats: bool,
     #[serde(default = "yes")]
     pub roshan: bool,
+    /// Bounty / water / power / wisdom rune countdowns.
     #[serde(default = "yes")]
-    pub checkpoints: bool,
-    #[serde(default)]
-    pub items: bool,
-    #[serde(default)]
-    pub deaths: bool,
+    pub runes: bool,
+    /// Neutral camp stack timer (the :53 pull).
+    #[serde(default = "yes")]
+    pub stacks: bool,
+    #[serde(default = "yes")]
+    pub daynight: bool,
 }
 
 impl Default for DotaPanels {
     fn default() -> Self {
-        DotaPanels { stats: true, roshan: true, checkpoints: true, items: false, deaths: false }
+        DotaPanels { stats: true, roshan: true, runes: true, stacks: true, daynight: true }
     }
 }
 
@@ -245,7 +254,7 @@ mod tests {
         // things. Sharing one set would put a Roshan toggle on a game that
         // has no Roshan.
         let d = OverlaySettings::default();
-        assert!(d.dota.checkpoints);
+        assert!(d.dota.runes);
         assert!(d.deadlock.match_info);
     }
 
@@ -259,5 +268,6 @@ mod tests {
         assert_eq!(p.overlay.opacity, 0.5);
         assert_eq!(p.overlay.corner, "bottom-right");
         assert!(p.overlay.dota.roshan, "missing panel block falls back to defaults");
+        assert!(p.overlay.dota.runes, "new panels default on for existing users");
     }
 }

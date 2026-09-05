@@ -16,6 +16,9 @@ const DL = {
   search: { query: "", results: [], busy: false, error: null },
   live: null,
   heroFilter: null,
+  open: new Set(),
+  details: new Map(), // matchId -> scoreboard, fetched on first expand
+  detailLoading: new Set(),
 };
 
 const DL_CACHE_MS = 60000;
@@ -215,7 +218,7 @@ function dlRenderMatches() {
             const kda = (m.kills + m.assists) / Math.max(1, m.deaths);
             const kdaCls = kda >= 4 ? "kda-good" : kda < 1.5 ? "kda-bad" : "";
             return `
-              <tr class="${cls}">
+              <tr class="${cls}" data-dl-toggle="${m.matchId}">
                 <td>
                   <div class="cell-hero">
                     ${m.heroImage ? `<img src="${m.heroImage}" alt="" onerror="this.style.visibility='hidden'" />` : ""}
@@ -232,11 +235,16 @@ function dlRenderMatches() {
                 <td class="num">${m.heroLevel}</td>
                 <td class="num">${dlFmtDuration(m.durationSeconds)}</td>
                 <td class="num cell-sub">${dlFmtWhen(m.startTime)}</td>
-              </tr>`;
+              </tr>
+              ${DL.open.has(m.matchId) ? `<tr class="detail-row"><td colspan="11">${dlDetailHtml(m.matchId)}</td></tr>` : ""}`;
           })
           .join("")}
       </tbody>
     </table>`;
+
+  root.querySelectorAll("[data-dl-toggle]").forEach((el) =>
+    el.addEventListener("click", () => dlToggleMatch(Number(el.dataset.dlToggle)))
+  );
 
   const clear = root.querySelector("[data-dl-clearfilter]");
   if (clear)
@@ -244,6 +252,74 @@ function dlRenderMatches() {
       DL.heroFilter = null;
       dlRender();
     });
+}
+
+
+/// Scoreboard for one Deadlock match. The metadata payload is around a
+/// megabyte, so it is only fetched when a row is actually expanded, and the
+/// result is cached for the session.
+function dlDetailHtml(matchId) {
+  if (DL.detailLoading.has(matchId)) return `<div class="hint">Loading scoreboard…</div>`;
+  const d = DL.details.get(matchId);
+  if (!d) return `<div class="hint">Scoreboard unavailable.</div>`;
+  if (d.error) return `<div class="note err">${escapeHtml(d.error)}</div>`;
+
+  const side = (team, label) => {
+    const players = d.players.filter((p) => p.team === team);
+    if (!players.length) return "";
+    const won = d.winningTeam === team;
+    return `
+      <div class="board">
+        <div class="board-team ${won ? "radiant" : "dire"}">${label} ${won ? "· Won" : "· Lost"}</div>
+        <div class="board-row head" style="grid-template-columns:30px minmax(90px,1.2fr) 74px repeat(4,minmax(48px,0.7fr))">
+          <span></span><span>Hero</span><span>K / D / A</span>
+          <span class="board-num">Souls</span><span class="board-num">LH</span>
+          <span class="board-num">DN</span><span class="board-num">Lvl</span>
+        </div>
+        ${players
+          .map(
+            (p) => `
+          <div class="board-row ${p.isMe ? "me" : ""}" style="grid-template-columns:30px minmax(90px,1.2fr) 74px repeat(4,minmax(48px,0.7fr))">
+            ${p.heroImage ? `<img class="board-hero" src="${p.heroImage}" alt="" onerror="this.style.visibility='hidden'" />` : `<span class="board-hero"></span>`}
+            <span class="board-name">${escapeHtml(p.heroName)}</span>
+            <span>${p.kills} / ${p.deaths} / ${p.assists}</span>
+            <span class="board-num">${dlFmtSouls(p.netWorth)}</span>
+            <span class="board-num">${p.lastHits}</span>
+            <span class="board-num">${p.denies}</span>
+            <span class="board-num">${p.level}</span>
+          </div>`
+          )
+          .join("")}
+      </div>`;
+  };
+
+  return `
+    <div class="row" style="gap:14px;margin-bottom:10px">
+      <span class="hint">${dlFmtDuration(d.durationSeconds)} · match ${d.matchId}</span>
+    </div>
+    ${side(0, "Team 0")}
+    ${side(1, "Team 1")}`;
+}
+
+async function dlToggleMatch(matchId) {
+  if (DL.open.has(matchId)) {
+    DL.open.delete(matchId);
+    dlRenderMatches();
+    return;
+  }
+  DL.open.add(matchId);
+
+  if (!DL.details.has(matchId)) {
+    DL.detailLoading.add(matchId);
+    dlRenderMatches();
+    try {
+      DL.details.set(matchId, await invoke("deadlock_match_detail", { matchId }));
+    } catch (e) {
+      DL.details.set(matchId, { error: String(e) });
+    }
+    DL.detailLoading.delete(matchId);
+  }
+  dlRenderMatches();
 }
 
 // ---------- Heroes ----------

@@ -23,11 +23,11 @@ function renderOverlaySettings() {
   ];
 
   const dotaPanels = [
-    ["stats", "Last hits, denies, deaths and gold lost"],
-    ["roshan", "Roshan respawn timer"],
-    ["checkpoints", "Last-hit checkpoints (5/10/15/20/25 min)"],
-    ["items", "Key items as you buy them"],
-    ["deaths", "Death log"],
+    ["stats", "Your line — kills, deaths, last hits, gold lost"],
+    ["roshan", "Roshan respawn window"],
+    ["runes", "Rune timers — bounty, water, power, wisdom"],
+    ["stacks", "Neutral camp stack timer (:53)"],
+    ["daynight", "Day / night countdown"],
   ];
 
   const dlPanels = [
@@ -102,10 +102,12 @@ function renderOverlaySettings() {
         </label>`
         )
         .join("")}
-      <p class="hint" style="margin-top:10px">
-        Valve ships Game State Integration specifically so tools can read this,
-        and it only ever exposes your own state &mdash; never an opponent's. That
-        is what makes a GSI overlay safe to run.
+      <p class="hint" style="margin-top:10px;max-width:72ch">
+        These are the timers every established Dota overlay shows. All of them
+        are arithmetic on the match clock you can already see, and the stats
+        line is your own. Valve ships Game State Integration specifically so
+        tools can read this, and it only ever exposes your own state &mdash;
+        never an opponent's.
       </p>
     </section>
 

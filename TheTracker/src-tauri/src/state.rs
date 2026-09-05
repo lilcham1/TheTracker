@@ -111,6 +111,9 @@ impl Tracker {
         {
             let m = self.current.as_mut().unwrap();
             m.last_clock_time = clock_time;
+            if let Some(day) = map.get("daytime").and_then(|v| v.as_bool()) {
+                m.daytime = Some(day);
+            }
             if let Some(name) = &hero_name_raw {
                 m.hero_name = Some(name.clone());
             }

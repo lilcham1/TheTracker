@@ -404,6 +404,91 @@ pub async fn live_match(account_id: u64, cache: &SharedHeroes) -> Result<Option<
     Ok(None)
 }
 
+// ---------- Single match detail ----------
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DeadlockPlayer {
+    #[serde(rename = "accountId")]
+    pub account_id: u64,
+    #[serde(rename = "heroName")]
+    pub hero_name: String,
+    #[serde(rename = "heroImage")]
+    pub hero_image: Option<String>,
+    pub team: u64,
+    pub kills: u32,
+    pub deaths: u32,
+    pub assists: u32,
+    #[serde(rename = "netWorth")]
+    pub net_worth: u64,
+    #[serde(rename = "lastHits")]
+    pub last_hits: u32,
+    pub denies: u32,
+    pub level: u32,
+    #[serde(rename = "isMe")]
+    pub is_me: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DeadlockMatchDetail {
+    #[serde(rename = "matchId")]
+    pub match_id: u64,
+    #[serde(rename = "durationSeconds")]
+    pub duration_seconds: u32,
+    #[serde(rename = "winningTeam")]
+    pub winning_team: u64,
+    pub players: Vec<DeadlockPlayer>,
+}
+
+/// Full scoreboard for one match.
+///
+/// The metadata payload is around a megabyte — it carries every death
+/// position, damage matrix and ability event — so this is only ever fetched
+/// when a row is actually expanded, and the frontend caches the result.
+pub async fn match_detail(
+    match_id: u64,
+    me: Option<u64>,
+    cache: &SharedHeroes,
+) -> Result<DeadlockMatchDetail, String> {
+    let value = get_json(&format!("/v1/matches/{match_id}/metadata")).await?;
+    let hero_map = heroes(cache).await;
+
+    let info = value.get("match_info").unwrap_or(&value);
+
+    let mut players = Vec::new();
+    if let Some(list) = info.get("players").and_then(|p| p.as_array()) {
+        for p in list {
+            let hero_id = p.get("hero_id").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let hero = hero_map.get(&hero_id);
+            let account_id = p.get("account_id").and_then(|v| v.as_u64()).unwrap_or(0);
+
+            players.push(DeadlockPlayer {
+                account_id,
+                hero_name: hero.map(|h| h.name.clone()).unwrap_or_else(|| format!("Hero {hero_id}")),
+                hero_image: hero.and_then(|h| h.image.clone()),
+                team: p.get("team").and_then(|v| v.as_u64()).unwrap_or(0),
+                kills: p.get("kills").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                deaths: p.get("deaths").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                assists: p.get("assists").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                net_worth: p.get("net_worth").and_then(|v| v.as_u64()).unwrap_or(0),
+                last_hits: p.get("last_hits").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                denies: p.get("denies").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                level: p.get("level").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                is_me: me.is_some_and(|m| m == account_id),
+            });
+        }
+    }
+
+    // Sort by team then net worth, which is how a scoreboard is read.
+    players.sort_by(|a, b| a.team.cmp(&b.team).then(b.net_worth.cmp(&a.net_worth)));
+
+    Ok(DeadlockMatchDetail {
+        match_id,
+        duration_seconds: info.get("duration_s").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+        winning_team: info.get("winning_team").and_then(|v| v.as_u64()).unwrap_or(0),
+        players,
+    })
+}
+
 // ---------- Derived summary ----------
 
 #[derive(Debug, Clone, Serialize)]

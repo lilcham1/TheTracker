@@ -369,6 +369,16 @@ fn save_overlay_settings(settings: prefs::OverlaySettings, app: tauri::AppHandle
     p
 }
 
+#[tauri::command]
+async fn deadlock_match_detail(
+    match_id: u64,
+    app_state: tauri::State<'_, AppState>,
+) -> Result<deadlock::DeadlockMatchDetail, String> {
+    let me = deadlock::load_link().account_id;
+    let cache = app_state.heroes.clone();
+    deadlock::match_detail(match_id, me, &cache).await
+}
+
 // ---------- Overlay ----------
 
 #[tauri::command]
@@ -452,6 +462,7 @@ fn main() {
             deadlock_unlink,
             deadlock_overview,
             deadlock_live,
+            deadlock_match_detail,
             steam_accounts,
             get_prefs,
             set_favorite_hero,

@@ -285,7 +285,7 @@ function deadlockSectionHtml() {
 }
 
 function renderHome() {
-  const root = document.getElementById("tab-home");
+  const root = document.getElementById("tab-dotaoverview");
   if (!root) return;
 
   const p = state.profile || {};
@@ -308,8 +308,7 @@ function renderHome() {
       }
     </header>
 
-    ${dotaSectionHtml()}
-    ${deadlockSectionHtml()}`;
+    ${dotaSectionHtml()}`;
 
   root.querySelectorAll("[data-goto]").forEach((el) =>
     el.addEventListener("click", () => setView(el.dataset.goto))
@@ -318,12 +317,9 @@ function renderHome() {
 
 /// The home page reads from both games, so it pulls whichever links exist.
 /// Each loader caches, so revisiting home doesn't re-hit either API.
-async function loadHome() {
-  await Promise.all([dtRefreshLink(), dlRefreshLink()]);
+async function loadDotaHome() {
+  await dtRefreshLink();
   renderHome();
-  const jobs = [];
-  if (DOTA.link.accountId) jobs.push(dtLoad().then(renderHome));
-  if (DL.link.accountId) jobs.push(dlLoad().then(renderHome));
-  await Promise.all(jobs);
+  if (DOTA.link.accountId) await dtLoad();
   renderHome();
 }

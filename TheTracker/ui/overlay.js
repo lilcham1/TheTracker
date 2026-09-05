@@ -1,16 +1,37 @@
 // Overlay renderer. Runs in its own transparent window and polls the same
-// Tauri commands the main window does. Deliberately shows only what the
-// player already has access to: their own Dota GSI feed, and whether they
-// are currently in a Deadlock match.
+// Tauri commands the main window does.
+//
+// What it shows is deliberately the set every established Dota overlay
+// shows: objective and rune timers derived from the game clock, plus your
+// own scoreboard line. Every number here is either already on your screen
+// or simple arithmetic on the clock you can see — nothing is read from the
+// game process, and nothing reveals an opponent's state.
 
 const invoke = window.__TAURI__ ? window.__TAURI__.core.invoke : null;
-const CHECKPOINT_MINUTES = [5, 10, 15, 20, 25];
+
+// Timing rules, current as of the 2026 patches:
+//   Bounty  — 0:00, then every 4 minutes
+//   Water   — 2:00 and 4:00 only, then never again
+//   Power   — from 6:00, every 2 minutes
+//   Wisdom  — 7:00, then every 7 minutes
+//   Stacks  — neutral camps spawn on the minute, so the pull goes at :53
+//   Day/night — flips every 5 minutes
+const BOUNTY_EVERY = 240;
+const POWER_FROM = 360;
+const POWER_EVERY = 120;
+const WISDOM_EVERY = 420;
+const WATER_TIMES = [120, 240];
 
 function fmtClock(seconds) {
   if (seconds === null || seconds === undefined) return "--:--";
   const neg = seconds < 0;
   const abs = Math.floor(Math.abs(seconds));
   return `${neg ? "-" : ""}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, "0")}`;
+}
+
+function countdown(seconds) {
+  const s = Math.max(0, Math.ceil(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
 function heroDisplayName(raw) {
@@ -38,10 +59,7 @@ function heroDisplayName(raw) {
     vengefulspirit: "Vengeful Spirit",
     keeper_of_the_light: "Keeper of the Light",
   };
-  return (
-    overrides[clean] ||
-    clean.split("_").map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" ")
-  );
+  return overrides[clean] || clean.split("_").map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
 }
 
 function esc(s) {
@@ -52,71 +70,26 @@ function totalGoldLost(deaths) {
   return deaths.reduce((sum, d) => sum + (d.goldLost ?? 0), 0);
 }
 
-function roshanBlock(roshan, clockTime) {
-  if (roshan.lastDeathClock === null || roshan.lastDeathClock === undefined) return "";
-  const min = roshan.lastDeathClock + 480;
-  const max = roshan.lastDeathClock + 660;
-  const countdown = (t) => {
-    const rem = Math.max(0, t - clockTime);
-    return `${Math.floor(rem / 60)}:${String(Math.floor(rem % 60)).padStart(2, "0")}`;
-  };
-  let cls = "alive";
-  let status = "Roshan up";
-  let sub = "Respawn window passed";
-  if (clockTime < min) {
-    cls = "dead";
-    status = "Roshan down";
-    sub = `Earliest respawn in ${countdown(min)}`;
-  } else if (clockTime < max) {
-    cls = "maybe";
-    status = "Roshan may be up";
-    sub = `Guaranteed in ${countdown(max)}`;
-  }
-  return `
-    <div class="ov-rosh">
-      <div class="ov-rosh-status ${cls}">🐉 ${status}</div>
-      <div class="ov-rosh-sub">${sub}</div>
-    </div>`;
-}
+// ---------- Settings ----------
 
-// Appearance and panel choices, refreshed from the backend so changes made
-// in Overlay Settings appear without reopening the window.
 let OV_SETTINGS = {
   opacity: 0.85,
   scale: 1,
-  // Panels are per game: Dota's name Dota objectives (Roshan, last hits),
-  // which have no counterpart in Deadlock.
-  dota: { stats: true, roshan: true, checkpoints: true, items: false, deaths: false },
-  deadlock: { matchInfo: true, lineup: false, sessionRecord: true },
+  dota: { stats: true, roshan: true, runes: true, stacks: true, daynight: true },
+  deadlock: { matchInfo: true, sessionRecord: true, lineup: false },
 };
-
-// Win/loss so far today, for the Deadlock session panel. Deadlock gives no
-// live feed, so this comes from already-synced match history.
-let OV_SESSION = null;
-
-async function refreshSession() {
-  if (!invoke) return;
-  try {
-    const data = await invoke("deadlock_overview", { limit: 50 });
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    const cutoff = midnight.getTime() / 1000;
-    const today = (data.matches || []).filter((m) => m.startTime >= cutoff);
-    OV_SESSION = {
-      wins: today.filter((m) => m.outcome === "win").length,
-      losses: today.filter((m) => m.outcome === "loss").length,
-    };
-  } catch (_) {
-    // Leave the last known record rather than flashing zeros.
-  }
-}
 
 async function refreshOverlaySettings() {
   if (!invoke) return;
   try {
     const p = await invoke("get_prefs");
     if (p && p.overlay) {
-      OV_SETTINGS = { ...OV_SETTINGS, ...p.overlay };
+      OV_SETTINGS = {
+        ...OV_SETTINGS,
+        ...p.overlay,
+        dota: { ...OV_SETTINGS.dota, ...(p.overlay.dota || {}) },
+        deadlock: { ...OV_SETTINGS.deadlock, ...(p.overlay.deadlock || {}) },
+      };
       const card = document.getElementById("overlay");
       if (card) {
         card.style.opacity = String(OV_SETTINGS.opacity);
@@ -128,57 +101,124 @@ async function refreshOverlaySettings() {
   }
 }
 
+// ---------- Timer maths ----------
+
+/// Seconds until the next multiple of `every`, counting from `from`.
+function nextEvery(clock, every, from = 0) {
+  if (clock < from) return from - clock;
+  return every - ((clock - from) % every);
+}
+
+function roshanRow(roshan, clock) {
+  const alive = `
+    <div class="ov-row">
+      <span class="ov-label">Roshan</span>
+      <span class="ov-value good">Alive</span>
+    </div>`;
+
+  if (roshan.lastDeathClock === null || roshan.lastDeathClock === undefined) return alive;
+
+  const min = roshan.lastDeathClock + 480;
+  const max = roshan.lastDeathClock + 660;
+
+  if (clock < min) {
+    return `
+      <div class="ov-row">
+        <span class="ov-label">Roshan</span>
+        <span class="ov-value danger">${countdown(min - clock)}</span>
+      </div>`;
+  }
+  if (clock < max) {
+    return `
+      <div class="ov-row">
+        <span class="ov-label">Roshan &middot; maybe up</span>
+        <span class="ov-value warn">${countdown(max - clock)}</span>
+      </div>`;
+  }
+  return alive;
+}
+
+function runeRows(clock) {
+  const rows = [["Bounty", countdown(nextEvery(clock, BOUNTY_EVERY))]];
+
+  // Water runes exist only at 2:00 and 4:00; afterwards the row would be a
+  // permanent "never", so it disappears instead of lying.
+  const nextWater = WATER_TIMES.find((t) => t > clock);
+  if (nextWater !== undefined) rows.push(["Water", countdown(nextWater - clock)]);
+
+  rows.push([
+    "Power",
+    clock < POWER_FROM ? countdown(POWER_FROM - clock) : countdown(nextEvery(clock, POWER_EVERY, POWER_FROM)),
+  ]);
+  rows.push(["Wisdom", countdown(nextEvery(clock, WISDOM_EVERY, WISDOM_EVERY))]);
+
+  return rows
+    .map(
+      ([label, val]) => `
+      <div class="ov-row">
+        <span class="ov-label">${label} rune</span>
+        <span class="ov-value">${val}</span>
+      </div>`
+    )
+    .join("");
+}
+
+function stackRow(clock) {
+  // Camps spawn on the minute, so the pull goes out at :53.
+  const intoMinute = clock % 60;
+  const until = intoMinute <= 53 ? 53 - intoMinute : 113 - intoMinute;
+  return `
+    <div class="ov-row">
+      <span class="ov-label">Stack camps</span>
+      <span class="ov-value ${until <= 5 ? "warn" : ""}">${countdown(until)}</span>
+    </div>`;
+}
+
+function dayNightRow(clock, isDaytime) {
+  // GSI reports daytime directly, so only the 5-minute flip needs computing.
+  const until = 300 - (clock % 300);
+  const now = isDaytime === false ? "Night" : "Day";
+  return `
+    <div class="ov-row">
+      <span class="ov-label">${now} &rarr; ${now === "Day" ? "night" : "day"}</span>
+      <span class="ov-value">${countdown(until)}</span>
+    </div>`;
+}
+
+// ---------- Renders ----------
+
 function renderDota(m) {
   document.getElementById("ovDot").classList.add("live");
   document.getElementById("ovTitle").textContent = heroDisplayName(m.heroName);
   document.getElementById("ovClock").textContent = fmtClock(m.lastClockTime);
 
-  const cps = CHECKPOINT_MINUTES.map((min) => {
-    const cp = m.checkpoints[min];
-    return `<div class="ov-cp">
-        <div class="ov-cp-min">${min}m</div>
-        <div class="ov-cp-val ${cp ? "" : "pending"}">${cp ? cp.lastHits : "—"}</div>
-      </div>`;
-  }).join("");
-
+  const d = OV_SETTINGS.dota || {};
+  const clock = m.lastClockTime || 0;
   const parts = [];
 
-  if (OV_SETTINGS.dota.stats) {
+  if (d.stats) {
     parts.push(`
+      <div class="ov-row">
+        <span class="ov-label">Kills / deaths</span>
+        <span class="ov-value">${m.kills} / ${m.deaths.length}</span>
+      </div>
       <div class="ov-row">
         <span class="ov-label">Last hits / denies</span>
         <span class="ov-value">${m.lastHits} / ${m.denies}</span>
       </div>
       <div class="ov-row">
-        <span class="ov-label">Deaths / gold lost</span>
-        <span class="ov-value danger">${m.deaths.length} / ${totalGoldLost(m.deaths)}g</span>
-      </div>
-      <div class="ov-row">
-        <span class="ov-label">Kills</span>
-        <span class="ov-value">${m.kills}</span>
+        <span class="ov-label">Gold lost to deaths</span>
+        <span class="ov-value danger">${totalGoldLost(m.deaths)}g</span>
       </div>`);
   }
 
-  if (OV_SETTINGS.dota.roshan) parts.push(roshanBlock(m.roshan, m.lastClockTime));
-  if (OV_SETTINGS.dota.checkpoints) parts.push(`<div class="ov-checkpoints">${cps}</div>`);
+  const timers = d.roshan || d.runes || d.stacks || d.daynight;
+  if (d.stats && timers) parts.push(`<div class="ov-sep"></div>`);
+  if (d.roshan) parts.push(roshanRow(m.roshan, clock));
+  if (d.runes) parts.push(runeRows(clock));
+  if (d.stacks) parts.push(stackRow(clock));
+  if (d.daynight) parts.push(dayNightRow(clock, m.daytime));
 
-  if (OV_SETTINGS.dota.items && m.keyItemLog && m.keyItemLog.length) {
-    const items = m.keyItemLog
-      .slice(-6)
-      .map((i) => `<span class="ov-hero-chip">${esc(i.item.replace(/_/g, " "))} ${esc(i.clock)}</span>`)
-      .join("");
-    parts.push(`<div class="ov-heroes">${items}</div>`);
-  }
-
-  if (OV_SETTINGS.dota.deaths && m.deaths.length) {
-    const deaths = m.deaths
-      .slice(-5)
-      .map((d) => `<span class="ov-hero-chip">${esc(d.clock)} −${d.goldLost ?? "?"}g</span>`)
-      .join("");
-    parts.push(`<div class="ov-heroes">${deaths}</div>`);
-  }
-
-  // Everything switched off would leave a bare title bar looking broken.
   if (!parts.length) {
     parts.push(`<div class="ov-hint">All panels are hidden — enable some in Overlay Settings.</div>`);
   }
@@ -207,7 +247,7 @@ function renderDeadlock(live) {
     parts.push(`
       <div class="ov-row">
         <span class="ov-label">Today</span>
-        <span class="ov-value">${OV_SESSION.wins}–${OV_SESSION.losses}</span>
+        <span class="ov-value">${OV_SESSION.wins}&ndash;${OV_SESSION.losses}</span>
       </div>`);
   }
 
@@ -216,6 +256,7 @@ function renderDeadlock(live) {
   // overlays, so it stays opt-in. Never shows names, ranks or stats.
   if (dl.lineup) {
     parts.push(`
+      <div class="ov-sep"></div>
       <div>
         <div class="ov-label" style="margin-bottom:4px">Your team</div>
         <div class="ov-heroes">${live.allyHeroes.map((h) => `<span class="ov-hero-chip">${esc(h)}</span>`).join("")}</div>
@@ -228,8 +269,7 @@ function renderDeadlock(live) {
 
   parts.push(`
     <div class="ov-hint">
-      Deadlock has no live stats feed, so in-match numbers aren't available —
-      this match appears in the app once it ends.
+      Deadlock has no live stats feed, so in-match numbers aren't available.
     </div>`);
 
   document.getElementById("ovBody").innerHTML = parts.join("");
@@ -240,6 +280,29 @@ function renderIdle(message) {
   document.getElementById("ovTitle").textContent = "No match in progress";
   document.getElementById("ovClock").textContent = "";
   document.getElementById("ovBody").innerHTML = `<div class="ov-hint">${esc(message)}</div>`;
+}
+
+// ---------- Polling ----------
+
+// Win/loss so far today, for the Deadlock session panel. Deadlock gives no
+// live feed, so this comes from already-synced match history.
+let OV_SESSION = null;
+
+async function refreshSession() {
+  if (!invoke) return;
+  try {
+    const data = await invoke("deadlock_overview", { limit: 50 });
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const cutoff = midnight.getTime() / 1000;
+    const today = (data.matches || []).filter((m) => m.startTime >= cutoff);
+    OV_SESSION = {
+      wins: today.filter((m) => m.outcome === "win").length,
+      losses: today.filter((m) => m.outcome === "loss").length,
+    };
+  } catch (_) {
+    // Leave the last known record rather than flashing zeros.
+  }
 }
 
 // The Dota feed is local and free to poll every second. The Deadlock check

@@ -743,52 +743,63 @@ async function loadGlobalLeaderboard() {
 
 function renderProfile() {
   const root = document.getElementById("tab-profile");
+  if (!root) return;
+
   const p = state.profileDraft;
+  const linkedDota = DOTA.link && DOTA.link.accountId;
+  const linkedDl = DL.link && DL.link.accountId;
 
   root.innerHTML = `
-    <div>
-      <label class="form-label">Username</label>
-      <input class="text-input" id="usernameInput" type="text" value="${escapeHtml(p.username || "")}" placeholder="Your name" />
-    </div>
-
-    <div>
-      <label class="form-label">Rank</label>
-      <div class="swatch-grid" id="rankSwatches">
-        ${RANKS.map(
-          (r) => `<button class="swatch" data-rank="${r.id}" style="${p.rank === r.id ? `background:${r.color};border-color:${r.color};` : ""}">${r.label}</button>`
-        ).join("")}
+    <section class="home-section" style="padding-top:0">
+      <div class="home-head"><h2 class="home-title">Display name</h2></div>
+      <p class="hint" style="margin-bottom:10px">
+        Shown in the app, and next to your entries on the shared leaderboard
+        when you are signed in.
+      </p>
+      <div class="row">
+        <input class="text-input grow" id="usernameInput" type="text" placeholder="Your name"
+               value="${escapeHtml(p.username || "")}" style="max-width:340px" />
+        <button class="btn" id="saveProfileBtn" type="button">Save</button>
+        <span class="flash" id="saveFlash">Saved</span>
       </div>
-    </div>
+    </section>
 
-    <div>
-      <label class="form-label">Main Role</label>
-      <div class="swatch-grid" id="roleSwatches">
-        ${ROLES.map(
-          (r) => `<button class="swatch" data-role="${r.id}" style="${p.role === r.id ? `background:${r.color};border-color:${r.color};` : ""}">${r.label}</button>`
-        ).join("")}
+    <section class="home-section">
+      <div class="home-head">
+        <h2 class="home-title">Linked accounts</h2>
+        <button class="link-btn" data-goto="accounts">Manage &rsaquo;</button>
       </div>
-    </div>
+      ${railHtml([
+        {
+          label: "Dota 2",
+          value: linkedDota ? escapeHtml(DOTA.link.personaname || "Linked") : "Not linked",
+          tone: linkedDota ? "" : "loss",
+          sub: linkedDota ? `Steam ${DOTA.link.accountId}` : "link it to load match history",
+        },
+        {
+          label: "Deadlock",
+          value: linkedDl ? escapeHtml(DL.link.personaname || "Linked") : "Not linked",
+          tone: linkedDl ? "" : "loss",
+          sub: linkedDl ? `Steam ${DL.link.accountId}` : "link it to load match history",
+        },
+        {
+          label: "Cloud account",
+          value: state.auth && state.auth.signedIn ? "Signed in" : "Signed out",
+          tone: state.auth && state.auth.signedIn ? "win" : "",
+          sub: state.auth && state.auth.email ? escapeHtml(state.auth.email) : "sign in to publish matches",
+        },
+      ])}
+    </section>
 
-    <div style="display:flex;align-items:center;gap:14px;">
-      <button class="save-btn" id="saveProfileBtn">Save Profile</button>
-      <span class="save-flash" id="saveFlash">Saved!</span>
-    </div>
+    <section class="home-section">
+      <div class="home-head"><h2 class="home-title">Where your data lives</h2></div>
+      <p class="hint" style="max-width:72ch">
+        Matches are written to this PC first, under your app-data folder, and
+        only pushed to the cloud if you are signed in. Nothing is uploaded
+        while signed out.
+      </p>
+    </section>`;
 
-
-  `;
-
-  root.querySelectorAll("[data-rank]").forEach((btn) =>
-    btn.addEventListener("click", () => {
-      state.profileDraft.rank = btn.dataset.rank;
-      renderProfile();
-    })
-  );
-  root.querySelectorAll("[data-role]").forEach((btn) =>
-    btn.addEventListener("click", () => {
-      state.profileDraft.role = btn.dataset.role;
-      renderProfile();
-    })
-  );
   root.querySelector("#usernameInput").addEventListener("input", (e) => {
     state.profileDraft.username = e.target.value;
   });
@@ -801,6 +812,9 @@ function renderProfile() {
       setTimeout(() => flash.classList.remove("show"), 1600);
     });
   });
+  root.querySelectorAll("[data-goto]").forEach((el) =>
+    el.addEventListener("click", () => setView(el.dataset.goto))
+  );
 }
 
 function accountCardHtml() {
@@ -943,7 +957,7 @@ function renderSyncPill() {
 
 // Every view, its heading, and which game tab owns it.
 const VIEWS = {
-  home: { game: null, title: "Account Overview", sub: "Both games at a glance" },
+  dotaoverview: { game: "dota", title: "Overview", sub: "Your Dota 2 account at a glance" },
   live: { game: "dota", title: "Live", sub: "Real-time Dota 2 tracking via Valve's GSI feed" },
   dotamatches: { game: "dota", title: "Match History", sub: "Results, modes and scoreboards from OpenDota" },
   dotaheroes: { game: "dota", title: "Heroes", sub: "Per-hero performance across your recent games" },
@@ -978,12 +992,12 @@ function setGame(game) {
   // view, otherwise the click appears to do nothing.
   const meta = VIEWS[state.view];
   if (!meta || meta.game !== game) {
-    setView(game === "deadlock" ? "dloverview" : "live");
+    setView(game === "deadlock" ? "dloverview" : "dotaoverview");
   }
 }
 
 function setView(view) {
-  if (!VIEWS[view]) view = "home";
+  if (!VIEWS[view]) view = "dotaoverview";
   state.view = view;
   state.tab = view; // older helpers still read state.tab
 
@@ -996,8 +1010,8 @@ function setView(view) {
   document.getElementById("viewSub").textContent = meta.sub;
 
   switch (view) {
-    case "home":
-      loadHome();
+    case "dotaoverview":
+      loadDotaHome();
       break;
     case "history":
       loadHistory().then(renderHistory);
@@ -1172,12 +1186,8 @@ function renderUserChip() {
   if (!nameEl) return;
 
   const p = state.profile || {};
-  const rank = RANKS.find((r) => r.id === p.rank);
-  const role = ROLES.find((r) => r.id === p.role);
-
   nameEl.textContent = p.username || state.auth.email || "Signed out";
-  rankEl.textContent = [rank && rank.label, role && role.label].filter(Boolean).join(" · ");
-  if (rank) rankEl.style.color = rank.color;
+  rankEl.textContent = state.auth && state.auth.signedIn ? "Synced" : "Local only";
 
   const avatar = (DOTA.link && DOTA.link.avatar) || (DL.link && DL.link.avatar);
   avatarEl.style.backgroundImage = avatar ? `url("${avatar}")` : "none";
@@ -1316,7 +1326,7 @@ async function boot() {
   renderHistory();
   renderLeaderboard();
 
-  setView("home");
+  setView("dotaoverview");
 
   setInterval(refreshLive, 700);
   setInterval(refreshSyncStatus, 1500);
