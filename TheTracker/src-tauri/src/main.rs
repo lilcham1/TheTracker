@@ -495,6 +495,10 @@ fn main() {
 
             let syncer = convex_sync::spawn(device_id::device_id(), auth.clone());
             tracker_for_setup.lock().unwrap().syncer = Some(syncer.clone());
+            // Build the overlay once, hidden. Creating it on demand raced
+            // and could produce two stacked windows.
+            let _ = overlay::ensure(&app.handle().clone());
+
             spawn_overlay_watcher(app.handle().clone(), tracker_for_setup.clone());
 
             app.manage(AppState {

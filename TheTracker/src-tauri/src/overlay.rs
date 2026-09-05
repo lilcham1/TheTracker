@@ -15,16 +15,20 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const OVERLAY_LABEL: &str = "overlay";
 
-/// Creates the overlay window if it doesn't exist, otherwise shows it.
-pub fn show(app: &AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window(OVERLAY_LABEL) {
-        win.show().map_err(|e| e.to_string())?;
-        win.set_always_on_top(true).map_err(|e| e.to_string())?;
+/// Builds the overlay window once, hidden, at startup.
+///
+/// Creating it lazily on first show was a race: the auto-show watcher and a
+/// manual toggle could both find no window and both build one, leaving two
+/// identical always-on-top windows stacked over the game. Building it once
+/// up front and only ever toggling visibility makes that impossible rather
+/// than merely unlikely.
+pub fn ensure(app: &AppHandle) -> Result<(), String> {
+    if app.get_webview_window(OVERLAY_LABEL).is_some() {
         return Ok(());
     }
 
     let win = WebviewWindowBuilder::new(app, OVERLAY_LABEL, WebviewUrl::App("overlay.html".into()))
-        .title("Dota Tracker Overlay")
+        .title("TheTracker Overlay")
         .inner_size(320.0, 420.0)
         .position(24.0, 24.0)
         .decorations(false)
@@ -34,13 +38,30 @@ pub fn show(app: &AppHandle) -> Result<(), String> {
         .resizable(false)
         .shadow(false)
         .focused(false)
+        // Starts hidden: the watcher shows it when a match begins.
+        .visible(false)
         .build()
         .map_err(|e| format!("Couldn't create the overlay window: {e}"))?;
 
-    // Start click-through so it never steals input from the game.
+    // Click-through from the outset, so it can never steal input from the game.
     let settings = crate::prefs::load().overlay;
     win.set_ignore_cursor_events(settings.click_through).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Shows the overlay, creating it first if startup somehow hadn't.
+pub fn show(app: &AppHandle) -> Result<(), String> {
+    ensure(app)?;
+    let Some(win) = app.get_webview_window(OVERLAY_LABEL) else {
+        return Err("Overlay window is unavailable".to_string());
+    };
+
+    let settings = crate::prefs::load().overlay;
+    // Position before showing, so it never flashes in the wrong corner or on
+    // the wrong monitor on the way to the right one.
     apply_settings(app, &settings);
+    win.show().map_err(|e| e.to_string())?;
+    win.set_always_on_top(true).map_err(|e| e.to_string())?;
     Ok(())
 }
 
