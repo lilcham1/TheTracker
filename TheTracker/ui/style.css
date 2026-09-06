@@ -1,3 +1,45 @@
+/* Overwolf's two faces, subset to latin and served from the app itself —
+   the CSP is default-src 'self', so a Google Fonts link would be blocked.
+   Montserrat carries the interface: headings, navigation, and the tracked
+   uppercase labels. Lato carries body copy and every number, because it is
+   narrower and a table of figures in Montserrat runs out of room. */
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("fonts/montserrat-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/montserrat-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/montserrat-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/lato-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/lato-700.woff2") format("woff2");
+}
+
 /* TheTracker — desktop tracker UI.
    Layout follows the pattern the popular trackers settled on for good
    reason: a persistent left rail for navigation, a slim context bar on top,
@@ -7,23 +49,28 @@
 :root {
   color-scheme: dark;
 
-  /* Cool near-black, slightly blue rather than pure grey, so the accent
-     colours sit on it without vibrating. */
-  --bg: #0b0d12;
-  --bg-2: #0f121a;
-  --panel: #141823;
-  --panel-2: #1a1f2c;
-  --panel-hi: #212739;
-  --line: #232a3a;
-  --line-soft: #1b2130;
+  /* Overwolf's ground is pure black, with only two raised greys above it —
+     #101010 and #202020 — and no blue in any of them. The old palette was a
+     cool near-black with four panel steps; most of that separation is done
+     by hairlines here instead, which is what makes their pages read as flat
+     planes rather than stacked boxes. */
+  --bg: #000000;
+  --bg-2: #060606;
+  --panel: #101010;
+  --panel-2: #161616;
+  --panel-hi: #202020;
+  --line: #262626;
+  --line-soft: #1a1a1a;
 
-  --text: #eef1f7;
-  --text-2: #9aa3b8;
-  --text-3: #626c85;
+  /* Body text is #dfdfdf, never pure white. White is reserved for the thing
+     on screen that matters most, which is why their headlines carry. */
+  --text: #dfdfdf;
+  --text-2: #9f9f9f;
+  --text-3: #6b6b6b;
 
-  /* Dota's amber. Every tint of it is written rgba(var(--brand-rgb), a)
-     rather than as a literal, so switching games actually repaints the app
-     instead of leaving twenty orange highlights behind. */
+  /* Their accent is a red, #d34037. It is deliberately not adopted: red
+     already means "loss" on every row of this app, and a brand that collides
+     with the data would make both harder to read. The per-game accents stay. */
   --brand: #f0a13c;
   --brand-2: #ffc46b;
   --brand-rgb: 240, 161, 60;
@@ -34,11 +81,21 @@
   --loss-bg: rgba(242, 85, 95, 0.1);
   --info: #5aa9f5;
 
-  --r-sm: 8px;
-  --r: 12px;
+  /* Square, everywhere. Kept as tokens so the intent is stated once rather
+     than implied by fifty zeroes. */
+  --r-sm: 0;
+  --r: 0;
+
+  /* The uppercase label with wide tracking is Overwolf's most recognisable
+     habit: 14px at 2.8px of letter-spacing, which is 0.2em. */
+  --track: 0.2em;
+
+  --ui: "Montserrat", "Segoe UI", system-ui, sans-serif;
+  --body: "Lato", "Segoe UI", system-ui, sans-serif;
 
   --sidebar-w: 232px;
-  --shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+  /* Flat: their surfaces do not float. */
+  --shadow: none;
 }
 
 * {
@@ -58,7 +115,7 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--body);
   font-size: 13.5px;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -105,7 +162,7 @@ button {
 .brand-mark {
   width: 34px;
   height: 34px;
-  border-radius: 9px;
+  border-radius: 0;
   object-fit: cover;
   box-shadow: 0 0 0 1px var(--line), 0 4px 14px rgba(var(--brand-rgb), 0.18);
 }
@@ -153,7 +210,7 @@ button {
   background: transparent;
   color: var(--text-2);
   padding: 8px 10px;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -181,7 +238,7 @@ button {
   top: 8px;
   bottom: 8px;
   width: 3px;
-  border-radius: 0 3px 3px 0;
+  border-radius: 0;
   background: var(--brand);
 }
 
@@ -290,7 +347,7 @@ button {
   gap: 7px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 0;
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 600;
@@ -337,7 +394,7 @@ button {
   align-items: center;
   gap: 9px;
   padding: 4px 10px 4px 4px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--panel);
   border: 1px solid var(--line);
 }
@@ -424,7 +481,7 @@ button {
 .card {
   background: var(--panel);
   border: 1px solid var(--line-soft);
-  border-radius: var(--r);
+  border-radius: 0;
   padding: 16px;
 }
 
@@ -437,7 +494,7 @@ button {
 .stat {
   background: var(--panel);
   border: 1px solid var(--line-soft);
-  border-radius: var(--r);
+  border-radius: 0;
   padding: 13px 15px;
 }
 
@@ -469,7 +526,7 @@ button {
 
 .meter {
   height: 4px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--line);
   overflow: hidden;
   margin-top: 9px;
@@ -477,7 +534,7 @@ button {
 
 .meter-fill {
   height: 100%;
-  border-radius: 999px;
+  border-radius: 0;
   background: linear-gradient(90deg, var(--win), #6ee7b7);
   transition: width 0.35s ease;
 }
@@ -490,7 +547,7 @@ button {
   background: var(--panel);
   border: 1px solid var(--line-soft);
   border-left: 3px solid var(--text-3);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   overflow: hidden;
   transition: background 0.13s;
 }
@@ -505,7 +562,7 @@ button {
 .hero-portrait {
   width: 44px;
   height: 25px;
-  border-radius: 4px;
+  border-radius: 0;
   object-fit: cover;
   background: var(--panel-hi);
 }
@@ -513,7 +570,7 @@ button {
 .hero-portrait.square {
   width: 34px;
   height: 34px;
-  border-radius: 7px;
+  border-radius: 0;
 }
 
 .col-label {
@@ -551,7 +608,7 @@ button {
   align-items: center;
   gap: 10px;
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 12px;
 }
 
@@ -571,7 +628,7 @@ button {
 .board-hero {
   width: 30px;
   height: 17px;
-  border-radius: 3px;
+  border-radius: 0;
   object-fit: cover;
   background: var(--panel-hi);
 }
@@ -601,7 +658,7 @@ button {
 .board-items img {
   width: 22px;
   height: 17px;
-  border-radius: 2px;
+  border-radius: 0;
   object-fit: cover;
   background: var(--panel-hi);
 }
@@ -619,7 +676,7 @@ button {
   background: var(--panel);
   color: var(--text-2);
   padding: 5px 12px;
-  border-radius: 999px;
+  border-radius: 0;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -639,7 +696,7 @@ button {
 
 .badge {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 0;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -660,7 +717,7 @@ button {
   background: var(--panel-2);
   color: var(--text-2);
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: 0;
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
@@ -678,7 +735,7 @@ button {
   right: 0;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   box-shadow: var(--shadow);
   padding: 4px;
   display: flex;
@@ -694,7 +751,7 @@ button {
   color: var(--text);
   text-align: left;
   padding: 6px 9px;
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 12px;
   cursor: pointer;
 }
@@ -713,7 +770,7 @@ button {
 .live-hero img {
   width: 74px;
   height: 42px;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   object-fit: cover;
   background: var(--panel-hi);
 }
@@ -753,7 +810,7 @@ button {
 .cp {
   text-align: center;
   background: var(--panel-2);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   padding: 9px 4px;
 }
 
@@ -769,7 +826,7 @@ button {
   align-items: center;
   gap: 3px;
   background: var(--panel-2);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   padding: 6px;
   width: 62px;
 }
@@ -778,7 +835,7 @@ button {
   width: 46px;
   height: 34px;
   object-fit: contain;
-  border-radius: 3px;
+  border-radius: 0;
   background: #0a0c10;
 }
 
@@ -790,7 +847,7 @@ button {
   display: flex;
   justify-content: space-between;
   background: var(--panel-2);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 6px 11px;
   font-size: 12.5px;
 }
@@ -825,7 +882,7 @@ button {
   padding: 10px 14px;
   background: var(--panel);
   border: 1px solid var(--line-soft);
-  border-radius: var(--r-sm);
+  border-radius: 0;
 }
 
 .lb-row.is-you { box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.3); }
@@ -851,7 +908,7 @@ button {
   border: 1px solid var(--line);
   color: var(--text);
   padding: 9px 12px;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   font-size: 13px;
   outline: none;
   transition: border-color 0.13s;
@@ -864,7 +921,7 @@ button {
   color: #201304;
   border: none;
   padding: 9px 18px;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -893,7 +950,7 @@ button {
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-left: 3px solid var(--info);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   padding: 11px 13px;
   font-size: 12px;
   color: var(--text-2);
@@ -915,7 +972,7 @@ button {
   padding: 8px 11px;
   background: var(--panel-2);
   border: 1px solid var(--line-soft);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   cursor: pointer;
 }
 
@@ -940,13 +997,13 @@ button {
   padding: 10px 13px;
   background: var(--panel);
   border: 1px solid var(--line-soft);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   cursor: pointer;
 }
 
 .dl-hero-row:hover { background: var(--panel-2); }
 
-.dl-hero-img { width: 40px; height: 40px; border-radius: 9px; object-fit: cover; background: var(--panel-hi); }
+.dl-hero-img { width: 40px; height: 40px; border-radius: 0; object-fit: cover; background: var(--panel-hi); }
 .dl-hero-img.sm { width: 34px; height: 34px; }
 .dl-hero-main { flex: 1; min-width: 0; }
 .dl-hero-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
@@ -954,14 +1011,14 @@ button {
 .dl-wr { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .dl-wr.good { color: var(--win); }
 .dl-wr.bad { color: var(--loss); }
-.dl-winbar { height: 4px; background: var(--line); border-radius: 999px; margin: 6px 0 5px; overflow: hidden; }
-.dl-winbar-fill { height: 100%; background: var(--win); border-radius: 999px; }
+.dl-winbar { height: 4px; background: var(--line); border-radius: 0; margin: 6px 0 5px; overflow: hidden; }
+.dl-winbar-fill { height: 100%; background: var(--win); border-radius: 0; }
 .dl-match-meta { font-size: 10.5px; color: var(--text-3); }
 
 /* ---------- Scrollbar ---------- */
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 0; border: 2px solid var(--bg); }
 ::-webkit-scrollbar-thumb:hover { background: var(--panel-hi); }
 ::-webkit-scrollbar-track { background: transparent; }
 
@@ -985,7 +1042,7 @@ button {
   background: var(--loss-bg);
   border: 1px solid rgba(242, 85, 95, 0.3);
   color: #ffb3b7;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   padding: 8px 11px;
   font-size: 12px;
 }
@@ -997,7 +1054,7 @@ button {
   color: #201304;
   border: none;
   padding: 9px 18px;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -1013,7 +1070,7 @@ button {
   gap: 4px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 0;
   padding: 3px;
 }
 
@@ -1022,7 +1079,7 @@ button {
   background: transparent;
   color: var(--text-2);
   padding: 7px 20px;
-  border-radius: 999px;
+  border-radius: 0;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -1058,7 +1115,7 @@ button {
   padding: 10px 13px;
   background: var(--panel);
   border: 1px solid var(--line-soft);
-  border-radius: var(--r-sm);
+  border-radius: 0;
 }
 
 .hero-row.fav { box-shadow: inset 0 0 0 1px rgba(245, 181, 68, 0.35); }
@@ -1079,7 +1136,7 @@ button {
 .form-dot {
   width: 8px;
   height: 18px;
-  border-radius: 2px;
+  border-radius: 0;
   background: var(--line);
 }
 
@@ -1091,7 +1148,7 @@ button {
 .build-card {
   background: var(--panel-2);
   border: 1px solid var(--line-soft);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   padding: 11px 13px;
   display: flex;
   flex-direction: column;
@@ -1107,7 +1164,7 @@ button {
   width: 42px;
   height: 31px;
   object-fit: contain;
-  border-radius: 4px;
+  border-radius: 0;
   background: #0a0c10;
   border: 1px solid var(--line-soft);
 }
@@ -1121,7 +1178,7 @@ button {
   width: 40px;
   height: 30px;
   object-fit: contain;
-  border-radius: 4px;
+  border-radius: 0;
   background: #0a0c10;
   border: 1px solid var(--line-soft);
   cursor: pointer;
@@ -1224,7 +1281,7 @@ input[type="range"] {
   background: var(--win-bg);
   border: 1px solid rgba(53, 211, 154, 0.3);
   color: var(--win);
-  border-radius: 999px;
+  border-radius: 0;
   padding: 7px 15px;
   font-size: 12.5px;
   font-weight: 600;
@@ -1281,7 +1338,7 @@ input[type="range"] {
 .res.other { color: var(--text-3); }
 
 .cell-hero { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.cell-hero img { width: 38px; height: 22px; border-radius: 3px; object-fit: cover; background: var(--panel-hi); flex-shrink: 0; }
+.cell-hero img { width: 38px; height: 22px; border-radius: 0; object-fit: cover; background: var(--panel-hi); flex-shrink: 0; }
 .cell-hero-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cell-sub { font-size: 10.5px; color: var(--text-3); }
 
@@ -1339,7 +1396,7 @@ input[type="range"] {
   letter-spacing: 0.6px;
   color: var(--brand-2);
   background: rgba(var(--brand-rgb), 0.14);
-  border-radius: 999px;
+  border-radius: 0;
   padding: 1px 7px;
   margin-left: 6px;
 }
@@ -1365,7 +1422,7 @@ input[type="range"] {
   padding: 8px 11px;
   background: var(--panel-2);
   border: 1px solid var(--line-soft);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   cursor: pointer;
 }
 
@@ -1378,7 +1435,7 @@ input[type="range"] {
   border: 1px solid var(--line);
   color: var(--text);
   padding: 8px 13px;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -1461,7 +1518,7 @@ input[type="range"] {
 .nav-item {
   padding: 8px 10px;
   gap: 11px;
-  border-radius: 9px;
+  border-radius: 0;
   letter-spacing: -0.1px;
 }
 
@@ -1491,7 +1548,7 @@ input[type="range"] {
 }
 
 .brand-name { letter-spacing: -0.35px; font-size: 15.5px; }
-.brand-mark { width: 30px; height: 30px; border-radius: 8px; }
+.brand-mark { width: 30px; height: 30px; border-radius: 0; }
 
 .game-tab { letter-spacing: -0.1px; transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease; }
 
@@ -1569,7 +1626,7 @@ input[type="range"] {
 /* A row of related buttons should read as one control {
   display: inline-flex;
   border: 1px solid var(--line);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   overflow: hidden;
   background: var(--panel);
 }
@@ -1582,7 +1639,7 @@ input[type="range"] {
   background: linear-gradient(90deg, var(--panel) 25%, var(--panel-hi) 37%, var(--panel) 63%);
   background-size: 400% 100%;
   animation: shimmer 1.3s ease-in-out infinite;
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 @keyframes shimmer {
@@ -1608,7 +1665,7 @@ input[type="range"] {
 .empty-ico {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: 0;
   display: grid;
   place-items: center;
   background: var(--panel);
@@ -1635,7 +1692,7 @@ input[type="range"] {
 input[type="range"] {
   -webkit-appearance: none;
   height: 4px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--line);
   outline: none;
 }
@@ -1657,7 +1714,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
 /* Checkbox rows read as switches in a settings list. */
 .switch-row {
   padding: 9px 11px;
-  border-radius: 8px;
+  border-radius: 0;
   transition: background 0.13s ease;
 }
 
@@ -1706,7 +1763,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
   width: 34px;
   height: 25px;
   object-fit: contain;
-  border-radius: 3px;
+  border-radius: 0;
   background: #0a0c10;
   border: 1px solid var(--line-soft);
 }
@@ -1724,14 +1781,14 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .pop-bar {
   height: 4px;
   background: var(--line);
-  border-radius: 999px;
+  border-radius: 0;
   overflow: hidden;
   margin-bottom: 3px;
 }
 
 .pop-bar-fill {
   height: 100%;
-  border-radius: 999px;
+  border-radius: 0;
   background: linear-gradient(90deg, var(--brand), var(--brand-2));
 }
 
@@ -1804,7 +1861,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
 
 .headline-meter {
   height: 6px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--line);
   overflow: hidden;
   margin-top: 14px;
@@ -1813,7 +1870,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
 
 .headline-meter-fill {
   height: 100%;
-  border-radius: 999px;
+  border-radius: 0;
   transition: width 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
@@ -1896,7 +1953,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .form-cell {
   width: 26px;
   height: 30px;
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--line);
   transition: transform 0.12s ease;
 }
@@ -1929,13 +1986,13 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .hero-compare-img {
   width: 54px;
   height: 31px;
-  border-radius: 5px;
+  border-radius: 0;
   object-fit: cover;
   background: var(--panel-hi);
   flex-shrink: 0;
 }
 
-.hero-compare-img.square { width: 38px; height: 38px; border-radius: 9px; }
+.hero-compare-img.square { width: 38px; height: 38px; border-radius: 0; }
 .hero-compare-name { font-size: 14.5px; font-weight: 600; letter-spacing: -0.2px; }
 .hero-compare-meta { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
 
@@ -1961,7 +2018,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
   align-items: center;
   gap: 14px;
   padding: 9px 12px;
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--panel);
   border: 1px solid var(--line-soft);
   border-left: 3px solid var(--text-3);
@@ -1977,7 +2034,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .mini-img {
   width: 46px;
   height: 26px;
-  border-radius: 4px;
+  border-radius: 0;
   object-fit: cover;
   background: var(--panel-hi);
 }
@@ -2012,16 +2069,19 @@ html[data-game="deadlock"] {
   --brand-2: #c8afff;
   --brand-rgb: 166, 124, 255;
 
-  --bg: #0b0817;
-  --bg-2: #100c1f;
-  --panel: #17122b;
-  --panel-2: #1e1836;
-  --panel-hi: #271f45;
-  --line: #2e2650;
-  --line-soft: #221b3d;
+  /* The ground stays black, as it is on the Dota side and on Overwolf. Only
+     the raised surfaces and the hairlines pick up the violet, which is
+     enough to tell the two games apart without turning the app purple. */
+  --bg: #000000;
+  --bg-2: #070510;
+  --panel: #120e1e;
+  --panel-2: #181327;
+  --panel-hi: #221a38;
+  --line: #2a2142;
+  --line-soft: #1b1530;
 
-  --text-2: #a09ab8;
-  --text-3: #6a6483;
+  --text-2: #9d97ab;
+  --text-3: #6b6480;
 }
 
 /* Only the large surfaces cross-fade. Transitioning every border and shadow
@@ -2116,7 +2176,7 @@ body,
   padding: 14px 16px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   color: var(--loss);
   font-family: ui-monospace, Consolas, monospace;
   font-size: 12px;
@@ -2143,7 +2203,7 @@ body,
 .content,
 .upd-banner {
   width: 100%;
-  max-width: 1320px;
+  max-width: 1560px;
 }
 
 /* The device id is a UUID — full rail type would wrap it across two lines. */
@@ -2184,7 +2244,7 @@ img.portrait-missing {
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: 0;
   background: var(--panel-hi);
   border: 1px solid var(--line);
   color: var(--text-3);
@@ -2192,4 +2252,216 @@ img.portrait-missing {
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+}
+
+/* ============================================================
+   Overwolf pass
+   ============================================================
+
+   Their system, measured off the site rather than eyeballed: pure black
+   with two raised greys, #dfdfdf text, Montserrat over Lato, no rounded
+   corner anywhere, and uppercase labels tracked out to 0.2em. The parts
+   below are the ones a marketing page and a stats app share — structure,
+   type and weight. What is not carried over is their density: a landing
+   page can spend a screen on one sentence, a match table cannot.
+   ============================================================ */
+
+/* ---------- Type ---------- */
+
+/* Montserrat is the interface voice — anything that names or labels. Body
+   copy and every figure stay in Lato, set on <body>. */
+.brand-name,
+.view-title,
+.home-title,
+.section-title,
+.nav-label,
+.nav-group-label,
+.game-tab,
+.btn,
+.link-btn,
+.chip,
+.col-label,
+.form-label,
+.rail-label,
+.home-meta,
+.acct-name,
+.dtable th,
+.board-row.head span {
+  font-family: var(--ui);
+}
+
+/* Headline weight and tightness. Their h2 is 32/40 at 700, and the page
+   titles here are the same gesture two sizes down. */
+.view-title {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: #fff;
+}
+
+.home-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.1px;
+  color: var(--text);
+}
+
+.brand-name {
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+/* The tracked uppercase label, which is the most recognisable thing they
+   do. Applied to every micro-label so the app speaks with one accent
+   instead of four slightly different ones. */
+.section-title,
+.nav-group-label,
+.col-label,
+.form-label,
+.rail-label,
+.home-meta {
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  font-weight: 500;
+  font-size: 9.5px;
+  color: var(--text-3);
+}
+
+.rail-label { font-size: 9.5px; }
+
+/* Figures stay in Lato and stay tabular — a stat rail only reads as a rail
+   when the digits line up. */
+.rail-value,
+.headline-value,
+.stat-value,
+.lb-value,
+.board-num,
+.dtable td.num {
+  font-family: var(--body);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ---------- Surfaces ---------- */
+
+/* Flat planes separated by hairlines, not floating panels. */
+.card,
+.home-section,
+.lb-row,
+.build-card,
+.hero-row,
+.dl-hero-row,
+.mini-match,
+.result-row,
+.acct-row {
+  box-shadow: none;
+}
+
+.lb-row,
+.mini-match,
+.hero-row,
+.dl-hero-row {
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+}
+
+/* ---------- Controls ---------- */
+
+/* Their buttons are a 1px outline on nothing, square, with generous
+   horizontal padding — 16px 32px on the page, tightened here because this
+   is an app toolbar rather than a hero section. */
+.btn,
+.btn-secondary,
+.link-btn {
+  border-radius: 0;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--text-3);
+  color: var(--text);
+  padding: 8px 22px;
+}
+
+.btn-secondary:hover {
+  border-color: var(--text);
+  background: transparent;
+}
+
+/* Filter chips read as a segmented row of squares rather than pills. */
+.chip {
+  border-radius: 0;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.chip.selected,
+.chip.active {
+  border-color: var(--brand);
+}
+
+/* The game switch is the one place a filled accent earns its keep. */
+.game-tab {
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 8px 18px;
+}
+
+.text-input,
+select.text-input,
+textarea.text-input {
+  border-radius: 0;
+  font-family: var(--body);
+}
+
+/* ---------- Navigation ---------- */
+
+/* The active item is marked by a hard accent edge, not a rounded pill. */
+.nav-item {
+  border-radius: 0;
+  font-family: var(--ui);
+  font-size: 12.5px;
+  font-weight: 500;
+  border-left: 2px solid transparent;
+}
+
+.nav-item.active {
+  background: var(--panel);
+  border-left-color: var(--brand);
+  color: #fff;
+}
+
+.nav-group-label {
+  padding-left: 10px;
+}
+
+/* ---------- Structure ---------- */
+
+/* A hairline under the top bar and beside the rail, in place of the shadow
+   they never use. */
+.topbar {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.sidebar {
+  background: var(--bg);
+  border-right: 1px solid var(--line-soft);
+}
+
+.home-section + .home-section {
+  border-top: 1px solid var(--line-soft);
+}
+
+.pill,
+.sync-pill,
+.badge,
+.you-tag,
+.res {
+  border-radius: 0;
 }

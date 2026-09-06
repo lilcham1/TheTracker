@@ -175,7 +175,7 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.10.1";
+const APP_VERSION = "0.11.0";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 

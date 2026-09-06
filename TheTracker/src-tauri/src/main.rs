@@ -540,6 +540,25 @@ fn main() {
 
             let syncer = convex_sync::spawn(device_id::device_id(), auth.clone());
             tracker_for_setup.lock().unwrap().syncer = Some(syncer.clone());
+
+            // Managed state has to exist before anything can call a command,
+            // and creating a window counts: the overlay's page starts polling
+            // get_live_state the moment it loads, and the main window is
+            // already loading by the time setup runs. Registering last left a
+            // gap where an early call failed with "state not managed" — which
+            // the main window hit as a hard boot failure whenever the page
+            // won the race, and which the overlay hid by simply retrying a
+            // second later.
+            app.manage(AppState {
+                tracker: tracker_for_setup.clone(),
+                server_error: server_error.clone(),
+                syncer,
+                auth,
+                heroes: Arc::new(Mutex::new(deadlock::HeroCache::default())),
+                dota_heroes: Arc::new(Mutex::new(dota_api::DotaHeroCache::default())),
+                items: Arc::new(Mutex::new(popular::ItemNameCache::default())),
+            });
+
             // Build the overlay once, hidden. Creating it on demand raced
             // and could produce two stacked windows.
             let _ = overlay::ensure(&app.handle().clone());
@@ -561,16 +580,6 @@ fn main() {
 
             spawn_overlay_watcher(app.handle().clone(), tracker_for_setup.clone());
             spawn_game_type_backfill();
-
-            app.manage(AppState {
-                tracker: tracker_for_setup.clone(),
-                server_error: server_error.clone(),
-                syncer,
-                auth,
-                heroes: Arc::new(Mutex::new(deadlock::HeroCache::default())),
-                dota_heroes: Arc::new(Mutex::new(dota_api::DotaHeroCache::default())),
-                items: Arc::new(Mutex::new(popular::ItemNameCache::default())),
-            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
