@@ -57,7 +57,7 @@ function heroRowHtml(h, favSlug) {
   const isFav = h.slug === favSlug;
   return `
     <div class="hero-row ${isFav ? "fav" : ""}">
-      <img class="hero-portrait" src="${DOTA_HERO_CDN}${h.slug}.png" alt="" onerror="this.style.visibility='hidden'" />
+      <img class="hero-portrait" src="${DOTA_HERO_CDN}${h.slug}.png" alt="" />
       <div class="hero-main">
         <div class="hero-top">
           <span class="hero-name">${escapeHtml(h.name)}${isFav ? ' <span class="badge badge-brand">Favorite</span>' : ""}</span>
@@ -226,7 +226,7 @@ function renderFavoriteHero() {
 
   root.innerHTML = `
     <div class="card live-hero">
-      <img src="${DOTA_HERO_CDN}${h.slug}.png" alt="" onerror="this.style.visibility='hidden'" />
+      <img src="${DOTA_HERO_CDN}${h.slug}.png" alt="" />
       <div class="grow">
         <p class="live-hero-name">${escapeHtml(h.name)}</p>
         <span class="hint">${h.played} games · ${h.wins}W ${h.losses}L · last ${DOTA.matches.length} matches</span>

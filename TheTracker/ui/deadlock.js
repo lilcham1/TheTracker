@@ -121,7 +121,7 @@ function dlDetailHtml(matchId) {
           .map(
             (p) => `
           <div class="board-row ${p.isMe ? "me" : ""}" style="grid-template-columns:30px minmax(90px,1.2fr) 74px repeat(3,minmax(48px,.7fr))">
-            ${p.heroImage ? `<img class="board-hero" src="${p.heroImage}" alt="" onerror="this.style.visibility='hidden'" />` : `<span class="board-hero"></span>`}
+            ${p.heroImage ? `<img class="board-hero" src="${p.heroImage}" alt="" />` : `<span class="board-hero"></span>`}
             <span class="board-name">${escapeHtml(p.heroName)}</span>
             <span>${p.kills} / ${p.deaths} / ${p.assists}</span>
             <span class="board-num">${dlFmtSouls(p.netWorth)}</span>
@@ -173,7 +173,7 @@ function dlRowHtml(m) {
     <tr class="${cls}" data-dl-toggle="${m.matchId}">
       <td>
         <div class="cell-hero">
-          ${m.heroImage ? `<img src="${m.heroImage}" alt="" onerror="this.style.visibility='hidden'" />` : ""}
+          ${m.heroImage ? `<img src="${m.heroImage}" alt="" />` : ""}
           <div style="min-width:0"><div class="cell-hero-name">${escapeHtml(m.heroName)}</div></div>
         </div>
       </td>

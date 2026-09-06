@@ -23,18 +23,49 @@ const ITEM_CATALOG = {
     "desolator", "mage_slayer", "maelstrom", "mjollnir", "orchid", "bloodthorn",
   ],
   Damage: [
-    "daedalus", "butterfly", "satanic", "monkey_king_bar", "silver_edge",
+    "greater_crit", "butterfly", "satanic", "monkey_king_bar", "silver_edge",
     "abyssal_blade", "nullifier", "skadi", "radiance", "rapier",
   ],
   Defence: [
     "heart", "assault", "shivas_guard", "crimson_guard", "pipe", "lotus_orb",
-    "linkens_sphere", "blade_mail", "heavens_halberd", "eternal_shroud",
+    "sphere", "blade_mail", "heavens_halberd", "eternal_shroud",
   ],
   Support: [
     "force_staff", "glimmer_cape", "ghost", "solar_crest", "vladmir",
     "spirit_vessel", "aeon_disk", "sheepstick", "refresher", "octarine_core",
-    "rod_of_atos", "dagon_5", "wind_waker", "aghanims_blessing",
+    "rod_of_atos", "dagon_5", "wind_waker", "ultimate_scepter_2",
   ],
+};
+
+/// Items whose internal name is not the name anyone would recognise.
+///
+/// The internal name has to be what is stored and what the icon URL is built
+/// from — it is what GSI sends and what the key-item matcher compares — so
+/// only the label is overridden. Three entries in the catalog above used to
+/// be shop names instead (`daedalus`, `linkens_sphere`, `aghanims_blessing`);
+/// none of them exist on Valve's CDN, so those icons simply never loaded.
+const ITEM_LABELS = {
+  greater_crit: "Daedalus",
+  sphere: "Linken's Sphere",
+  ultimate_scepter: "Aghanim's Scepter",
+  ultimate_scepter_2: "Aghanim's Blessing",
+  aghanims_shard: "Aghanim's Shard",
+  sheepstick: "Scythe of Vyse",
+  skadi: "Eye of Skadi",
+  heart: "Heart of Tarrasque",
+  assault: "Assault Cuirass",
+  pipe: "Pipe of Insight",
+  rapier: "Divine Rapier",
+  vladmir: "Vladmir's Offering",
+  orchid: "Orchid Malevolence",
+  manta: "Manta Style",
+  blink: "Blink Dagger",
+  boots: "Boots of Speed",
+  travel_boots: "Boots of Travel",
+  refresher: "Refresher Orb",
+  dagon_5: "Dagon",
+  shivas_guard: "Shiva's Guard",
+  heavens_halberd: "Heaven's Halberd",
 };
 
 function itemIcon(name) {
@@ -42,6 +73,7 @@ function itemIcon(name) {
 }
 
 function prettyItem(name) {
+  if (ITEM_LABELS[name]) return ITEM_LABELS[name];
   return name
     .split("_")
     .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
@@ -63,7 +95,7 @@ function buildCardHtml(b, showHero = true) {
         ${b.items
           .map(
             (i) =>
-              `<img src="${itemIcon(i)}" title="${escapeHtml(prettyItem(i))}" alt="" onerror="this.style.visibility='hidden'" />`
+              `<img src="${itemIcon(i)}" title="${escapeHtml(prettyItem(i))}" alt="" />`
           )
           .join("")}
       </div>
@@ -105,7 +137,7 @@ function buildEditorHtml(d, heroOptions) {
               ? d.items
                   .map(
                     (i, idx) =>
-                      `<img src="${itemIcon(i)}" title="${escapeHtml(prettyItem(i))} — click to remove" data-remove-item="${idx}" alt="" onerror="this.style.visibility='hidden'" />`
+                      `<img src="${itemIcon(i)}" title="${escapeHtml(prettyItem(i))} — click to remove" data-remove-item="${idx}" alt="" />`
                   )
                   .join("")
               : `<span class="hint">Nothing added yet — pick items below.</span>`
@@ -139,7 +171,7 @@ function buildEditorHtml(d, heroOptions) {
                 ${shown
                   .map(
                     (i) =>
-                      `<img src="${itemIcon(i)}" title="${escapeHtml(prettyItem(i))}" data-add-item="${i}" alt="" onerror="this.parentElement.removeChild(this)" />`
+                      `<img src="${itemIcon(i)}" title="${escapeHtml(prettyItem(i))}" data-add-item="${i}" alt="" />`
                   )
                   .join("")}
               </div>

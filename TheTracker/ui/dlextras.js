@@ -85,7 +85,7 @@ function dlRenderFavorite() {
 
   root.innerHTML = `
     <div class="card live-hero">
-      ${h.image ? `<img src="${h.image}" alt="" onerror="this.style.visibility='hidden'" />` : ""}
+      ${h.image ? `<img src="${h.image}" alt="" />` : ""}
       <div class="grow">
         <p class="live-hero-name">${escapeHtml(h.name)}</p>
         <span class="hint">${h.played} games &middot; ${h.wins}W ${h.losses}L</span>

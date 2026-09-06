@@ -52,7 +52,7 @@ function popularPhaseHtml(phase) {
           .map(
             (i) => `
           <div class="pop-item" title="${escapeHtml(i.name)} — ${i.count} matches">
-            <img src="${DOTA_ITEM_CDN}${i.key}.png" alt="" onerror="this.style.visibility='hidden'" />
+            <img src="${DOTA_ITEM_CDN}${i.key}.png" alt="" />
             <div class="pop-bar"><div class="pop-bar-fill" style="width:${(i.count / max) * 100}%"></div></div>
             <span class="pop-name">${escapeHtml(i.name)}</span>
           </div>`

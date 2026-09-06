@@ -207,7 +207,7 @@ function dotaOverviewBodyHtml() {
   const worst = [...ranked].sort((a, b) => a.winRate - b.winRate)[0];
 
   const portrait = (h) =>
-    `<img class="hero-compare-img" src="${DOTA_HERO_CDN}${h.slug}.png" alt="" onerror="this.style.visibility='hidden'" />`;
+    `<img class="hero-compare-img" src="${DOTA_HERO_CDN}${h.slug}.png" alt="" />`;
 
   return `
     ${headlineHtml({
@@ -243,7 +243,7 @@ function dotaOverviewBodyHtml() {
           .map(
             (m) => `
           <div class="mini-match ${m.won ? "win" : "loss"}" data-goto="dotamatches">
-            <img src="${DOTA_HERO_CDN}${m.heroSlug}.png" alt="" onerror="this.style.visibility='hidden'" />
+            <img src="${DOTA_HERO_CDN}${m.heroSlug}.png" alt="" />
             <div class="grow">
               <div class="mini-hero">${escapeHtml(m.heroName)}</div>
               <div class="mini-meta">${escapeHtml(m.modeName)} &middot; ${dtDuration(m.durationSeconds)}</div>
@@ -325,7 +325,7 @@ function deadlockOverviewBodyHtml() {
 
   const portrait = (h) =>
     h.image
-      ? `<img class="hero-compare-img square" src="${h.image}" alt="" onerror="this.style.visibility='hidden'" />`
+      ? `<img class="hero-compare-img square" src="${h.image}" alt="" />`
       : `<span class="hero-compare-img square"></span>`;
 
   return `
@@ -364,7 +364,7 @@ function deadlockOverviewBodyHtml() {
             const label = m.outcome === "win" ? "Win" : m.outcome === "loss" ? "Loss" : "—";
             return `
           <div class="mini-match ${cls}" data-goto="dlmatches">
-            ${m.heroImage ? `<img src="${m.heroImage}" alt="" onerror="this.style.visibility='hidden'" />` : `<span class="mini-img"></span>`}
+            ${m.heroImage ? `<img src="${m.heroImage}" alt="" />` : `<span class="mini-img"></span>`}
             <div class="grow">
               <div class="mini-hero">${escapeHtml(m.heroName)}</div>
               <div class="mini-meta">${dlFmtDuration(m.durationSeconds)}</div>

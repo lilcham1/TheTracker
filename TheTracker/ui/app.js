@@ -118,32 +118,52 @@ function itemDisplayName(item) {
   return titleCase(item);
 }
 
-/// CDN icons occasionally 404 (renamed/removed items, or no connection).
-/// Swap those for a readable text tile instead of a broken-image glyph.
-/// Wired programmatically rather than via an inline `onerror` attribute,
-/// which the app's CSP (script-src 'self') would block.
-function wireImageFallbacks(root) {
-  root.querySelectorAll("img[data-item-img]").forEach((img) => {
-    img.addEventListener(
-      "error",
-      () => {
-        const name = img.dataset.itemImg;
-        const div = document.createElement("div");
-        div.className = "item-fallback";
-        div.textContent = itemDisplayName(name)
-          .split(" ")
-          .map((w) => w[0])
-          .join("")
-          .slice(0, 3);
-        img.replaceWith(div);
-      },
-      { once: true }
-    );
-  });
-  root.querySelectorAll("img.hero-portrait").forEach((img) => {
-    img.addEventListener("error", () => img.classList.add("portrait-missing"), { once: true });
-  });
-}
+/// Every image failure in the app, handled in one place.
+///
+/// CDN icons 404 from time to time — renamed items, a wrong slug, or simply
+/// no connection. Every `<img>` in the app used to carry its own
+/// `onerror="…"` attribute, and not one of them ever ran: the CSP is
+/// `script-src 'self'`, which blocks inline handlers, so a failed icon
+/// showed the browser's broken-image glyph instead of the intended
+/// fallback. That is also how three wrong item slugs went unnoticed.
+///
+/// `error` does not bubble, but it does capture, so a single listener on
+/// the document catches every image — including ones rendered long after
+/// this runs, which per-element wiring kept missing.
+document.addEventListener(
+  "error",
+  (e) => {
+    const img = e.target;
+    if (!(img instanceof HTMLImageElement) || img.dataset.failed) return;
+    img.dataset.failed = "1";
+
+    // An item icon becomes its initials, which still identifies it.
+    const item = img.dataset.itemImg;
+    if (item) {
+      const tile = document.createElement("div");
+      tile.className = "item-fallback";
+      tile.title = itemDisplayName(item);
+      tile.textContent = itemDisplayName(item)
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .slice(0, 3);
+      img.replaceWith(tile);
+      return;
+    }
+
+    // A hero portrait keeps its footprint so the row stays aligned.
+    if (img.classList.contains("hero-portrait")) {
+      img.classList.add("portrait-missing");
+      img.removeAttribute("src");
+      return;
+    }
+
+    // Anything else just gets out of the way.
+    img.style.visibility = "hidden";
+  },
+  true
+);
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -155,7 +175,7 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.10.0";
+const APP_VERSION = "0.10.1";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 
@@ -303,7 +323,6 @@ function renderLive() {
   `);
 
   root.innerHTML = parts.join("");
-  wireImageFallbacks(root);
 
   root.querySelectorAll("[data-live-type]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -506,8 +525,6 @@ function renderHistory() {
       `;
     })
     .join("");
-
-  wireImageFallbacks(root);
 
   root.querySelectorAll("[data-toggle-history]").forEach((headEl) => {
     headEl.addEventListener("click", (e) => {

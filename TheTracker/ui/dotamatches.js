@@ -135,7 +135,7 @@ function dtBoardSideHtml(players, radiant, label) {
           <span class="board-num">${p.xpPerMin}</span>
           <span class="board-num">${dtNum(p.heroDamage)}</span>
           <span class="board-items">${p.items
-            .map((id) => `<img src="${DOTA_ITEM_CDN}${id}.png" alt="" onerror="this.style.visibility='hidden'" />`)
+            .map((id) => `<img src="${DOTA_ITEM_CDN}${id}.png" alt="" />`)
             .join("")}</span>
         </div>`;
         })
@@ -206,7 +206,7 @@ function dtRowHtml(m) {
     <tr class="${result}" data-dt-toggle="${m.matchId}">
       <td>
         <div class="cell-hero">
-          ${img ? `<img src="${img}" alt="" onerror="this.style.visibility='hidden'" />` : ""}
+          ${img ? `<img src="${img}" alt="" />` : ""}
           <div style="min-width:0">
             <div class="cell-hero-name">${escapeHtml(m.heroName)}</div>
             <div class="cell-sub">${escapeHtml(m.modeName)}${m.partySize && m.partySize > 1 ? ` · party ${m.partySize}` : ""}</div>
