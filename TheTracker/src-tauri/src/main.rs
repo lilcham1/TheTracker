@@ -149,13 +149,6 @@ async fn global_leaderboard(
     convex_sync::global_leaderboard(&metric, &game_type, limit.unwrap_or(10.0)).await
 }
 
-/// Everything this account has published, for restoring onto a new machine.
-#[tauri::command]
-async fn cloud_history(app_state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
-    let auth = app_state.auth.clone();
-    convex_sync::cloud_history(&auth).await
-}
-
 #[tauri::command]
 fn device_identity(app_state: tauri::State<AppState>) -> String {
     app_state.syncer.device_id.clone()
@@ -592,7 +585,6 @@ fn main() {
             sync_status,
             sync_all,
             global_leaderboard,
-            cloud_history,
             device_identity,
             auth_status,
             sign_in,

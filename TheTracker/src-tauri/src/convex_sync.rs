@@ -284,25 +284,6 @@ pub async fn global_leaderboard(
     }
 }
 
-/// Everything this account has published — used to restore history onto a
-/// fresh machine. Requires being signed in.
-pub async fn cloud_history(auth: &SharedAuth) -> Result<serde_json::Value, String> {
-    let token = auth.lock().ok().and_then(|a| a.token.clone());
-    if token.is_none() {
-        return Err("Sign in to load your cloud history".to_string());
-    }
-    let mut client = ConvexClient::new(&convex_url())
-        .await
-        .map_err(|e| format!("Couldn't reach Convex: {e}"))?;
-    client.set_auth(token).await;
-    match client.query("matches:listMine", BTreeMap::new()).await {
-        Ok(FunctionResult::Value(v)) => Ok(serde_json::Value::from(v)),
-        Ok(FunctionResult::ErrorMessage(e)) => Err(e),
-        Ok(FunctionResult::ConvexError(e)) => Err(format!("{e:?}")),
-        Err(e) => Err(e.to_string()),
-    }
-}
-
 /// Attaches matches this install synced before accounts existed to the
 /// signed-in account.
 pub async fn claim_device(auth: &SharedAuth, device_id: &str) -> Result<serde_json::Value, String> {

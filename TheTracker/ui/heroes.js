@@ -56,7 +56,7 @@ function formStripHtml(matches, limit = 10) {
 function heroRowHtml(h, favSlug) {
   const isFav = h.slug === favSlug;
   return `
-    <div class="hero-row ${isFav ? "fav" : ""}" data-hero-slug="${escapeHtml(h.slug)}">
+    <div class="hero-row ${isFav ? "fav" : ""}">
       <img class="hero-portrait" src="${DOTA_HERO_CDN}${h.slug}.png" alt="" onerror="this.style.visibility='hidden'" />
       <div class="hero-main">
         <div class="hero-top">

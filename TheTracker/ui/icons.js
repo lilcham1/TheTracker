@@ -58,11 +58,3 @@ function icon(name, size = 16) {
     aria-hidden="true" focusable="false">${path}</svg>`;
 }
 
-/// Filled variant, for the favourite star once it's set.
-function iconFilled(name, size = 16) {
-  const path = ICON_PATHS[name];
-  if (!path) return "";
-  return `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24"
-    fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"
-    aria-hidden="true" focusable="false">${path}</svg>`;
-}

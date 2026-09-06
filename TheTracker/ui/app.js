@@ -43,11 +43,18 @@ const HERO_NAME_OVERRIDES = {
   keeper_of_the_light: "Keeper of the Light",
 };
 
-// ---------- Tauri bridge (falls back to mock data when previewed as a
-// plain webpage outside Tauri, e.g. in a browser, for layout sanity-checks
-// during development) ----------
+// ---------- Tauri bridge ----------
 
-const invoke = window.__TAURI__ ? window.__TAURI__.core.invoke : mockInvoke;
+/// Every backend call goes through here.
+///
+/// Opened as a plain webpage there is no backend, and this used to answer
+/// with several hundred lines of fixtures so the layout could be eyeballed
+/// in a browser. They were deleted: fixtures drift from the shapes the Rust
+/// side actually returns, and a page that renders plausible fake data is
+/// worse than one that admits it has none.
+const invoke = window.__TAURI__
+  ? window.__TAURI__.core.invoke
+  : (cmd) => Promise.reject(new Error(`No backend for "${cmd}" — TheTracker has to run as the app.`));
 
 // ---------- Small helpers ----------
 
@@ -148,7 +155,7 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.9.6";
+const APP_VERSION = "0.10.0";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 
@@ -473,7 +480,7 @@ function renderHistory() {
       const open = state.openHistory.has(m.matchid);
       const portrait = heroPortraitUrl(m.heroName);
       return `
-        <div class="history-item ${open ? "open" : ""}" data-matchid="${escapeHtml(m.matchid)}">
+        <div class="history-item ${open ? "open" : ""}">
           <div class="history-head" data-toggle-history="${escapeHtml(m.matchid)}">
             ${portrait ? `<img class="hero-portrait" src="${portrait}" alt="" />` : `<div class="hero-portrait"></div>`}
             <div class="history-head-main">
@@ -663,7 +670,7 @@ function personalListHtml(metric) {
       (r, i) => `
       <div class="lb-row">
         <span class="lb-medal">${MEDALS[i] || ""}</span>
-        <span class="lb-rank">#${i + 1}</span>
+        <span class="lb-rank${i < 3 ? " top" : ""}">#${i + 1}</span>
         <span class="lb-name">${escapeHtml(heroDisplayName(r.m.heroName))}</span>
         <span class="lb-value">${lbMetricFmt(state.lbMetric, r.v)}</span>
       </div>`
@@ -685,7 +692,7 @@ function globalListHtml() {
   if (!g.rows.length) {
     const hint = state.auth.signedIn
       ? "Yours will show up here once a match finishes."
-      : "Sign in on the Profile tab to publish your own games here.";
+      : "Sign in on the Account page to publish your own games here.";
     return `<div class="empty-state">Nobody has published a game with this stat yet.<br/>${hint}</div>`;
   }
   return g.rows
@@ -695,7 +702,7 @@ function globalListHtml() {
       return `
       <div class="lb-row ${isYou ? "is-you" : ""}">
         <span class="lb-medal">${MEDALS[i] || ""}</span>
-        <span class="lb-rank">#${i + 1}</span>
+        <span class="lb-rank${i < 3 ? " top" : ""}">#${i + 1}</span>
         <span class="lb-name">
           ${escapeHtml(who)}${isYou ? `<span class="you-tag">you</span>` : ""}
           <span class="lb-sub">${escapeHtml(heroDisplayName(r.heroName))} · ${gameTypeLabel(r.gameType)}</span>
@@ -722,122 +729,60 @@ async function loadGlobalLeaderboard() {
   renderLeaderboard();
 }
 
-// ---------- Rendering: Profile tab ----------
+// ---------- Rendering: Account page ----------
 
-function renderProfile() {
-  const root = document.getElementById("tab-profile");
-  if (!root) return;
-
-  const p = state.profileDraft;
-  const linkedDota = DOTA.link && DOTA.link.accountId;
-  const linkedDl = DL.link && DL.link.accountId;
-
-  root.innerHTML = `
-    <section class="home-section" style="padding-top:0">
-      <div class="home-head"><h2 class="home-title">Display name</h2></div>
-      <p class="hint" style="margin-bottom:10px">
-        Shown in the app, and next to your entries on the shared leaderboard
-        when you are signed in.
-      </p>
-      <div class="row">
-        <input class="text-input grow" id="usernameInput" type="text" placeholder="Your name"
-               value="${escapeHtml(p.username || "")}" style="max-width:340px" />
-        <button class="btn" id="saveProfileBtn" type="button">Save</button>
-        <span class="flash" id="saveFlash">Saved</span>
-      </div>
-    </section>
-
-    <section class="home-section">
-      <div class="home-head">
-        <h2 class="home-title">Linked accounts</h2>
-        <button class="link-btn" data-goto="accounts">Manage &rsaquo;</button>
-      </div>
-      ${railHtml([
-        {
-          label: "Dota 2",
-          value: linkedDota ? escapeHtml(DOTA.link.personaname || "Linked") : "Not linked",
-          tone: linkedDota ? "" : "loss",
-          sub: linkedDota ? `Steam ${DOTA.link.accountId}` : "link it to load match history",
-        },
-        {
-          label: "Deadlock",
-          value: linkedDl ? escapeHtml(DL.link.personaname || "Linked") : "Not linked",
-          tone: linkedDl ? "" : "loss",
-          sub: linkedDl ? `Steam ${DL.link.accountId}` : "link it to load match history",
-        },
-        {
-          label: "Cloud account",
-          value: state.auth && state.auth.signedIn ? "Signed in" : "Signed out",
-          tone: state.auth && state.auth.signedIn ? "win" : "",
-          sub: state.auth && state.auth.email ? escapeHtml(state.auth.email) : "sign in to publish matches",
-        },
-      ])}
-    </section>
-
-    <section class="home-section">
-      <div class="home-head"><h2 class="home-title">Where your data lives</h2></div>
-      <p class="hint" style="max-width:72ch">
-        Matches are written to this PC first, under your app-data folder, and
-        only pushed to the cloud if you are signed in. Nothing is uploaded
-        while signed out.
-      </p>
-    </section>`;
-
-  root.querySelector("#usernameInput").addEventListener("input", (e) => {
-    state.profileDraft.username = e.target.value;
-  });
-  root.querySelector("#saveProfileBtn").addEventListener("click", () => {
-    invoke("save_profile", { profile: state.profileDraft }).then(() => {
-      state.profile = { ...state.profileDraft };
-      renderUserChip();
-      const flash = document.getElementById("saveFlash");
-      flash.classList.add("show");
-      setTimeout(() => flash.classList.remove("show"), 1600);
-    });
-  });
-  root.querySelectorAll("[data-goto]").forEach((el) =>
-    el.addEventListener("click", () => setView(el.dataset.goto))
-  );
-}
-
+/// The cloud-account section: sign in, or show who is signed in.
+///
+/// Written as a plain section rather than a card because the rest of the app
+/// moved off stacked cards, and an account page made of three floating
+/// panels reads as three unrelated things rather than one page.
 function accountCardHtml() {
   const a = state.auth || {};
   if (a.signedIn) {
     return `
-      <div class="card" style="margin-top:6px">
-        <p class="section-title">Account</p>
-        <div class="cloud-body">
-          <div class="cloud-line">
-            <span class="cloud-key">Signed in as</span>
-            <span class="cloud-val good">${escapeHtml(a.email || "—")}</span>
-          </div>
-          <p class="cloud-note">
-            Your matches publish to the global leaderboard under this account.
-          </p>
-          <button class="btn btn-secondary" id="signOutBtn">Sign out</button>
+      <section class="home-section">
+        <div class="home-head">
+          <h2 class="home-title">Cloud account</h2>
+          <div class="home-meta">signed in</div>
+          <button class="link-btn" id="signOutBtn" type="button">Sign out</button>
         </div>
-      </div>`;
+        <div class="acct-line">
+          <span class="acct-key">Email</span>
+          <span class="acct-val good">${escapeHtml(a.email || "—")}</span>
+        </div>
+        <p class="hint" style="margin-top:10px;max-width:70ch">
+          Finished matches publish to the shared leaderboard under this
+          account. Everything is written to this PC first either way.
+        </p>
+      </section>`;
   }
   return `
-    <div class="card" style="margin-top:6px">
-      <p class="section-title">Account</p>
-      <div class="cloud-body">
-        <p class="cloud-note" style="margin-top:0">
-          Tracking works fully signed out, and you can browse the global
-          leaderboard either way — an account is only needed to
-          <em>publish</em> your own matches to it.
-        </p>
-        <input class="text-input" id="authEmail" type="email" placeholder="Email" value="${escapeHtml(state.authForm.email)}" autocomplete="off" />
-        <input class="text-input" id="authPassword" type="password" placeholder="Password (8+ characters)" value="${escapeHtml(state.authForm.password)}" autocomplete="off" />
-        ${state.authForm.error ? `<div class="auth-error">${escapeHtml(state.authForm.error)}</div>` : ""}
-        <div style="display:flex;gap:8px;align-items:center;">
-          <button class="save-btn" id="signInBtn" ${state.authForm.busy ? "disabled" : ""}>
-            ${state.authForm.busy ? "Working…" : "Sign in"}
-          </button>
-          <button class="btn btn-secondary" id="signUpBtn" ${state.authForm.busy ? "disabled" : ""}>Create account</button>
-        </div>
+    <section class="home-section">
+      <div class="home-head">
+        <h2 class="home-title">Cloud account</h2>
+        <div class="home-meta">signed out</div>
       </div>
-    </div>`;
+      <p class="hint" style="max-width:70ch">
+        Tracking works fully signed out, and the shared leaderboard is
+        readable either way. An account is only needed to <em>publish</em>
+        your own matches to it.
+      </p>
+      <div class="auth-form">
+        <input class="text-input" id="authEmail" type="email" placeholder="Email"
+               value="${escapeHtml(state.authForm.email)}" autocomplete="off" />
+        <input class="text-input" id="authPassword" type="password" placeholder="Password (8+ characters)"
+               value="${escapeHtml(state.authForm.password)}" autocomplete="off" />
+      </div>
+      ${state.authForm.error ? `<div class="auth-error">${escapeHtml(state.authForm.error)}</div>` : ""}
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="signInBtn" type="button" ${state.authForm.busy ? "disabled" : ""}>
+          ${state.authForm.busy ? "Working…" : "Sign in"}
+        </button>
+        <button class="btn btn-secondary" id="signUpBtn" type="button" ${state.authForm.busy ? "disabled" : ""}>
+          Create account
+        </button>
+      </div>
+    </section>`;
 }
 
 function wireAccountCard(root) {
@@ -884,23 +829,44 @@ function wireAccountCard(root) {
     });
 }
 
-/// Fills in the Cloud Sync card. Split out so the 700ms status poll can
-/// refresh it without rebuilding the whole profile form (which would blow
-/// away whatever the user is typing in the username field).
+/// Fills in the sync figures. Split out so the 700ms status poll can
+/// refresh them without rebuilding the whole page — which would blow away
+/// whatever is half-typed in the display-name field.
 function renderCloudSection() {
   const statusText = document.getElementById("cloudStatusText");
-  if (!statusText) return; // not on the Profile tab
+  if (!statusText) return; // not on the Account page
   const s = state.sync || {};
 
-  let text = "Connecting…";
-  if (!state.auth.signedIn) text = "Signed out — matches stay on this PC";
-  else if (s.pending > 0) text = `Uploading ${s.pending}…`;
-  else if (s.lastError) text = `Offline — ${s.lastError}`;
-  else if (s.connected) text = s.lastSync ? `Up to date (${s.lastSync})` : "Connected";
-  else text = "Idle — nothing synced yet this session";
+  // Two parts, because these sit in a stat rail: a short value set in the
+  // rail's large type, and the explanation underneath it. A whole sentence
+  // in the value slot was set at 28px and read as a headline.
+  let value = "Connecting";
+  let detail = "";
+  let tone = "";
 
-  statusText.textContent = text;
-  statusText.className = "cloud-val " + (s.lastError ? "bad" : s.connected ? "good" : "");
+  if (!state.auth.signedIn) {
+    value = "Signed out";
+    detail = "matches stay on this PC";
+  } else if (s.pending > 0) {
+    value = `Uploading ${s.pending}`;
+    detail = "in progress";
+  } else if (s.lastError) {
+    value = "Offline";
+    detail = s.lastError;
+    tone = "loss";
+  } else if (s.connected) {
+    value = "Up to date";
+    detail = s.lastSync ? `last push ${s.lastSync}` : "connected";
+    tone = "win";
+  } else {
+    value = "Idle";
+    detail = "nothing synced yet this session";
+  }
+
+  statusText.textContent = value;
+  statusText.parentElement.className = "rail-value " + tone;
+  const sub = document.getElementById("cloudStatusSub");
+  if (sub) sub.textContent = detail;
   document.getElementById("cloudSyncedCount").textContent = s.synced ?? 0;
   document.getElementById("cloudDeviceId").textContent = state.deviceId || "—";
 }
@@ -916,7 +882,7 @@ function renderSyncPill() {
 
   if (!state.auth.signedIn) {
     label = "Signed out";
-    title = "Matches are saved locally. Sign in on the Profile tab to publish them to the global leaderboard.";
+    title = "Matches are saved locally. Sign in on the Account page to publish them to the global leaderboard.";
   } else if (s.pending > 0) {
     pill.classList.add("warn");
     label = `Syncing ${s.pending}`;
@@ -955,9 +921,8 @@ const VIEWS = {
   dlfavorite: { game: "deadlock", title: "Favorite Hero", sub: "Deep dive on your most-played pick" },
   dlbuilds: { game: "deadlock", title: "Builds", sub: "Saved builds for Deadlock heroes" },
 
-  overlaysettings: { game: null, title: "Overlay Settings", sub: "Position, opacity and what the overlay shows" },
-  profile: { game: null, title: "Profile", sub: "Your display name, rank and role" },
-  accounts: { game: null, title: "Accounts", sub: "Cloud sync and linked game accounts" },
+  overlaysettings: { game: null, title: "Overlay Settings", sub: "Position, opacity and what the overlay warns about" },
+  accounts: { game: null, title: "Account", sub: "Display name, cloud sync and linked Steam accounts" },
   about: { game: null, title: "About & Updates", sub: "Version, update checks and data sources" },
 };
 
@@ -966,6 +931,10 @@ const VIEWS = {
 /// survives flipping back and forth.
 function setGame(game) {
   state.game = game;
+
+  // Repaints the whole app in that game's colours. It sits on <html> so the
+  // page background behind the scroll area changes too, not just the panels.
+  document.documentElement.dataset.game = game;
   document.querySelectorAll(".game-tab").forEach((t) => t.classList.toggle("active", t.dataset.game === game));
   document.querySelectorAll("[data-game-group]").forEach((g) => {
     g.hidden = g.dataset.gameGroup !== game;
@@ -983,7 +952,6 @@ function setGame(game) {
 function setView(view) {
   if (!VIEWS[view]) view = "dotaoverview";
   state.view = view;
-  state.tab = view; // older helpers still read state.tab
 
   const meta = VIEWS[view];
   if (meta.game && meta.game !== state.game) setGame(meta.game);
@@ -993,6 +961,24 @@ function setView(view) {
   document.getElementById("viewTitle").textContent = meta.title;
   document.getElementById("viewSub").textContent = meta.sub;
 
+  // A renderer that throws used to leave the page blank with no hint of
+  // why, in a release build with no devtools. Now it says so on the page.
+  try {
+    renderView(view);
+  } catch (err) {
+    const pane = document.getElementById(`tab-${view}`);
+    if (pane) {
+      pane.innerHTML = `
+        <section class="home-section" style="padding-top:0">
+          <div class="home-head"><h2 class="home-title">This page failed to draw</h2></div>
+          <pre class="boot-error">${escapeHtml(String((err && err.stack) || err))}</pre>
+        </section>`;
+    }
+    console.error("render failed for", view, err);
+  }
+}
+
+function renderView(view) {
   switch (view) {
     case "dotaoverview":
       loadDotaOverview();
@@ -1038,9 +1024,6 @@ function setView(view) {
     case "overlaysettings":
       renderOverlaySettings();
       break;
-    case "profile":
-      renderProfile();
-      break;
     case "accounts":
       renderAccounts();
       break;
@@ -1050,11 +1033,6 @@ function setView(view) {
     default:
       break;
   }
-}
-
-/// Deadlock views share one renderer, so it needs to know which is showing.
-function setDeadlockTab(tab) {
-  setView(tab);
 }
 
 async function loadHistory() {
@@ -1199,108 +1177,124 @@ function renderAccounts() {
   const root = document.getElementById("tab-accounts");
   if (!root) return;
 
-  const dotaLinked = DOTA.link && DOTA.link.accountId;
-  const dlLinked = DL.link && DL.link.accountId;
+  const linkRow = (game, link, powers, where) => {
+    const linked = link && link.accountId;
+    return `
+      <div class="acct-row">
+        ${
+          linked && link.avatar
+            ? `<img class="acct-avatar" src="${escapeHtml(link.avatar)}" alt="" />`
+            : `<div class="acct-avatar"></div>`
+        }
+        <div class="acct-main">
+          <div class="acct-name">${game}</div>
+          <div class="acct-sub">
+            ${
+              linked
+                ? `${escapeHtml(link.personaname || "Linked")} &middot; <span class="mono">${link.accountId}</span>`
+                : `Not linked &mdash; ${where}`
+            }
+          </div>
+        </div>
+        <div class="acct-side">
+          <span class="acct-note">${powers}</span>
+          ${linked ? `<button class="btn btn-secondary" data-unlink="${game === "Dota 2" ? "dota" : "deadlock"}" type="button">Unlink</button>` : ""}
+        </div>
+      </div>`;
+  };
 
   root.innerHTML = `
-    ${accountCardHtml()}
-    <div class="card" style="margin-top:6px">
-      <p class="section-title">Cloud Sync</p>
-      <div class="cloud-body">
-        <div class="cloud-line">
-          <span class="cloud-key">Status</span>
-          <span class="cloud-val" id="cloudStatusText">—</span>
-        </div>
-        <div class="cloud-line">
-          <span class="cloud-key">Synced this session</span>
-          <span class="cloud-val" id="cloudSyncedCount">0</span>
-        </div>
-        <div class="cloud-line">
-          <span class="cloud-key">Device ID</span>
-          <span class="cloud-val mono" id="cloudDeviceId">—</span>
-        </div>
-        <p class="cloud-note">
-          Matches are always saved to this PC first, then pushed to the cloud.
-          If the cloud is unreachable nothing is lost — just press Sync
-          Everything once you're back online.
-        </p>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <button class="btn btn-secondary" id="syncAllBtn">Sync Everything</button>
-          <span class="save-flash" id="syncFlash">Queued!</span>
-        </div>
+    <section class="home-section" style="padding-top:0">
+      <div class="home-head"><h2 class="home-title">Display name</h2></div>
+      <p class="hint" style="margin-bottom:10px;max-width:70ch">
+        Shown in the app, and beside your entries on the shared leaderboard
+        while you are signed in.
+      </p>
+      <div class="row">
+        <input class="text-input grow" id="usernameInput" type="text" placeholder="Your name"
+               value="${escapeHtml(state.profileDraft.username || "")}" style="max-width:340px" />
+        <button class="btn" id="saveProfileBtn" type="button">Save</button>
+        <span class="flash" id="saveFlash">Saved</span>
       </div>
-    </div>
+    </section>
 
+    ${accountCardHtml()}
 
-    <div class="card col">
-      <div class="section-head"><h3 class="section-title">Dota 2 — Steam account</h3></div>
-      ${
-        dotaLinked
-          ? `<div class="row">
-               ${DOTA.link.avatar ? `<img src="${escapeHtml(DOTA.link.avatar)}" style="width:38px;height:38px;border-radius:50%" alt="" />` : ""}
-               <div class="grow">
-                 <div class="result-name">${escapeHtml(DOTA.link.personaname || "Linked")}</div>
-                 <div class="result-id">Account ${DOTA.link.accountId}</div>
-               </div>
-               <button class="btn btn-secondary" id="dotaUnlinkBtn" type="button">Unlink</button>
-             </div>
-             <p class="hint">Powers Match History: real results, game modes and scoreboards from OpenDota.</p>`
-          : `<p class="hint">Not linked. Open <b>Match History</b> to search for your Steam profile and link it.</p>`
-      }
-    </div>
+    <section class="home-section">
+      <div class="home-head">
+        <h2 class="home-title">Sync</h2>
+        <button class="link-btn" id="syncAllBtn" type="button">Sync everything</button>
+        <span class="flash" id="syncFlash">Queued</span>
+      </div>
+      ${railHtml([
+        { label: "Status", value: '<span id="cloudStatusText">—</span>', sub: '<span id="cloudStatusSub"></span>' },
+        { label: "Synced this session", value: '<span id="cloudSyncedCount">0</span>', sub: "matches pushed" },
+        { label: "Device", value: '<span id="cloudDeviceId" class="acct-device">—</span>', sub: "this install's id" },
+      ])}
+      <p class="hint" style="margin-top:12px;max-width:72ch">
+        Matches are written to this PC first and pushed up afterwards, so an
+        unreachable server costs nothing &mdash; press <b>Sync everything</b>
+        once you are back online.
+      </p>
+    </section>
 
-    <div class="card col">
-      <div class="section-head"><h3 class="section-title">Deadlock — Steam account</h3></div>
-      ${
-        dlLinked
-          ? `<div class="row">
-               ${DL.link.avatar ? `<img src="${escapeHtml(DL.link.avatar)}" style="width:38px;height:38px;border-radius:50%" alt="" />` : ""}
-               <div class="grow">
-                 <div class="result-name">${escapeHtml(DL.link.personaname || "Linked")}</div>
-                 <div class="result-id">Account ${DL.link.accountId}</div>
-               </div>
-               <button class="btn btn-secondary" id="dlUnlinkBtn" type="button">Unlink</button>
-             </div>
-             <p class="hint">Powers the Deadlock views via the community Deadlock API.</p>`
-          : `<p class="hint">Not linked. Open <b>Deadlock → Overview</b> to search for your Steam profile.</p>`
-      }
-    </div>`;
+    <section class="home-section">
+      <div class="home-head">
+        <h2 class="home-title">Linked game accounts</h2>
+        <div class="home-meta">Steam</div>
+      </div>
+      ${linkRow("Dota 2", DOTA.link, "Match History, modes and scoreboards, via OpenDota", "open <b>Match History</b> to search for your profile")}
+      ${linkRow("Deadlock", DL.link, "Every Deadlock view, via the community Deadlock API", "open <b>Deadlock &rsaquo; Overview</b> to search for your profile")}
+    </section>`;
+
+  // ---- wiring ----
+
+  root.querySelector("#usernameInput").addEventListener("input", (e) => {
+    state.profileDraft.username = e.target.value;
+  });
+  root.querySelector("#saveProfileBtn").addEventListener("click", () => {
+    invoke("save_profile", { profile: state.profileDraft }).then(() => {
+      state.profile = { ...state.profileDraft };
+      renderUserChip();
+      flash("saveFlash");
+    });
+  });
 
   wireAccountCard(root);
-  const syncBtn = root.querySelector("#syncAllBtn");
-  if (syncBtn)
-    syncBtn.addEventListener("click", () => {
-      invoke("sync_all").then(() => {
-        const flash = document.getElementById("syncFlash");
-        if (flash) {
-          flash.classList.add("show");
-          setTimeout(() => flash.classList.remove("show"), 1600);
-        }
-      });
-    });
+
+  root.querySelector("#syncAllBtn").addEventListener("click", () => {
+    invoke("sync_all").then(() => flash("syncFlash"));
+  });
   renderCloudSection();
 
-  const du = root.querySelector("#dotaUnlinkBtn");
-  if (du)
-    du.addEventListener("click", async () => {
-      DOTA.link = await invoke("dota_unlink");
-      DOTA.matches = [];
-      DOTA.summary = null;
-      DOTA.loadedAt = 0;
+  root.querySelectorAll("[data-unlink]").forEach((el) =>
+    el.addEventListener("click", async () => {
+      if (el.dataset.unlink === "dota") {
+        DOTA.link = await invoke("dota_unlink");
+        DOTA.matches = [];
+        DOTA.summary = null;
+        DOTA.loadedAt = 0;
+      } else {
+        DL.link = await invoke("deadlock_unlink");
+        DL.matches = [];
+        DL.summary = null;
+        DL.rank = null;
+        DL.loadedAt = 0;
+      }
       renderAccounts();
       renderUserChip();
-    });
+    })
+  );
+}
 
-  const dlu = root.querySelector("#dlUnlinkBtn");
-  if (dlu)
-    dlu.addEventListener("click", async () => {
-      DL.link = await invoke("deadlock_unlink");
-      DL.matches = [];
-      DL.summary = null;
-      DL.loadedAt = 0;
-      renderAccounts();
-      renderUserChip();
-    });
+/// Briefly shows a confirmation next to a button that has no other visible
+/// result. Without it "Save" and "Sync everything" look like they did
+/// nothing at all.
+function flash(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 1600);
 }
 
 async function boot() {
@@ -1320,7 +1314,7 @@ async function boot() {
 
   renderOverlayToggle();
   renderUserChip();
-  renderProfile();
+  renderAccounts();
   await refreshLive();
   await refreshSyncStatus();
   await loadHistory();
@@ -1349,363 +1343,4 @@ async function boot() {
   };
   pollDeadlockLive();
   setInterval(pollDeadlockLive, 45000);
-}
-
-// ---------- Mock backend (only used outside Tauri, for visual preview) ----------
-
-
-// ---- preview-only fixtures for the newer views ----
-
-function mockDotaApi() {
-  const heroes = [
-    ["juggernaut", "Juggernaut"],
-    ["queenofpain", "Queen of Pain"],
-    ["rattletrap", "Clockwerk"],
-    ["lina", "Lina"],
-    ["pudge", "Pudge"],
-  ];
-  const now = Math.floor(Date.now() / 1000);
-  const matches = Array.from({ length: 24 }, (_, i) => {
-    const [slug, name] = heroes[i % heroes.length];
-    const won = Math.random() > 0.45;
-    const kills = 2 + Math.floor(Math.random() * 14);
-    const deaths = 1 + Math.floor(Math.random() * 11);
-    const assists = 3 + Math.floor(Math.random() * 18);
-    return {
-      matchId: 9000000 + i,
-      heroId: i,
-      heroName: name,
-      heroSlug: slug,
-      startTime: now - i * 7200,
-      durationSeconds: 1800 + Math.floor(Math.random() * 1800),
-      won,
-      radiant: i % 2 === 0,
-      kills,
-      deaths,
-      assists,
-      kda: (kills + assists) / Math.max(1, deaths),
-      lastHits: 80 + Math.floor(Math.random() * 320),
-      denies: Math.floor(Math.random() * 25),
-      goldPerMin: 380 + Math.floor(Math.random() * 320),
-      xpPerMin: 400 + Math.floor(Math.random() * 400),
-      heroDamage: 12000 + Math.floor(Math.random() * 40000),
-      towerDamage: Math.floor(Math.random() * 8000),
-      heroHealing: Math.floor(Math.random() * 3000),
-      gameType: ["ranked", "all_pick", "turbo"][i % 3],
-      modeName: "All Pick",
-      lobbyName: i % 3 === 0 ? "Ranked" : "Unranked",
-      partySize: 1 + (i % 3),
-      abandoned: false,
-    };
-  });
-  const wins = matches.filter((m) => m.won).length;
-  const sum = (pick) => matches.reduce((t, m) => t + pick(m), 0);
-  return {
-    matches,
-    summary: {
-      matches: matches.length,
-      wins,
-      losses: matches.length - wins,
-      winRate: (wins / matches.length) * 100,
-      kills: sum((m) => m.kills),
-      deaths: sum((m) => m.deaths),
-      assists: sum((m) => m.assists),
-      kda: (sum((m) => m.kills) + sum((m) => m.assists)) / Math.max(1, sum((m) => m.deaths)),
-      avgGpm: Math.round(sum((m) => m.goldPerMin) / matches.length),
-      avgXpm: Math.round(sum((m) => m.xpPerMin) / matches.length),
-      avgLastHits: Math.round(sum((m) => m.lastHits) / matches.length),
-    },
-  };
-}
-
-function mockDeadlock() {
-  const names = ["Yamato", "Infernus", "Seven", "Haze", "Abrams"];
-  const now = Math.floor(Date.now() / 1000);
-  const matches = Array.from({ length: 18 }, (_, i) => {
-    const kills = 2 + Math.floor(Math.random() * 12);
-    const deaths = 2 + Math.floor(Math.random() * 12);
-    return {
-      matchId: 103000000 + i,
-      heroId: i,
-      heroName: names[i % names.length],
-      heroImage: null,
-      startTime: now - i * 9000,
-      durationSeconds: 1500 + Math.floor(Math.random() * 1500),
-      kills,
-      deaths,
-      assists: 2 + Math.floor(Math.random() * 12),
-      netWorth: 20000 + Math.floor(Math.random() * 30000),
-      lastHits: 60 + Math.floor(Math.random() * 200),
-      denies: Math.floor(Math.random() * 20),
-      heroLevel: 20 + Math.floor(Math.random() * 20),
-      outcome: Math.random() > 0.5 ? "win" : "loss",
-      abandoned: false,
-    };
-  });
-  const wins = matches.filter((m) => m.outcome === "win").length;
-  return {
-    matches,
-    summary: {
-      matches: matches.length,
-      wins,
-      losses: matches.length - wins,
-      winRate: (wins / matches.length) * 100,
-      kills: 0,
-      deaths: 0,
-      assists: 0,
-      kda: 2.4,
-      avgSouls: 31000,
-      bestHero: "Yamato",
-    },
-    rank: { badge: 26, tier: 2, subrank: 6, tierName: "Seeker", label: "Seeker 6" },
-  };
-}
-
-function mockInvoke(cmd, args) {
-  const mock = (window.__mockState ||= {
-    history: mockHistory(),
-    profile: { username: "lilcham", rank: "archon", role: "mid" },
-    current: mockCurrentMatch(),
-  });
-  switch (cmd) {
-    case "dota_link_status":
-      return Promise.resolve({ accountId: 850402858, personaname: "lilcham", avatar: null });
-    case "deadlock_link_status":
-      return Promise.resolve({ accountId: 850402858, personaname: "lilcham", avatar: null });
-    case "dota_api_history":
-      return Promise.resolve((window.__mockDota ||= mockDotaApi()));
-    case "deadlock_overview":
-      return Promise.resolve((window.__mockDl ||= mockDeadlock()));
-    case "deadlock_live":
-      return Promise.resolve(null);
-    case "get_prefs":
-      return Promise.resolve(
-        (window.__mockPrefs ||= {
-          favorites: { dota: "juggernaut", deadlock: "Yamato" },
-          builds: [],
-          overlay: {
-            opacity: 0.85,
-            scale: 1,
-            corner: "top-left",
-            clickThrough: true,
-            dota: { stats: true, roshan: true, checkpoints: true, items: false, deaths: false },
-            deadlock: { matchInfo: true, lineup: false, sessionRecord: true },
-          },
-        })
-      );
-    case "set_favorite_hero":
-      window.__mockPrefs.favorites[args.game] = args.hero;
-      return Promise.resolve(window.__mockPrefs);
-    case "save_overlay_settings":
-      window.__mockPrefs.overlay = { ...window.__mockPrefs.overlay, ...args.settings };
-      return Promise.resolve(window.__mockPrefs);
-    case "save_build":
-      window.__mockPrefs.builds.push({ ...args.build, id: args.build.id || String(Date.now()) });
-      return Promise.resolve(window.__mockPrefs);
-    case "delete_build":
-      window.__mockPrefs.builds = window.__mockPrefs.builds.filter((b) => b.id !== args.id);
-      return Promise.resolve(window.__mockPrefs);
-    case "dota_match_detail":
-      return Promise.resolve({
-        matchId: args.matchId,
-        durationSeconds: 2400,
-        startTime: 0,
-        radiantWin: true,
-        radiantScore: 34,
-        direScore: 21,
-        modeName: "All Pick",
-        lobbyName: "Ranked",
-        gameType: "ranked",
-        players: Array.from({ length: 10 }, (_, i) => ({
-          accountId: i,
-          name: "Player " + (i + 1),
-          heroName: "Juggernaut",
-          heroSlug: "juggernaut",
-          radiant: i < 5,
-          kills: i,
-          deaths: 10 - i,
-          assists: i * 2,
-          lastHits: 100 + i * 20,
-          denies: i,
-          goldPerMin: 400 + i * 30,
-          xpPerMin: 450 + i * 25,
-          heroDamage: 15000 + i * 2000,
-          netWorth: 18000 + i * 1500,
-          level: 20 + i,
-          isMe: i === 2,
-          items: [],
-        })),
-      });
-    case "get_live_state":
-      return Promise.resolve({ current: mock.current, trackingEnabled: true, serverError: null });
-    case "get_history":
-      return Promise.resolve(mock.history);
-    case "get_profile":
-      return Promise.resolve(mock.profile);
-    case "save_profile":
-      mock.profile = args.profile;
-      return Promise.resolve();
-    case "set_history_game_type": {
-      const entry = mock.history.find((h) => h.matchid === args.matchid);
-      if (entry) entry.gameType = args.gameType;
-      return Promise.resolve(mock.history);
-    }
-    case "device_identity":
-      return Promise.resolve("mock-device-0001");
-    case "auth_status":
-      return Promise.resolve(mock.auth ||= { signedIn: false, email: null, userId: null, lastError: null });
-    case "sign_in":
-      mock.auth = { signedIn: true, email: args.email, userId: "mock-user-1", lastError: null };
-      return Promise.resolve(mock.auth);
-    case "sign_out":
-      mock.auth = { signedIn: false, email: null, userId: null, lastError: null };
-      return Promise.resolve(mock.auth);
-    case "sync_status":
-      return Promise.resolve({ connected: true, pending: 0, synced: 3, lastError: null, lastSync: "12:34:56" });
-    case "sync_all":
-      return Promise.resolve(mock.history.length);
-    case "overlay_visible":
-      return Promise.resolve(false);
-    case "overlay_show":
-    case "overlay_hide":
-    case "overlay_click_through":
-      return Promise.resolve(null);
-    case "deadlock_link_status":
-      return Promise.resolve(mock.dlLink ||= { accountId: null, personaname: null, avatar: null });
-    case "deadlock_search":
-      return Promise.resolve([
-        { accountId: 850402858, personaname: "恵lilcham", avatar: null, profileUrl: null },
-        { accountId: 111111111, personaname: "lilcham alt", avatar: null, profileUrl: null },
-      ]);
-    case "deadlock_link":
-      mock.dlLink = { accountId: args.accountId, personaname: args.personaname, avatar: args.avatar };
-      return Promise.resolve(mock.dlLink);
-    case "deadlock_unlink":
-      mock.dlLink = { accountId: null, personaname: null, avatar: null };
-      return Promise.resolve(mock.dlLink);
-    case "deadlock_live":
-      return Promise.resolve(null);
-    case "deadlock_overview": {
-      const matches = mockDeadlockMatches();
-      return Promise.resolve({ matches, summary: mockDeadlockSummary(matches), rank: { badge: 26, tier: 2, subrank: 6, tierName: "Seeker", label: "Seeker 6" } });
-    }
-    case "global_leaderboard":
-      return Promise.resolve([
-        { userId: "someone-else", username: "Dendi", heroName: "npc_dota_hero_nevermore", gameType: "ranked", date: "", value: 214 },
-        { userId: "mock-user-1", username: "lilcham", heroName: "npc_dota_hero_antimage", gameType: "ranked", date: "", value: 187 },
-        { userId: "another", username: "Miracle", heroName: "npc_dota_hero_wisp", gameType: "turbo", date: "", value: 165 },
-      ]);
-    default:
-      return Promise.resolve(null);
-  }
-}
-
-function mockDeadlockMatches() {
-  const heroes = ["Yamato", "Infernus", "Seven", "Lash", "Bebop"];
-  const out = [];
-  for (let i = 0; i < 14; i++) {
-    const outcome = i % 3 === 0 ? "loss" : i % 7 === 5 ? "abandoned" : "win";
-    out.push({
-      matchId: 103485245 - i,
-      heroId: 27,
-      heroName: heroes[i % heroes.length],
-      heroImage: null,
-      startTime: Math.floor(Date.now() / 1000) - i * 7200,
-      durationSeconds: 1800 + i * 60,
-      kills: 4 + (i % 9),
-      deaths: 3 + (i % 6),
-      assists: 6 + (i % 8),
-      netWorth: 28000 + i * 900,
-      lastHits: 100 + i * 7,
-      denies: i % 12,
-      heroLevel: 24 + (i % 12),
-      outcome,
-      abandoned: outcome === "abandoned",
-    });
-  }
-  return out;
-}
-
-function mockDeadlockSummary(matches) {
-  const scored = matches.filter((m) => m.outcome === "win" || m.outcome === "loss");
-  const wins = scored.filter((m) => m.outcome === "win").length;
-  const k = matches.reduce((s, m) => s + m.kills, 0);
-  const d = matches.reduce((s, m) => s + m.deaths, 0);
-  const a = matches.reduce((s, m) => s + m.assists, 0);
-  return {
-    matches: matches.length,
-    wins,
-    losses: scored.length - wins,
-    winRate: scored.length ? (wins / scored.length) * 100 : 0,
-    kills: k,
-    deaths: d,
-    assists: a,
-    kda: (k + a) / Math.max(d, 1),
-    avgSouls: Math.round(matches.reduce((s, m) => s + m.netWorth, 0) / matches.length),
-    bestHero: "Yamato",
-  };
-}
-
-function mockCurrentMatch() {
-  return {
-    matchid: "7891234560",
-    heroName: "npc_dota_hero_queenofpain",
-    startedAt: new Date().toISOString(),
-    wasAlive: true,
-    ownedItemCounts: {},
-    deaths: [
-      { clock: "6:41", goldLost: 214 },
-      { clock: "14:02", goldLost: 388 },
-      { clock: "21:37", goldLost: 512 },
-    ],
-    keyItemLog: [
-      { clock: "8:12", item: "power_treads" },
-      { clock: "16:30", item: "black_king_bar" },
-      { clock: "24:05", item: "aghanims_scepter" },
-    ],
-    checkpoints: { 5: { lastHits: 31, denies: 4 }, 10: { lastHits: 68, denies: 9 }, 15: { lastHits: 104, denies: 12 }, 20: null, 25: null },
-    lastClockTime: 1123,
-    lastHits: 137,
-    denies: 15,
-    kills: 8,
-    prevGold: 2400,
-    ended: false,
-    summary: null,
-    gameType: "ranked",
-    roshan: { deaths: 1, lastDeathClock: 900, wasAlive: false },
-  };
-}
-
-function mockHistory() {
-  const mk = (matchid, hero, date, duration, kills, deaths, gold, type, lh25) => ({
-    matchid,
-    heroName: hero,
-    date,
-    duration,
-    kills,
-    totalDeaths: deaths,
-    totalGoldLost: gold,
-    deaths: [
-      { clock: "9:14", goldLost: Math.round(gold / Math.max(deaths, 1)) },
-      { clock: "18:52", goldLost: Math.round(gold / Math.max(deaths, 1)) },
-    ],
-    keyItems: [
-      { clock: "9:40", item: "phase_boots" },
-      { clock: "19:20", item: "blink" },
-    ],
-    checkpoints: { 5: { lastHits: 28, denies: 3 }, 10: { lastHits: 61, denies: 7 }, 15: { lastHits: 95, denies: 10 }, 20: { lastHits: 128, denies: 12 }, 25: { lastHits: lh25, denies: 14 } },
-    roshanDeaths: 2,
-    gameType: type,
-    comparison: {
-      deaths: { value: deaths, avg: 5.2, verdict: deaths < 5 ? "better" : "worse", isBest: deaths <= 2 },
-      goldLost: { value: gold, avg: 1420, verdict: gold < 1400 ? "better" : "worse", isBest: false },
-      checkpoints: { 25: { value: lh25, avg: 150.4, verdict: lh25 > 155 ? "better" : "similar", isBest: lh25 > 180 } },
-    },
-    gamesComparedAgainst: 7,
-  });
-  return [
-    mk("7891234501", "npc_dota_hero_antimage", "2026-09-01T18:22:00Z", "38:14", 11, 3, 980, "ranked", 187),
-    mk("7891234502", "npc_dota_hero_nevermore", "2026-09-02T20:05:00Z", "44:52", 7, 8, 2140, "turbo", 142),
-    mk("7891234503", "npc_dota_hero_rattletrap", "2026-09-03T21:41:00Z", "31:08", 4, 5, 1310, "all_pick", 151),
-  ];
 }

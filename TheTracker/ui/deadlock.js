@@ -69,106 +69,6 @@ async function dlRefreshLink() {
   }
 }
 
-// ---------- Overview ----------
-
-function dlRenderOverview() {
-  const root = document.getElementById("tab-dloverview");
-  if (!DL.link.accountId) {
-    root.innerHTML = dlNotLinkedHtml();
-    dlWireNotLinked(root);
-    return;
-  }
-  if (DL.loading && !DL.matches.length) {
-    root.innerHTML = `<div class="empty-state">Loading your Deadlock matches…</div>`;
-    return;
-  }
-  if (DL.error) {
-    root.innerHTML = dlErrorHtml(DL.error);
-    dlWireRetry(root);
-    return;
-  }
-
-  const s = DL.summary;
-  const rank = DL.rank;
-  const recent = DL.matches.slice(0, 10);
-  const form = recent
-    .map((m) => {
-      const cls = m.outcome === "win" ? "form-w" : m.outcome === "loss" ? "form-l" : "form-x";
-      const ch = m.outcome === "win" ? "W" : m.outcome === "loss" ? "L" : "–";
-      return `<span class="form-pip ${cls}" title="${escapeHtml(m.heroName)} · ${escapeHtml(m.outcome)}">${ch}</span>`;
-    })
-    .join("");
-
-  // Rebuilt on the shared rail/divider language. The previous markup leaned
-  // on card classes that no longer exist, so it rendered as unstyled text.
-  const recentAll = DL.matches.map((m) => ({ ...m, won: m.outcome === "win" }));
-  const chrono = [...recentAll].reverse();
-  const kdaSeries = chrono.map((m) => (m.kills + m.assists) / Math.max(1, m.deaths));
-  const soulSeries = chrono.map((m) => m.netWorth);
-
-  root.innerHTML = `
-    ${DL.live ? dlLiveCardHtml(DL.live) : ""}
-
-    <section class="home-section" style="padding-top:0">
-      <div class="home-head">
-        <h2 class="home-title">${rank ? escapeHtml(rank.label) : "Unranked"}</h2>
-        <div class="home-meta">${escapeHtml(DL.link.personaname || "Linked")} · last ${s ? s.matches : 0} matches</div>
-        <button class="link-btn" data-dl-refresh>Refresh</button>
-      </div>
-
-      ${railHtml([
-        {
-          label: "Win rate",
-          value: `${s ? s.winRate.toFixed(0) : 0}%`,
-          tone: s && s.winRate >= 50 ? "win" : "loss",
-          sub: `${s ? s.wins : 0}W – ${s ? s.losses : 0}L`,
-        },
-        { label: "KDA", value: s ? s.kda.toFixed(2) : "0.00", sub: "avg per match", spark: sparkline(kdaSeries) },
-        {
-          label: "Avg souls",
-          value: s ? dlFmtSouls(s.avgSouls) : 0,
-          sub: "net worth",
-          spark: sparkline(soulSeries),
-        },
-        { label: "Best hero", value: s && s.bestHero ? escapeHtml(s.bestHero) : "—", sub: "most wins" },
-      ])}
-
-      <div class="form-row">
-        <span class="form-caption">Recent form · newest first</span>
-        ${formStripHtml(recentAll, 20)}
-      </div>
-    </section>
-
-    <section class="home-section">
-      <div class="home-head"><h2 class="home-title">Totals</h2>
-        <div class="home-meta">across ${s ? s.matches : 0} matches</div>
-      </div>
-      ${railHtml([
-        { label: "Kills", value: s ? s.kills : 0 },
-        { label: "Deaths", value: s ? s.deaths : 0 },
-        { label: "Assists", value: s ? s.assists : 0 },
-      ])}
-    </section>
-
-    <p class="hint" style="margin-top:18px;max-width:72ch">
-      Deadlock has no live stats feed from Valve, so these come from the
-      community Deadlock API after each match ends — a game can take a little
-      while to appear, and some may be missing entirely.
-    </p>
-  `;
-  dlWireRetry(root);
-}
-
-function dlLiveCardHtml(live) {
-  const elapsed = live.startTime ? Math.floor(Date.now() / 1000 - live.startTime) : 0;
-  return `
-    <div class="live-banner" style="margin-bottom:14px">
-      <span class="live-pulse"></span>
-      In a match as <b>${escapeHtml(live.heroName)}</b> · ${dlFmtDuration(elapsed)}
-    </div>`;
-}
-
-// ---------- Matches ----------
 
 const DL_COLUMNS = [
   { key: "heroName", label: "Hero", type: "text" },
@@ -389,8 +289,12 @@ function dlRenderHeroes() {
     .map((h) => {
       const scored = h.wins + h.losses;
       const wr = scored ? (h.wins / scored) * 100 : 0;
+      // `is-fav` is what turns the star gold. Dota's hero list sets it and
+      // this one did not, so a favourited Deadlock hero showed a filled star
+      // in exactly the same grey as every unfavourited one.
+      const isFav = state.prefs.favorites.deadlock === h.name;
       return `
-      <div class="dl-hero-row" data-dl-hero="${escapeHtml(h.name)}">
+      <div class="dl-hero-row${isFav ? " fav" : ""}" data-dl-hero="${escapeHtml(h.name)}">
         ${h.image ? `<img class="dl-hero-img sm" src="${h.image}" alt="" />` : `<div class="dl-hero-img sm"></div>`}
         <div class="dl-hero-main">
           <div class="dl-hero-top">
@@ -403,9 +307,8 @@ function dlRenderHeroes() {
             ${(h.k / h.played).toFixed(1)}/${(h.d / h.played).toFixed(1)}/${(h.a / h.played).toFixed(1)} avg
           </div>
         </div>
-        <button class="chip fav-btn" data-dl-fav="${escapeHtml(h.name)}" title="Set as favourite hero">${
-          state.prefs.favorites.deadlock === h.name ? "★" : "☆"
-        }</button>
+        <button class="chip fav-btn${isFav ? " is-fav" : ""}" data-dl-fav="${escapeHtml(h.name)}"
+          title="${isFav ? "Your favourite hero" : "Set as favourite hero"}">${isFav ? "★" : "☆"}</button>
       </div>`;
     })
     .join("");
@@ -424,49 +327,9 @@ function dlRenderHeroes() {
   root.querySelectorAll("[data-dl-hero]").forEach((el) =>
     el.addEventListener("click", () => {
       DL.heroFilter = el.dataset.dlHero;
-      setDeadlockTab("dlmatches");
+      setView("dlmatches");
     })
   );
-}
-
-// ---------- Account ----------
-
-function dlRenderAccount() {
-  const root = document.getElementById("tab-dlaccount");
-  if (DL.link.accountId) {
-    root.innerHTML = `
-      <div class="card">
-        <p class="card-title">Linked Steam account</p>
-        <div class="dl-linked">
-          ${DL.link.avatar ? `<img class="dl-avatar" src="${DL.link.avatar}" alt="" />` : ""}
-          <div>
-            <div class="dl-hero-name">${escapeHtml(DL.link.personaname || "Unknown")}</div>
-            <div class="dl-match-meta mono">${DL.link.accountId}</div>
-          </div>
-        </div>
-        <p class="cloud-note">
-          Match data is read from the public community Deadlock API for this
-          account. Nothing is sent to it, and the app never reads the game.
-        </p>
-        <div style="display:flex;gap:8px;">
-          <button class="roshan-btn" data-dl-refresh>Refresh matches</button>
-          <button class="roshan-btn" id="dlUnlinkBtn">Unlink</button>
-        </div>
-      </div>`;
-    root.querySelector("#dlUnlinkBtn").addEventListener("click", async () => {
-      DL.link = await invoke("deadlock_unlink");
-      DL.matches = [];
-      DL.summary = null;
-      DL.rank = null;
-      DL.loadedAt = 0;
-      dlRender();
-    });
-    dlWireRetry(root);
-    return;
-  }
-
-  root.innerHTML = dlNotLinkedHtml();
-  dlWireNotLinked(root);
 }
 
 function dlNotLinkedHtml() {

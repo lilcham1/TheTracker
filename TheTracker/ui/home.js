@@ -412,8 +412,8 @@ function renderDeadlockOverview() {
 
 // ---------- Loaders ----------
 //
-// Each overview pulls only its own game, and both loaders cache, so
-// revisiting a tab costs nothing.
+// The Deadlock overview is loaded by dlRender, which every Deadlock view
+// shares; Dota's is its own since its views load independently.
 
 async function loadDotaOverview() {
   await dtRefreshLink();
@@ -422,9 +422,3 @@ async function loadDotaOverview() {
   renderDotaOverview();
 }
 
-async function loadDeadlockOverview() {
-  await dlRefreshLink();
-  renderDeadlockOverview();
-  if (DL.link.accountId) await dlLoad();
-  renderDeadlockOverview();
-}

@@ -50,7 +50,7 @@ function prettyItem(name) {
 
 function buildCardHtml(b, showHero = true) {
   return `
-    <div class="build-card" data-build-id="${escapeHtml(b.id)}">
+    <div class="build-card">
       <div class="build-head">
         <div class="grow">
           <div class="build-name">${escapeHtml(b.name || "Untitled build")}</div>

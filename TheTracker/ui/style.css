@@ -21,8 +21,12 @@
   --text-2: #9aa3b8;
   --text-3: #626c85;
 
+  /* Dota's amber. Every tint of it is written rgba(var(--brand-rgb), a)
+     rather than as a literal, so switching games actually repaints the app
+     instead of leaving twenty orange highlights behind. */
   --brand: #f0a13c;
   --brand-2: #ffc46b;
+  --brand-rgb: 240, 161, 60;
 
   --win: #35d39a;
   --win-bg: rgba(53, 211, 154, 0.1);
@@ -41,8 +45,7 @@
   box-sizing: border-box;
 }
 
-/* Any element carrying the hidden attribute must stay hidden. Without this,
-   component rules like .nav-badge{display:flex} silently override the
+/* Any element carrying the hidden attribute must stay hidden. Without this {display:flex} silently override the
    browser's [hidden]{display:none} and "hidden" elements render anyway. */
 [hidden] {
   display: none !important;
@@ -104,14 +107,7 @@ button {
   height: 34px;
   border-radius: 9px;
   object-fit: cover;
-  box-shadow: 0 0 0 1px var(--line), 0 4px 14px rgba(240, 161, 60, 0.18);
-}
-
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-  min-width: 0;
+  box-shadow: 0 0 0 1px var(--line), 0 4px 14px rgba(var(--brand-rgb), 0.18);
 }
 
 .brand-name {
@@ -123,13 +119,6 @@ button {
 .brand-name b {
   font-weight: 800;
   color: var(--brand);
-}
-
-.brand-sub {
-  font-size: 9.5px;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 1.1px;
 }
 
 .nav {
@@ -230,48 +219,10 @@ button {
   100% { box-shadow: 0 0 0 0 rgba(53, 211, 154, 0); }
 }
 
-.nav-badge {
-  margin-left: auto;
-  background: var(--win);
-  color: #05221a;
-  font-size: 9.5px;
-  font-weight: 800;
-  padding: 1px 6px;
-  border-radius: 999px;
-  display: flex;
-}
-
 .sidebar-foot {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.ghost-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  color: var(--text-2);
-  padding: 8px;
-  border-radius: var(--r-sm);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.13s, color 0.13s, border-color 0.13s;
-}
-
-.ghost-btn:hover {
-  background: var(--panel-hi);
-  color: var(--text);
-}
-
-.ghost-btn.on {
-  color: var(--brand);
-  border-color: rgba(240, 161, 60, 0.4);
-  background: rgba(240, 161, 60, 0.1);
 }
 
 .sync-pill {
@@ -325,13 +276,6 @@ button {
 .view-sub {
   font-size: 11.5px;
   color: var(--text-3);
-}
-
-.topbar-left {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
 }
 
 .topbar-right {
@@ -542,14 +486,6 @@ button {
   background: linear-gradient(90deg, var(--loss), #ff8a90);
 }
 
-/* ---------- Match rows ---------- */
-
-.match-list {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
 .match {
   background: var(--panel);
   border: 1px solid var(--line-soft);
@@ -566,15 +502,6 @@ button {
   background: var(--panel-2);
 }
 
-.match-head {
-  display: grid;
-  grid-template-columns: 44px minmax(120px, 1.4fr) 78px repeat(3, minmax(62px, 0.8fr)) 92px 26px;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 12px;
-  cursor: pointer;
-}
-
 .hero-portrait {
   width: 44px;
   height: 25px;
@@ -589,54 +516,6 @@ button {
   border-radius: 7px;
 }
 
-.match-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.match-hero-name {
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.match-mode {
-  font-size: 10.5px;
-  color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.match-result {
-  font-size: 11.5px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-}
-
-.match-result.win { color: var(--win); }
-.match-result.loss { color: var(--loss); }
-.match-result.other { color: var(--text-3); }
-
-.match-col {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.col-value {
-  font-size: 13px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 .col-label {
   font-size: 9.5px;
   color: var(--text-3);
@@ -646,37 +525,6 @@ button {
 
 .kda-good { color: var(--win); }
 .kda-bad { color: var(--loss); }
-
-.match-when {
-  font-size: 11px;
-  color: var(--text-3);
-  text-align: right;
-  white-space: nowrap;
-}
-
-.chev {
-  color: var(--text-3);
-  font-size: 10px;
-  text-align: center;
-  transition: transform 0.15s;
-}
-
-.match.open .chev {
-  transform: rotate(90deg);
-}
-
-.match-body {
-  display: none;
-  border-top: 1px solid var(--line-soft);
-  padding: 14px;
-  background: var(--bg-2);
-  flex-direction: column;
-  gap: 14px;
-}
-
-.match.open .match-body {
-  display: flex;
-}
 
 /* ---------- Scoreboard ---------- */
 
@@ -716,8 +564,8 @@ button {
 }
 
 .board-row.me {
-  background: rgba(240, 161, 60, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(240, 161, 60, 0.25);
+  background: rgba(var(--brand-rgb), 0.1);
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.25);
 }
 
 .board-hero {
@@ -784,8 +632,8 @@ button {
 }
 
 .chip.selected {
-  background: rgba(240, 161, 60, 0.14);
-  border-color: rgba(240, 161, 60, 0.5);
+  background: rgba(var(--brand-rgb), 0.14);
+  border-color: rgba(var(--brand-rgb), 0.5);
   color: var(--brand-2);
 }
 
@@ -802,7 +650,7 @@ button {
 .badge-win { background: var(--win-bg); color: var(--win); }
 .badge-loss { background: var(--loss-bg); color: var(--loss); }
 .badge-neutral { background: rgba(154, 163, 184, 0.13); color: var(--text-2); }
-.badge-brand { background: rgba(240, 161, 60, 0.14); color: var(--brand-2); }
+.badge-brand { background: rgba(var(--brand-rgb), 0.14); color: var(--brand-2); }
 
 /* Editable game-type badge (Tracked Sessions). */
 .type-badge-wrap { position: relative; }
@@ -967,9 +815,11 @@ button {
 
 /* ---------- Leaderboard ---------- */
 
+/* Four cells: medal, rank, name, value. The template declared three, so
+   the value wrapped onto a second implicit row and sat under the medal. */
 .lb-row {
   display: grid;
-  grid-template-columns: 34px 1fr auto;
+  grid-template-columns: 22px 34px 1fr auto;
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
@@ -978,11 +828,10 @@ button {
   border-radius: var(--r-sm);
 }
 
-.lb-row.me { box-shadow: inset 0 0 0 1px rgba(240, 161, 60, 0.3); }
+.lb-row.is-you { box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.3); }
 .lb-rank { font-size: 13px; font-weight: 700; color: var(--text-3); text-align: center; }
 .lb-rank.top { color: var(--brand); }
 .lb-name { font-size: 13px; font-weight: 600; }
-.lb-meta { font-size: 11px; color: var(--text-3); }
 .lb-value { font-size: 14px; font-weight: 700; color: var(--brand-2); font-variant-numeric: tabular-nums; }
 
 /* ---------- Forms ---------- */
@@ -1009,21 +858,6 @@ button {
 }
 
 .text-input:focus { border-color: var(--brand); }
-
-.swatch-grid { display: flex; flex-wrap: wrap; gap: 6px; }
-
-.swatch {
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-  color: var(--text-2);
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.swatch.selected { color: #0b0d12; border-color: transparent; font-weight: 700; }
 
 .btn {
   background: var(--brand);
@@ -1133,42 +967,17 @@ button {
 
 /* ---------- Narrow windows ---------- */
 
-@media (max-width: 1040px) {
-  .match-head {
-    grid-template-columns: 44px minmax(100px, 1.3fr) 70px repeat(2, minmax(56px, 0.8fr)) 80px 22px;
-  }
-  .col-hide { display: none; }
-}
-
 @media (max-width: 900px) {
   :root { --sidebar-w: 76px; }
-  .brand-text,
   .nav-group-label,
-  .nav-label,
-  .ghost-label,
-  .sync-label {
+.nav-label,
+.ghost-label,
+.sync-label {
     display: none;
   }
   .nav-item { justify-content: center; }
   .sync-pill { justify-content: center; }
 }
-
-/* ---------- Cloud sync / account cards ---------- */
-
-.cloud-body { display: flex; flex-direction: column; gap: 9px; }
-
-.cloud-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 12.5px;
-}
-
-.cloud-key { color: var(--text-3); }
-.cloud-val { font-weight: 600; text-align: right; }
-.cloud-val.good { color: var(--win); }
-.cloud-val.mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--text-2); }
 
 .cloud-note { font-size: 11.5px; color: var(--text-3); line-height: 1.55; margin: 2px 0 0; }
 
@@ -1196,9 +1005,6 @@ button {
 
 .save-btn:hover { filter: brightness(1.07); }
 .save-btn:disabled { opacity: 0.55; cursor: default; }
-
-.save-flash { color: var(--win); font-size: 12.5px; font-weight: 600; opacity: 0; transition: opacity 0.2s; }
-.save-flash.show { opacity: 1; }
 
 /* ---------- Game tabs (the primary split) ---------- */
 
@@ -1255,7 +1061,7 @@ button {
   border-radius: var(--r-sm);
 }
 
-.hero-row.fav { box-shadow: inset 0 0 0 1px rgba(240, 161, 60, 0.35); }
+.hero-row.fav { box-shadow: inset 0 0 0 1px rgba(245, 181, 68, 0.35); }
 .hero-row:hover { background: var(--panel-2); }
 .hero-main { flex: 1; min-width: 0; }
 .hero-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
@@ -1347,29 +1153,6 @@ input[type="range"] {
   cursor: pointer;
 }
 
-/* ---------- Account Overview ----------
-   Built on rules and rhythm rather than boxes. A stack of identical cards
-   flattens hierarchy — everything reads as equally important — which is the
-   opposite of what an overview page needs to do. */
-
-.home-hero {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.home-hero-name {
-  margin: 0;
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.7px;
-}
-
-.home-hero-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
-
 .home-section { padding: 22px 0 4px; border-bottom: 1px solid var(--line-soft); }
 .home-section:last-child { border-bottom: none; }
 
@@ -1430,16 +1213,9 @@ input[type="range"] {
 .rail-sub { font-size: 11px; color: var(--text-3); margin-top: 4px; }
 .spark { display: block; margin-top: 7px; overflow: visible; }
 
-.form-row { display: flex; align-items: center; gap: 14px; margin: 18px 0 4px; }
-.form-caption { font-size: 10.5px; color: var(--text-3); text-transform: uppercase; letter-spacing: 1px; }
-
 .split { display: flex; gap: 0; margin-top: 20px; flex-wrap: wrap; }
 .split-item { flex: 1; min-width: 220px; padding: 0 20px; border-left: 1px solid var(--line-soft); }
 .split-item:first-child { border-left: none; padding-left: 0; }
-
-.hero-line { display: flex; align-items: center; gap: 9px; margin: 6px 0 3px; }
-.hero-line img { width: 42px; height: 24px; border-radius: 3px; object-fit: cover; background: var(--panel-hi); }
-.hero-line-name { font-size: 14px; font-weight: 600; }
 
 .live-banner {
   display: inline-flex;
@@ -1562,7 +1338,7 @@ input[type="range"] {
   text-transform: uppercase;
   letter-spacing: 0.6px;
   color: var(--brand-2);
-  background: rgba(240, 161, 60, 0.14);
+  background: rgba(var(--brand-rgb), 0.14);
   border-radius: 999px;
   padding: 1px 7px;
   margin-left: 6px;
@@ -1579,9 +1355,6 @@ input[type="range"] {
   letter-spacing: 1.1px;
   margin: 0 0 10px;
 }
-
-/* Deadlock account/search bits */
-.dl-linked { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .dl-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--panel-hi); }
 .dl-results { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 
@@ -1615,12 +1388,6 @@ input[type="range"] {
 
 .small { font-size: 11.5px; }
 
-/* Overlay: a rule between the stats line and the timer block reads better
-   than another boxed section at overlay size. */
-.ov-sep { height: 1px; background: rgba(255, 255, 255, 0.1); margin: 3px 0; }
-.ov-value.good { color: #6fd18a; }
-.ov-value.warn { color: #e0c05b; }
-
 /* ---------- Update banner ----------
    A slim bar rather than a modal: an update is worth mentioning, not worth
    blocking the app over. */
@@ -1630,8 +1397,8 @@ input[type="range"] {
   align-items: center;
   gap: 12px;
   padding: 10px 22px;
-  background: linear-gradient(90deg, rgba(240, 161, 60, 0.14), transparent 70%);
-  border-bottom: 1px solid rgba(240, 161, 60, 0.3);
+  background: linear-gradient(90deg, rgba(var(--brand-rgb), 0.14), transparent 70%);
+  border-bottom: 1px solid rgba(var(--brand-rgb), 0.3);
   font-size: 12.5px;
 }
 
@@ -1648,15 +1415,19 @@ input[type="range"] {
 .upd-btn { padding: 6px 14px; font-size: 12px; }
 
 /* A favourited hero's star is gold and filled, so it reads at a glance in a
-   long list rather than being a subtly different grey glyph. */
+   long list rather than being a subtly different grey glyph.
+
+   Gold is fixed rather than taken from --brand: a favourite means the same
+   thing in both games, the way win-green and loss-red do, and following the
+   accent would turn the star violet on the Deadlock side for no reason. */
 .fav-btn.is-fav {
-  color: var(--brand);
-  border-color: rgba(240, 161, 60, 0.55);
-  background: rgba(240, 161, 60, 0.14);
-  text-shadow: 0 0 10px rgba(240, 161, 60, 0.55);
+  color: #f5b544;
+  border-color: rgba(245, 181, 68, 0.55);
+  background: rgba(245, 181, 68, 0.14);
+  text-shadow: 0 0 10px rgba(245, 181, 68, 0.55);
 }
 
-.fav-btn.is-fav:hover { color: var(--brand-2); }
+.fav-btn.is-fav:hover { color: #ffd27a; }
 
 /* ============================================================
    Polish pass
@@ -1725,7 +1496,7 @@ input[type="range"] {
 .game-tab { letter-spacing: -0.1px; transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease; }
 
 .game-tab.active {
-  box-shadow: 0 2px 10px rgba(240, 161, 60, 0.32);
+  box-shadow: 0 2px 10px rgba(var(--brand-rgb), 0.32);
 }
 
 .pill { transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease; }
@@ -1734,8 +1505,8 @@ input[type="range"] {
 /* Overlay button reads as engaged when the overlay is up. */
 #overlayBtn.on {
   color: var(--brand-2);
-  border-color: rgba(240, 161, 60, 0.5);
-  background: rgba(240, 161, 60, 0.12);
+  border-color: rgba(var(--brand-rgb), 0.5);
+  background: rgba(var(--brand-rgb), 0.12);
 }
 
 .user-chip { transition: border-color 0.14s ease; }
@@ -1751,7 +1522,6 @@ input[type="range"] {
 
 .rail-value,
 .stat-value,
-.col-value,
 .lb-value,
 .board-num,
 .dtable td.num,
@@ -1779,8 +1549,7 @@ input[type="range"] {
 
 .btn,
 .chip,
-.link-btn,
-.ghost-btn {
+.link-btn {
   transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, transform 0.1s ease,
     filter 0.14s ease;
 }
@@ -1797,33 +1566,12 @@ input[type="range"] {
   outline-offset: 2px;
 }
 
-/* A row of related buttons should read as one control, not scattered pills. */
-.btn-row {
+/* A row of related buttons should read as one control {
   display: inline-flex;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   overflow: hidden;
   background: var(--panel);
-}
-
-.btn-row button {
-  border: none;
-  background: transparent;
-  color: var(--text-2);
-  padding: 7px 14px;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  border-right: 1px solid var(--line);
-  transition: background 0.14s ease, color 0.14s ease;
-}
-
-.btn-row button:last-child { border-right: none; }
-.btn-row button:hover { background: var(--panel-2); color: var(--text); }
-
-.btn-row button.selected {
-  background: rgba(240, 161, 60, 0.16);
-  color: var(--brand-2);
 }
 
 /* ---------- Loading skeletons ----------
@@ -1840,12 +1588,6 @@ input[type="range"] {
 @keyframes shimmer {
   0% { background-position: 100% 50%; }
   100% { background-position: 0 50%; }
-}
-
-.skel-rail {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  gap: 18px;
 }
 
 .skel-line { height: 11px; margin-bottom: 9px; }
@@ -2253,4 +1995,201 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
   .mini-match { grid-template-columns: 46px minmax(100px, 1fr) 90px 50px; }
   .mini-when { display: none; }
   .headline-value { font-size: 46px; }
+}
+
+/* ---------- Per-game theme ----------
+
+   Switching games repaints the app. This is not decoration: the two games
+   share every screen shape, so without a colour shift it is genuinely easy
+   to read a Deadlock number as a Dota one. Deadlock takes a violet accent
+   against a cooler, slightly purple ground; Dota keeps the amber above.
+
+   Set on <html> rather than on the app shell so the page background behind
+   the scroll area changes too. */
+
+html[data-game="deadlock"] {
+  --brand: #a67cff;
+  --brand-2: #c8afff;
+  --brand-rgb: 166, 124, 255;
+
+  --bg: #0b0817;
+  --bg-2: #100c1f;
+  --panel: #17122b;
+  --panel-2: #1e1836;
+  --panel-hi: #271f45;
+  --line: #2e2650;
+  --line-soft: #221b3d;
+
+  --text-2: #a09ab8;
+  --text-3: #6a6483;
+}
+
+/* Only the large surfaces cross-fade. Transitioning every border and shadow
+   as well made the switch feel laggy rather than deliberate. */
+html,
+body,
+.topbar,
+.sidebar,
+.main {
+  transition: background-color 220ms ease, border-color 220ms ease;
+}
+
+/* ---------- Account page ---------- */
+
+.acct-line {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.acct-key {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-3);
+}
+
+.acct-val { font-size: 15px; font-weight: 600; }
+.acct-val.good { color: var(--win); }
+
+.auth-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  max-width: 520px;
+}
+
+.auth-form .text-input { flex: 1; min-width: 0; }
+
+/* Linked accounts are rows separated by a rule rather than boxed cards, so
+   two of them read as one list instead of two competing panels. */
+.acct-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.acct-row:first-of-type { border-top: none; }
+
+.acct-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  object-fit: cover;
+}
+
+.acct-main { flex: 1; min-width: 0; }
+.acct-name { font-weight: 650; font-size: 14px; }
+.acct-sub { font-size: 12px; color: var(--text-2); margin-top: 3px; }
+
+.acct-side {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.acct-note {
+  font-size: 11.5px;
+  color: var(--text-3);
+  max-width: 30ch;
+  text-align: right;
+  line-height: 1.45;
+}
+
+.acct-device { font-size: 12px; letter-spacing: 0; }
+
+/* A favourited Deadlock hero gets the same outline Dota's list uses. */
+.dl-hero-row.fav { box-shadow: inset 0 0 0 1px rgba(245, 181, 68, 0.35); }
+
+@media (max-width: 900px) {
+  .acct-note { display: none; }
+}
+
+.boot-error {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--loss);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* ---------- Reading width ----------
+
+   The content column used to run the full width of the window. On a 1440p
+   or ultrawide monitor that pulled every row apart: a hero name on the far
+   left and its win rate a metre away on the right, stat rails with the
+   labels bunched left and half a screen of nothing after them. Capping the
+   column is the single thing that makes the app look designed rather than
+   stretched. The head shares the cap so the title stays aligned with the
+   content beneath it.
+
+   Left-aligned rather than centred: the sidebar and the top bar are both
+   anchored left, and a content column floating in the middle of an
+   ultrawide window reads as a layout mistake rather than a choice. */
+
+.view-head,
+.content,
+.upd-banner {
+  width: 100%;
+  max-width: 1320px;
+}
+
+/* The device id is a UUID — full rail type would wrap it across two lines. */
+.acct-device {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+/* ---------- Fallbacks ----------
+
+   Three classes the scripts set that the stylesheet never defined, so each
+   one did nothing. They only appear when something has already gone wrong —
+   which is exactly when the page should still look deliberate. */
+
+/* Steam ids, device ids, match ids: fixed-width so digits line up and a long
+   id cannot be mistaken for prose. */
+.mono {
+  font-family: ui-monospace, Consolas, "Courier New", monospace;
+  font-size: 0.94em;
+  letter-spacing: 0;
+}
+
+/* A hero portrait whose CDN image 404s. Left unstyled it showed the
+   browser's broken-image glyph; now it is a quiet empty tile the same size
+   as the picture it replaces, so rows keep their alignment. */
+.hero-portrait.portrait-missing,
+img.portrait-missing {
+  background: linear-gradient(135deg, var(--panel-hi), var(--panel-2));
+  border: 1px solid var(--line-soft);
+}
+
+/* Item icons that fail to load become their initials instead. */
+.item-fallback {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--panel-hi);
+  border: 1px solid var(--line);
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
