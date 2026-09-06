@@ -1036,6 +1036,279 @@ button {
   .sync-pill { justify-content: center; }
 }
 
+/* ---------- Layout stability pass ----------
+   Text and figures must hold their place while new match data arrives. A
+   tracker is scanned, not read like a document, so fixed line boxes and
+   tabular figures are more valuable than clever type treatments. */
+
+button, input, select, textarea { line-height: 1.2; }
+.ico { display: block; flex: 0 0 auto; }
+.nav-ico { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 18px; line-height: 0; }
+.nav-label, .ghost-label, .top-action span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.view-title, .ov-name, .headline-value, .figure-value, .rail-value,
+.mini-kda, .mini-when, .board-num, .meta-row .num, .meta-head .num,
+.dl-wr, .hero-compare-rate, .result-id {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+.view-title { line-height: 1.12; }
+.view-sub { line-height: 1.42; }
+.topbar-right, .game-tabs, .user-chip, .pill, .pill-toggle, .top-action { flex-shrink: 0; }
+.pill-toggle, .top-action { white-space: nowrap; }
+.nav-item { overflow: hidden; }
+.nav-item .nav-label { line-height: 1.15; }
+
+.mini-match > *, .board-row > *, .meta-row > *, .meta-head > *,
+.result-row > *, .hero-compare-row > * { min-width: 0; }
+.mini-hero, .mini-meta, .result-name, .result-id, .hero-compare-name,
+.dl-hero-name, .meta-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.figure-sub, .rail-sub { min-height: 16px; line-height: 16px; }
+.headline-caption { line-height: 1.4; }
+
+.board { overflow-x: auto; padding-bottom: 2px; }
+.board-row { min-width: 700px; }
+.meta-head, .meta-row { min-width: 660px; }
+.meta-head, .meta-row, .mini-match, .result-row { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 1180px) {
+  .topbar { padding: 0 14px; gap: 10px; }
+  .brand { min-width: 155px; }
+  .brand-name { font-size: 14px; }
+  .top-action span:last-child { display: none; }
+  .top-action { width: 34px; justify-content: center; padding: 0; }
+  .user-meta { max-width: 100px; overflow: hidden; }
+  .user-name, .user-rank { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+}
+
+@media (max-width: 760px) {
+  .view-head { padding: 18px 16px 12px; }
+  .content { padding: 0 16px 28px; }
+  .view-title { font-size: 22px; }
+  .ov-name { font-size: 23px; }
+  .ov-kicker { font-size: 9px; }
+  .headline { padding: 20px; }
+  .headline-value { font-size: 45px; }
+  .figures, .rail { grid-template-columns: 1fr; }
+  .figure + .figure, .rail-item + .rail-item { border-left: 0; border-top: 1px solid var(--line); }
+  .figure, .rail-item { padding: 15px 18px; }
+  .mini-match { grid-template-columns: 40px minmax(0, 1fr) 64px; gap: 10px; }
+  .mini-match img, .mini-img { width: 40px; height: 24px; }
+  .mini-kda, .mini-when { display: none; }
+  .mini-result { text-align: right; }
+}
+
+/* -------------------------------------------------------------------------
+   Quiet data workspace
+
+   The visual system below deliberately dials the game colour back. Colour
+   now answers a question (which game is active, did I win, is this live?)
+   instead of competing with the data. Generous insets and a consistent
+   8px rhythm keep labels, values and controls away from their boundaries.
+   ------------------------------------------------------------------------- */
+
+:root {
+  --bg: #0c0e13;
+  --bg-2: #10131a;
+  --panel: #151922;
+  --panel-2: #191e28;
+  --panel-hi: #222837;
+  --line: #2b3342;
+  --line-soft: #202633;
+  --text: #eef1f7;
+  --text-2: #aab3c3;
+  --text-3: #727d91;
+  --brand: #aa5d59;
+  --brand-2: #d2a29d;
+  --brand-rgb: 170, 93, 89;
+  --sidebar-w: 236px;
+  --r-sm: 10px;
+  --r: 16px;
+}
+
+html[data-game="deadlock"] {
+  --bg: #0e0f0e;
+  --bg-2: #12130f;
+  --panel: #191a15;
+  --panel-2: #202119;
+  --panel-hi: #2a2b20;
+  --line: #39382b;
+  --line-soft: #29291f;
+  --brand: #98855f;
+  --brand-2: #cbbd9d;
+  --brand-rgb: 152, 133, 95;
+}
+
+html, body { background: var(--bg); }
+body { background-image: radial-gradient(700px 400px at 76% -170px, rgba(var(--brand-rgb), .045), transparent 72%); }
+
+.topbar {
+  min-height: 72px;
+  padding: 0 28px;
+  background: rgba(16, 19, 26, .88);
+  border-bottom: 1px solid var(--line-soft);
+  backdrop-filter: blur(20px) saturate(.75);
+}
+.brand { min-width: 212px; gap: 11px; }
+.brand-mark { width: 30px; height: 30px; border-radius: 8px; box-shadow: none; }
+.brand-name { font-size: 15px; font-weight: 700; letter-spacing: -.35px; }
+.brand-name b { color: var(--text); }
+
+.game-tabs { margin-left: 4px; padding: 0; gap: 0; border: 0; border-radius: 0; background: none; }
+.game-tab { position: relative; min-height: 72px; padding: 0 15px; border: 0; border-radius: 0; background: transparent; color: var(--text-3); font-size: 12px; font-weight: 600; }
+.game-tab:hover { background: transparent; color: var(--text-2); }
+.game-tab.active { color: var(--text); background: transparent; box-shadow: none; }
+.game-tab.active::after { content: ""; position: absolute; height: 2px; left: 15px; right: 15px; bottom: 0; background: var(--brand); border-radius: 2px 2px 0 0; }
+
+.topbar-right { gap: 7px; }
+.pill-error {
+  max-width: none;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(255, 104, 120, .08);
+  border: 1px solid rgba(255, 104, 120, .20);
+  color: #df9ba3;
+  font-size: 10.5px;
+  cursor: help;
+}
+.top-action, .pill-toggle { height: 36px; padding: 0 11px; border-radius: 9px; border-color: transparent; background: transparent; color: var(--text-3); font-size: 11px; }
+.top-action:hover, .pill-toggle:hover { border-color: var(--line); background: var(--panel); color: var(--text); }
+.pill-toggle.on { color: var(--win); background: rgba(66, 214, 164, .07); }
+.user-chip { margin-left: 5px; padding: 4px 10px 4px 5px; border-radius: 10px; border-color: transparent; background: transparent; }
+.user-chip:hover { background: var(--panel); }
+.user-avatar { width: 29px; height: 29px; border-radius: 8px; background-color: var(--panel-hi); }
+.user-name { font-size: 11.5px; }
+.user-rank { font-size: 10px; }
+
+.sidebar { padding: 22px 12px 14px; background: var(--bg-2); border-right: 1px solid var(--line-soft); }
+.nav { gap: 22px; }
+.nav-group { gap: 3px; }
+.nav-group-label { padding: 0 12px 7px; font-size: 9px; letter-spacing: .13em; color: var(--text-3); }
+.nav-item { min-height: 38px; padding: 0 12px; border: 0; border-left: 2px solid transparent; border-radius: 7px; gap: 10px; font-size: 12px; color: var(--text-2); }
+.nav-item:hover { background: rgba(255, 255, 255, .035); color: var(--text); }
+.nav-item.active { background: rgba(var(--brand-rgb), .10); border: 0; border-left: 2px solid var(--brand); color: var(--text); }
+.nav-item.active .nav-ico { color: var(--brand-2); }
+.sidebar-foot { padding: 14px 5px 0; border-top: 1px solid var(--line-soft); }
+.sync-pill { padding: 9px 10px; border: 0; background: transparent; color: var(--text-3); }
+
+.view-head { max-width: 1280px; padding: 38px 42px 22px; }
+.view-title { font-size: 28px; line-height: 1.15; letter-spacing: -.8px; font-weight: 700; }
+.view-sub { margin-top: 7px; color: var(--text-3); font-size: 12.5px; }
+.content { max-width: 1280px; padding: 0 42px 64px; }
+
+/* Overview: one calm account masthead, then data. The background art is
+   intentionally subdued by the dark wash so it never fights type. */
+.ov-hero {
+  min-height: 154px;
+  padding: 32px 34px;
+  margin-bottom: 26px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  background:
+    linear-gradient(90deg, rgba(15, 17, 23, .98) 0%, rgba(15, 17, 23, .94) 45%, rgba(15, 17, 23, .76) 71%, rgba(15, 17, 23, .57) 100%),
+    url("art/dota-profile-backdrop.png") center right / cover no-repeat,
+    var(--panel);
+  background-blend-mode: normal, luminosity, normal;
+}
+html[data-game="deadlock"] .ov-hero {
+  background:
+    linear-gradient(90deg, rgba(15, 16, 14, .98) 0%, rgba(15, 16, 14, .94) 45%, rgba(15, 16, 14, .76) 71%, rgba(15, 16, 14, .57) 100%),
+    url("art/deadlock-profile-backdrop.png") center right / cover no-repeat,
+    var(--panel);
+  background-blend-mode: normal, luminosity, normal;
+}
+.ov-hero::after { opacity: .38; }
+.ov-kicker { margin-bottom: 11px; color: var(--brand-2); font-size: 9px; letter-spacing: .14em; }
+.ov-game-dot { width: 6px; height: 6px; box-shadow: 0 0 0 4px rgba(var(--brand-rgb), .10); }
+.ov-name { font-size: 30px; line-height: 1.08; letter-spacing: -.9px; }
+.ov-sub { margin-top: 8px; font-size: 12px; color: var(--text-2); }
+.live-banner { padding: 9px 12px; border-radius: 9px; font-size: 11px; }
+
+/* Data containers use a shared soft surface, then whitespace—not a maze of
+   heavy borders. */
+.headline, .figures, .rail, .mini-matches, .meta-movers {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  background: var(--panel);
+  box-shadow: 0 12px 30px rgba(0,0,0,.09);
+}
+.headline { padding: 30px 32px; }
+.headline-value { font-size: clamp(48px, 5vw, 66px); letter-spacing: -2.7px; }
+.headline-caption { margin-top: 8px; font-size: 12.5px; color: var(--text-2); }
+.headline-meter { height: 5px; margin-top: 19px; background: var(--panel-hi); }
+.headline-meter-fill { background: var(--brand); }
+.headline-meter-fill.win { background: var(--win); }
+.headline-meter-fill.loss { background: var(--loss); }
+.figures { margin: 12px 0 4px; }
+.figure { padding: 23px 26px; }
+.figure + .figure { border-left: 1px solid var(--line-soft); }
+.figure-value { font-size: 26px; line-height: 1.08; letter-spacing: -.6px; }
+.figure-label, .rail-label { margin-top: 8px; font-size: 9px; letter-spacing: .115em; }
+.figure-sub, .rail-sub { margin-top: 5px; font-size: 11px; color: var(--text-3); }
+
+.ov-section, .home-section { padding: 34px 0; }
+.ov-section + .ov-section, .home-section + .home-section { border-top: 1px solid var(--line-soft); }
+.ov-section-head, .home-head { min-height: 24px; margin-bottom: 15px; }
+.ov-section-title, .home-title { font-size: 15px; font-weight: 700; letter-spacing: -.2px; }
+.ov-section-note, .home-meta { font-size: 11px; color: var(--text-3); }
+.form-track { gap: 5px; padding: 2px 0; }
+.form-cell { width: 24px; height: 7px; border-radius: 3px; opacity: .82; }
+
+.rail-item { padding: 23px 26px; }
+.rail-item + .rail-item { border-left: 1px solid var(--line-soft); }
+.rail-value { font-size: 25px; line-height: 1.1; }
+.mini-matches { gap: 0; overflow: hidden; }
+.mini-match { min-height: 64px; padding: 12px 17px; border: 0; border-bottom: 1px solid var(--line-soft); border-left: 3px solid var(--text-3); border-radius: 0; background: transparent; transform: none; }
+.mini-match:last-child { border-bottom: 0; }
+.mini-match:hover { background: var(--panel-2); transform: none; }
+.mini-match img, .mini-img { border-radius: 5px; }
+.mini-hero { font-size: 12.5px; }
+.mini-meta, .mini-when { font-size: 10.5px; }
+.mini-kda { font-size: 12px; }
+.mini-result { font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+
+.chip { min-height: 32px; padding: 0 11px; border-radius: 8px; }
+.chip.selected, .chip.active { background: rgba(var(--brand-rgb), .11); border-color: rgba(var(--brand-rgb), .34); color: var(--brand-2); }
+.text-input, select.text-input, textarea.text-input { min-height: 38px; padding: 9px 11px; border-radius: 9px; border-color: var(--line); background: var(--panel); color: var(--text); }
+.btn, .btn-secondary { min-height: 36px; padding: 0 13px; border-radius: 9px; }
+.btn-secondary { border-color: var(--line); background: var(--panel); }
+
+.result-row, .dl-hero-row, .hero-row, .lb-row, .meta-row { border-color: var(--line-soft); background: transparent; }
+.result-row, .dl-hero-row, .hero-row { padding: 13px 15px; border-radius: 10px; }
+.result-row:hover, .dl-hero-row:hover, .hero-row:hover, .meta-row:hover { background: var(--panel-2); border-color: var(--line); }
+.meta-head { padding: 11px 14px; border-color: var(--line-soft); }
+.meta-row { min-height: 58px; padding: 11px 14px; }
+.meta-mover { padding: 14px; background: var(--panel); }
+.meta-mover.static:hover { background: var(--panel); }
+.board { gap: 5px; padding: 4px; border: 1px solid var(--line-soft); border-radius: var(--r-sm); background: var(--panel); }
+.board-row { min-height: 38px; padding: 7px 10px; border-radius: 6px; }
+.board-row:nth-child(even) { background: rgba(255,255,255,.018); }
+.board-row.head { min-height: 27px; padding-top: 6px; padding-bottom: 6px; }
+
+.appmenu { padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); box-shadow: 0 18px 44px rgba(0,0,0,.26); }
+.appmenu-item { min-height: 36px; padding: 0 10px; border-radius: 7px; }
+.appmenu-item.active { background: rgba(var(--brand-rgb), .10); color: var(--brand-2); }
+
+@media (max-width: 1000px) {
+  .view-head { padding: 28px 28px 18px; }
+  .content { padding: 0 28px 44px; }
+  .topbar { padding: 0 18px; }
+  .brand { min-width: auto; }
+  .brand-name { display: none; }
+}
+
+@media (max-width: 760px) {
+  .view-head { padding: 22px 18px 14px; }
+  .content { padding: 0 18px 36px; }
+  .ov-hero { min-height: 136px; padding: 26px 24px; }
+  .headline { padding: 24px; }
+  .figures, .rail { grid-template-columns: 1fr; }
+  .figure + .figure, .rail-item + .rail-item { border-left: 0; border-top: 1px solid var(--line-soft); }
+  .figure, .rail-item { padding: 18px 20px; }
+}
+
 .cloud-note { font-size: 11.5px; color: var(--text-3); line-height: 1.55; margin: 2px 0 0; }
 
 .auth-error {
@@ -2657,3 +2930,206 @@ textarea.text-input {
 .meta-row.static,
 .meta-mover.static { cursor: default; }
 .meta-mover.static:hover { background: var(--bg); }
+
+/* -------------------------------------------------------------------------
+   Tracker profile refresh
+
+   This layer intentionally replaces the previous flat, console-like shell
+   with a proper profile workspace: a small app chrome, a calm navigation
+   rail, a readable player masthead and data grouped into distinct sections.
+   It takes inspiration from tracker sites' scan-friendly hierarchy without
+   borrowing their artwork, copy, or component styling.
+   ------------------------------------------------------------------------- */
+
+:root {
+  /* Dota: the muted Dire crimson of the official mark, cooled down enough
+     for all-day desktop use. Green remains reserved for a win. */
+  --bg: #10090b;
+  --bg-2: #160c0f;
+  --panel: #1c1115;
+  --panel-2: #28161b;
+  --panel-hi: #351e25;
+  --line: #4a2930;
+  --line-soft: #2b181d;
+  --text: #edf1fa;
+  --text-2: #a4aec2;
+  --text-3: #68738a;
+  --brand: #d54847;
+  --brand-2: #ff9a7c;
+  --brand-rgb: 213, 72, 71;
+  --win: #42d6a4;
+  --loss: #ff6878;
+  --r-sm: 8px;
+  --r: 14px;
+  --track: .09em;
+  --sidebar-w: 250px;
+}
+
+html[data-game="deadlock"] {
+  /* Deadlock: old-city noir, parchment gold, and smoke—not a generic neon
+     teal. It remains clearly separate from Dota's Dire red. */
+  --brand: #b7925b;
+  --brand-2: #f0d29f;
+  --brand-rgb: 183, 146, 91;
+  --bg: #100f0c;
+  --bg-2: #15130e;
+  --panel: #1d1a13;
+  --panel-2: #292419;
+  --panel-hi: #362f22;
+  --line: #51452e;
+  --line-soft: #30291d;
+}
+
+body {
+  background:
+    radial-gradient(900px 520px at 75% -220px, rgba(var(--brand-rgb), .12), transparent 66%),
+    var(--bg);
+}
+
+.topbar {
+  min-height: 66px;
+  padding: 0 22px;
+  background: rgba(12, 15, 24, .94);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(18px);
+}
+
+.brand { padding: 0; min-width: 210px; }
+.brand-mark { width: 32px; height: 32px; border-radius: 9px; box-shadow: 0 8px 20px rgba(var(--brand-rgb), .28); }
+.brand-name { font-family: var(--ui); font-weight: 700; letter-spacing: -.5px; }
+
+.game-tabs { margin-left: 8px; gap: 4px; padding: 4px; border: 1px solid var(--line-soft); border-radius: 10px; background: rgba(255,255,255,.025); }
+.game-tab { border: 0; border-radius: 7px; padding: 8px 16px; letter-spacing: .03em; text-transform: none; color: var(--text-2); }
+.game-tab:hover { background: var(--panel-hi); color: var(--text); }
+.game-tab.active { color: #fff; background: rgba(var(--brand-rgb), .2); box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), .38); }
+
+.topbar-right { gap: 8px; }
+.top-action,
+.pill-toggle {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.025);
+  color: var(--text-2);
+  padding: 0 10px;
+  font-family: var(--ui);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.top-action:hover,
+.pill-toggle:hover { color: var(--text); border-color: rgba(var(--brand-rgb), .5); background: rgba(var(--brand-rgb), .09); }
+.top-action:disabled { opacity: .55; cursor: wait; }
+.top-action.is-refreshing .ico { animation: tracker-spin .75s linear infinite; }
+@keyframes tracker-spin { to { transform: rotate(360deg); } }
+
+.user-chip { min-height: 38px; padding: 3px 8px 3px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.user-avatar { width: 28px; height: 28px; border-radius: 7px; }
+
+.sidebar { padding: 18px 12px 12px; background: rgba(9, 12, 20, .76); border-right-color: var(--line); }
+.nav { gap: 18px; padding-right: 2px; }
+.nav-group { gap: 2px; }
+.nav-group-label { color: var(--text-3); padding: 0 10px 7px; letter-spacing: .12em; font-size: 9.5px; }
+.nav-item { min-height: 38px; border: 1px solid transparent; border-left: 2px solid transparent; border-radius: 8px; padding: 0 10px; color: var(--text-2); }
+.nav-item:hover { background: rgba(255,255,255,.035); color: var(--text); }
+.nav-item.active { border-left-color: var(--brand); border-color: rgba(var(--brand-rgb), .25); background: linear-gradient(90deg, rgba(var(--brand-rgb), .16), rgba(var(--brand-rgb), .04)); color: #fff; }
+.sidebar-foot { border-top: 1px solid var(--line-soft); padding: 12px 4px 0; }
+.sync-pill { border-radius: 8px; background: var(--panel); border: 1px solid var(--line-soft); }
+
+.main { background: transparent; }
+.view-head { max-width: 1440px; margin: 0 auto; padding: 30px 36px 20px; }
+.view-title { font-family: var(--ui); font-size: 25px; letter-spacing: -.65px; }
+.view-sub { max-width: 70ch; margin-top: 5px; }
+.content { max-width: 1440px; margin: 0 auto; padding: 0 36px 48px; }
+
+/* The account header is a recognisable anchor on every game overview. */
+.ov-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 126px;
+  padding: 28px 30px;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background:
+    linear-gradient(90deg, rgba(9, 11, 18, .98) 0%, rgba(9, 11, 18, .92) 39%, rgba(9, 11, 18, .48) 70%, rgba(9, 11, 18, .18) 100%),
+    linear-gradient(105deg, rgba(var(--brand-rgb), .25), rgba(var(--brand-rgb), .035) 52%, transparent 75%),
+    url("art/dota-profile-backdrop.png") center right / cover no-repeat,
+    var(--panel);
+}
+.ov-hero > * { position: relative; z-index: 1; }
+html[data-game="deadlock"] .ov-hero {
+  background:
+    linear-gradient(90deg, rgba(16, 15, 12, .99) 0%, rgba(16, 15, 12, .94) 39%, rgba(16, 15, 12, .52) 70%, rgba(16, 15, 12, .18) 100%),
+    linear-gradient(105deg, rgba(var(--brand-rgb), .22), rgba(var(--brand-rgb), .03) 52%, transparent 75%),
+    url("art/deadlock-profile-backdrop.png") center right / cover no-repeat,
+    var(--panel);
+}
+.ov-hero::after { content: ""; position: absolute; width: 280px; height: 280px; right: -80px; top: -150px; border: 1px solid rgba(var(--brand-rgb), .22); border-radius: 50%; box-shadow: 0 0 0 42px rgba(var(--brand-rgb), .035), 0 0 0 84px rgba(var(--brand-rgb), .02); pointer-events: none; }
+.ov-kicker { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; color: var(--brand-2); font-family: var(--ui); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.ov-game-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 4px rgba(var(--brand-rgb), .15), 0 0 16px rgba(var(--brand-rgb), .7); }
+.ov-kicker-sep { color: rgba(237,241,250,.32); }
+.ov-name { font-family: var(--ui); font-size: 28px; letter-spacing: -.8px; }
+.ov-sub { color: var(--text-2); }
+.live-banner { position: relative; z-index: 1; border-radius: 8px; background: rgba(66, 214, 164, .1); border: 1px solid rgba(66, 214, 164, .27); }
+
+.headline { border: 1px solid var(--line); border-radius: var(--r); padding: 25px 28px; background: var(--panel); }
+.headline-value { font-family: var(--ui); font-size: clamp(42px, 5vw, 64px); letter-spacing: -2.5px; }
+.headline-caption { color: var(--text-2); }
+.headline-meter { border-radius: 999px; overflow: hidden; background: var(--panel-hi); }
+.headline-meter-fill { background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
+.figures { margin: 12px 0 4px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+.figure { padding: 20px 24px; }
+.figure + .figure { border-left-color: var(--line); }
+.figure-value { font-family: var(--ui); font-size: 24px; }
+.figure-label, .rail-label { color: var(--text-3); font-family: var(--ui); font-size: 10px; letter-spacing: .09em; }
+
+.ov-section, .home-section { padding: 26px 0; }
+.ov-section + .ov-section, .home-section + .home-section { border-top-color: var(--line); }
+.ov-section-title, .home-title { font-family: var(--ui); font-size: 15px; letter-spacing: -.18px; }
+.ov-section-note, .home-meta { color: var(--text-3); }
+.mini-matches { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--panel); }
+.mini-match { border: 0; border-radius: 0; border-bottom: 1px solid var(--line-soft); background: transparent; }
+.mini-match:last-child { border-bottom: 0; }
+.mini-match:hover { background: var(--panel-2); }
+.mini-match.win { border-left: 3px solid var(--win); }
+.mini-match.loss { border-left: 3px solid var(--loss); }
+
+.rail { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); overflow: hidden; }
+.rail-item { padding: 20px 23px; }
+.rail-item + .rail-item { border-left-color: var(--line); }
+.rail-value { font-family: var(--ui); font-size: 22px; }
+
+.match-table, .board, .meta-head, .meta-row { border-color: var(--line); }
+.result-row, .meta-row { background: var(--panel); }
+.result-row:hover, .meta-row:hover { background: var(--panel-2); }
+.meta-row { border-radius: 0; }
+.meta-movers { border-radius: var(--r); overflow: hidden; border-color: var(--line); gap: 1px; }
+.meta-mover { background: var(--panel); }
+.meta-mover.static:hover { background: var(--panel); }
+
+.chip-row { gap: 7px; }
+.chip { border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text-2); padding: 7px 11px; }
+.chip:hover { border-color: rgba(var(--brand-rgb), .5); color: var(--text); }
+.chip.selected, .chip.active { color: var(--brand-2); border-color: rgba(var(--brand-rgb), .55); background: rgba(var(--brand-rgb), .12); }
+.btn, .btn-secondary { border-radius: 8px; }
+.btn-secondary { border-color: var(--line); background: var(--panel); }
+.btn-secondary:hover { border-color: var(--brand); background: rgba(var(--brand-rgb), .08); }
+.text-input, select.text-input, textarea.text-input { border-radius: 8px; border-color: var(--line); background: var(--panel); }
+
+.appmenu { margin-top: 4px; padding: 6px; border-radius: 10px; border-color: var(--line); background: var(--panel-2); box-shadow: 0 16px 42px rgba(0,0,0,.34); }
+.appmenu-item { border-radius: 6px; border-left: 0; }
+.appmenu-item.active { border-left: 0; background: rgba(var(--brand-rgb), .13); color: var(--brand-2); }
+
+@media (max-width: 900px) {
+  :root { --sidebar-w: 208px; }
+  .brand { min-width: auto; }
+  .brand-name { display: none; }
+  .view-head { padding: 22px 22px 14px; }
+  .content { padding: 0 22px 32px; }
+  .top-action span:last-child, .ghost-label { display: none; }
+  .ov-hero { padding: 22px; }
+}

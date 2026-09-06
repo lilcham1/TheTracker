@@ -54,7 +54,7 @@ function renderOverlaySettings() {
         already have.
       </p>
       <p class="hint" style="max-width:70ch;margin-top:8px">
-        It draws one thing: a countdown in the <b>last five seconds</b>
+        It draws one thing: a reminder in the <b>last ${o.leadSeconds ?? 5} seconds</b>
         before an event. At every other moment &mdash; between matches,
         during the draft, and most of the match itself &mdash; the window is
         empty, so expect to see nothing until something is about to happen.
@@ -94,6 +94,11 @@ function renderOverlaySettings() {
           <input type="range" id="ovScale" min="75" max="150" step="5" value="${Math.round((o.scale ?? 1) * 100)}" />
         </div>
         <div class="split-item">
+          <label class="form-label">Reminder lead &mdash; ${o.leadSeconds ?? 5} seconds</label>
+          <input type="range" id="ovLead" min="1" max="30" step="1" value="${o.leadSeconds ?? 5}" />
+          <p class="field-hint" style="margin-top:6px">How early each event reminder appears. Five seconds is the default.</p>
+        </div>
+        <div class="split-item">
           <label class="form-label">Display</label>
           <select class="text-input" id="ovMonitor">
             <option value="" ${!o.monitor ? "selected" : ""}>Follow the app window</option>
@@ -130,7 +135,7 @@ function renderOverlaySettings() {
     <section class="home-section">
       <div class="home-head">
         <h2 class="home-title">Warn me about</h2>
-        <div class="home-meta">five seconds before each</div>
+        <div class="home-meta">${o.leadSeconds ?? 5}s before each</div>
       </div>
       ${dotaPanels
         .map(
@@ -194,6 +199,9 @@ function renderOverlaySettings() {
   );
   root.querySelector("#ovScale").addEventListener("change", (e) =>
     saveOverlay({ scale: Number(e.target.value) / 100 }).then(renderOverlaySettings)
+  );
+  root.querySelector("#ovLead").addEventListener("change", (e) =>
+    saveOverlay({ leadSeconds: Number(e.target.value) }).then(renderOverlaySettings)
   );
   root.querySelectorAll("[data-ov-corner]").forEach((el) =>
     el.addEventListener("click", () => saveOverlay({ corner: el.dataset.ovCorner }).then(renderOverlaySettings))

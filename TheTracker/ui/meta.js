@@ -7,9 +7,20 @@
 // for why the line is drawn where it is.
 
 const META = {
-  dota: { data: null, loading: false, error: null, role: "all", sort: "winRate" },
-  dl: { data: null, loading: false, error: null, tab: "heroes", sort: "winRate" },
+  dota: { data: null, loadedAt: 0, loading: false, error: null, role: "all", sort: "winRate" },
+  dl: { data: null, loadedAt: 0, loading: false, error: null, tab: "heroes", sort: "winRate" },
 };
+
+// The backend caches the expensive aggregate calls for thirty minutes. Keep
+// the browser cache on the same schedule; before this, opening Meta once
+// meant it silently stayed stale for the rest of the app session.
+const META_CACHE_MS = 30 * 60 * 1000;
+
+function metaUpdatedAt(timestamp) {
+  if (!timestamp) return "Updated now";
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  return minutes ? `Updated ${minutes}m ago` : "Updated just now";
+}
 
 const META_SORTS = [
   ["winRate", "Win rate"],
@@ -51,12 +62,13 @@ function metaBar(winRate) {
 
 async function loadDotaMeta(force = false) {
   if (META.dota.loading) return;
-  if (META.dota.data && !force) return;
+  if (META.dota.data && !force && Date.now() - META.dota.loadedAt < META_CACHE_MS) return;
   META.dota.loading = true;
   META.dota.error = null;
   renderDotaMeta();
   try {
     META.dota.data = await invoke("dota_meta");
+    META.dota.loadedAt = Date.now();
   } catch (e) {
     META.dota.error = String(e);
   }
@@ -114,7 +126,7 @@ function renderDotaMeta() {
     <section class="home-section" style="padding-top:0">
       <div class="home-head">
         <h2 class="home-title">The meta right now</h2>
-        <div class="home-meta">public matches</div>
+        <div class="home-meta">public matches · ${metaUpdatedAt(META.dota.loadedAt)}</div>
         <button class="link-btn" data-meta-retry type="button">${META.dota.loading ? "Refreshing…" : "Refresh"}</button>
       </div>
       ${railHtml([
@@ -215,12 +227,13 @@ function renderDotaMeta() {
 
 async function loadDeadlockMeta(force = false) {
   if (META.dl.loading) return;
-  if (META.dl.data && !force) return;
+  if (META.dl.data && !force && Date.now() - META.dl.loadedAt < META_CACHE_MS) return;
   META.dl.loading = true;
   META.dl.error = null;
   renderDeadlockMeta();
   try {
     META.dl.data = await invoke("deadlock_meta");
+    META.dl.loadedAt = Date.now();
   } catch (e) {
     META.dl.error = String(e);
   }
@@ -268,7 +281,7 @@ function renderDeadlockMeta() {
     <section class="home-section" style="padding-top:0">
       <div class="home-head">
         <h2 class="home-title">The meta right now</h2>
-        <div class="home-meta">ranked matches</div>
+        <div class="home-meta">ranked matches · ${metaUpdatedAt(META.dl.loadedAt)}</div>
         <button class="link-btn" data-meta-retry type="button">${META.dl.loading ? "Refreshing…" : "Refresh"}</button>
       </div>
       ${railHtml([

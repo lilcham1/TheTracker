@@ -18,7 +18,7 @@ use crate::storage::log_dir;
 ///
 /// The list has been cut down deliberately, and each removal has its own
 /// reason. The player's own scoreboard line went because the overlay shows
-/// a countdown in the last five seconds before an event and nothing at any
+/// a reminder only during the player's selected lead time and nothing at any
 /// other time, and a line pinned there permanently is exactly the sort of
 /// thing you stop seeing. Roshan went because his timer can only start from
 /// a death the player happened to witness, so it would be missing whenever
@@ -63,6 +63,11 @@ pub struct OverlaySettings {
     /// 0.75–1.5 — keeps the overlay legible on a 1440p/4K screen.
     #[serde(default = "default_scale")]
     pub scale: f64,
+    /// How many seconds before a known event the reminder appears. This is a
+    /// preference, not an event fact: some players want a quick five-second
+    /// nudge, while others need longer to move across the map.
+    #[serde(rename = "leadSeconds", default = "default_lead_seconds")]
+    pub lead_seconds: u8,
     /// "top-left" | "top-right" | "bottom-left" | "bottom-right"
     #[serde(default = "default_corner")]
     pub corner: String,
@@ -96,12 +101,16 @@ fn default_scale() -> f64 {
 fn default_corner() -> String {
     "top-left".to_string()
 }
+fn default_lead_seconds() -> u8 {
+    5
+}
 
 impl Default for OverlaySettings {
     fn default() -> Self {
         OverlaySettings {
             opacity: default_opacity(),
             scale: default_scale(),
+            lead_seconds: default_lead_seconds(),
             corner: default_corner(),
             click_through: true,
             auto: true,
@@ -117,6 +126,7 @@ impl OverlaySettings {
     fn sanitized(mut self) -> Self {
         self.opacity = self.opacity.clamp(0.25, 1.0);
         self.scale = self.scale.clamp(0.75, 1.5);
+        self.lead_seconds = self.lead_seconds.clamp(1, 30);
         if !matches!(self.corner.as_str(), "top-left" | "top-right" | "bottom-left" | "bottom-right") {
             self.corner = default_corner();
         }
@@ -223,11 +233,12 @@ mod tests {
 
     #[test]
     fn overlay_values_are_clamped() {
-        let wild = OverlaySettings { opacity: 0.0, scale: 9.0, corner: "middle".into(), ..Default::default() };
+        let wild = OverlaySettings { opacity: 0.0, scale: 9.0, lead_seconds: 99, corner: "middle".into(), ..Default::default() };
         let safe = wild.sanitized();
         // An opacity of 0 would leave an invisible window and no way back.
         assert_eq!(safe.opacity, 0.25);
         assert_eq!(safe.scale, 1.5);
+        assert_eq!(safe.lead_seconds, 30);
         assert_eq!(safe.corner, "top-left");
     }
 
@@ -235,6 +246,7 @@ mod tests {
     fn defaults_are_sane() {
         let d = OverlaySettings::default();
         assert!(d.click_through, "click-through must default on, or the overlay eats game input");
+        assert_eq!(d.lead_seconds, 5, "a short nudge is the sane default");
         assert!(d.dota.lotus, "lotus warnings are on by default like every other timer");
     }
 

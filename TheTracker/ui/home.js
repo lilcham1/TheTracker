@@ -268,6 +268,7 @@ function renderDotaOverview() {
   root.innerHTML = `
     <header class="ov-hero">
       <div>
+        <div class="ov-kicker"><span class="ov-game-dot"></span>Dota 2 profile <span class="ov-kicker-sep">/</span> Local account data</div>
         <h1 class="ov-name">${escapeHtml(name)}</h1>
         <div class="ov-sub">
           ${DOTA.link.accountId ? `Steam ${DOTA.link.accountId}` : "No account linked"}
@@ -395,6 +396,7 @@ function renderDeadlockOverview() {
   root.innerHTML = `
     <header class="ov-hero">
       <div>
+        <div class="ov-kicker"><span class="ov-game-dot"></span>Deadlock profile <span class="ov-kicker-sep">/</span> Local account data</div>
         <h1 class="ov-name">${escapeHtml(name)}</h1>
         <div class="ov-sub">
           ${DL.rank ? `${escapeHtml(DL.rank.label)} &middot; ` : ""}Steam ${DL.link.accountId}
@@ -421,4 +423,3 @@ async function loadDotaOverview() {
   if (DOTA.link.accountId) await dtLoad();
   renderDotaOverview();
 }
-

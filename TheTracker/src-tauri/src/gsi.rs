@@ -24,9 +24,16 @@ pub fn spawn_server(state: Arc<Mutex<Tracker>>, on_status: impl FnOnce(ServerSta
         let server = match tiny_http::Server::http(("0.0.0.0", GSI_PORT)) {
             Ok(s) => s,
             Err(e) => {
-                on_status(ServerStatus::Failed(format!(
-                    "Couldn't bind to port {GSI_PORT}: {e}. Is another instance of the tracker already running?"
-                )));
+                let technical = e.to_string();
+                let in_use = technical.contains("Only one usage")
+                    || technical.contains("Address already in use")
+                    || technical.contains("os error 10048");
+                let message = if in_use {
+                    "Live tracking is already active in another TheTracker window. Close that window to use live tracking here.".to_string()
+                } else {
+                    format!("Live tracking could not start on port {GSI_PORT}: {technical}")
+                };
+                on_status(ServerStatus::Failed(message));
                 return;
             }
         };

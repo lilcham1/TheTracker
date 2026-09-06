@@ -3,8 +3,8 @@
 // Dota only — Deadlock publishes no live feed, so an overlay there could
 // say nothing beyond "you are in a match".
 //
-// It draws exactly one kind of thing: a countdown in the last five seconds
-// before an event. The rest of the time the window is empty. No idle panel,
+// It draws exactly one kind of thing: a reminder during the selected lead
+// time before an event. The rest of the time the window is empty. No idle panel,
 // no sample values, no "waiting for a match" — anything that sits on screen
 // permanently is something you stop seeing, and a panel of numbers that
 // never move looks like a hung window rather than a tracker.
@@ -41,14 +41,10 @@ const LOTUS_EVERY = 180;
 // which is worse than no countdown at all. The History tab still records
 // Roshan deaths.
 
-// How long before an event its countdown appears. Five seconds: long
-// enough to react, short enough that nothing is ever on screen that isn't
-// about to happen.
-const LEAD = 5;
-
 let SETTINGS = {
   opacity: 0.85,
   scale: 1,
+  leadSeconds: 5,
   clickThrough: true,
   dota: { runes: true, lotus: true, stacks: true },
 };
@@ -59,7 +55,7 @@ function countdown(seconds) {
 }
 
 function chip(label, secs) {
-  const tone = secs <= 2 ? "urgent" : "soon";
+  const tone = label === "Lotus" ? "lotus" : label === "Stack" ? "stack" : "rune";
   return `<div class="chip ${tone}"><span class="label">${label}</span><span class="value">${countdown(secs)}</span></div>`;
 }
 
@@ -145,7 +141,7 @@ function renderMatch(m) {
 
   paint(
     events
-      .filter(([, secs]) => secs > 0 && secs <= LEAD)
+      .filter(([, secs]) => secs > 0 && secs <= (SETTINGS.leadSeconds || 5))
       .sort((a, b) => a[1] - b[1])
       .map(([label, secs]) => chip(label, secs))
       .join("")
@@ -155,8 +151,7 @@ function renderMatch(m) {
 async function tick() {
   // Unlocked for positioning: a transparent empty window cannot be dragged
   // to a corner you can see, so one marker stands in until it is locked
-  // again. This is the only thing that ever shows outside the last five
-  // seconds before an event.
+  // again. This is the only thing that ever shows outside a reminder.
   if (SETTINGS.clickThrough === false) {
     paint(`<div class="chip good"><span class="value">Drag to place, then lock</span></div>`);
     return;

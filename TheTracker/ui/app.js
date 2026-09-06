@@ -175,7 +175,7 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.12.0";
+const APP_VERSION = "0.13.0";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 
@@ -923,26 +923,26 @@ function renderSyncPill() {
 
 // Every view, its heading, and which game tab owns it.
 const VIEWS = {
-  dotaoverview: { game: "dota", title: "Overview", sub: "Your Dota 2 account at a glance" },
-  live: { game: "dota", title: "Live", sub: "Real-time Dota 2 tracking via Valve's GSI feed" },
-  dotamatches: { game: "dota", title: "Match History", sub: "Results, modes and scoreboards from OpenDota" },
-  dotameta: { game: "dota", title: "Meta", sub: "Strongest heroes right now, and which way they are moving" },
-  dotaheroes: { game: "dota", title: "Heroes", sub: "Per-hero performance across your recent games" },
-  favorite: { game: "dota", title: "Favorite Hero", sub: "Deep dive and improvement trend for your pick" },
-  builds: { game: "dota", title: "Builds", sub: "Your saved item builds, stored on this PC" },
-  history: { game: "dota", title: "Tracked Sessions", sub: "Matches this app recorded live" },
-  leaderboard: { game: "dota", title: "Leaderboard", sub: "Your personal bests and the shared board" },
+  dotaoverview: { game: "dota", title: "Overview", sub: "Performance, form, and recent matches" },
+  live: { game: "dota", title: "Live", sub: "Your current Dota match" },
+  dotamatches: { game: "dota", title: "Match History", sub: "Results, modes, and full scoreboards" },
+  dotameta: { game: "dota", title: "Meta", sub: "Hero strength and recent movement" },
+  dotaheroes: { game: "dota", title: "Heroes", sub: "Your results by hero" },
+  favorite: { game: "dota", title: "Hero Focus", sub: "Your most important hero" },
+  builds: { game: "dota", title: "Builds", sub: "Your saved item plans" },
+  history: { game: "dota", title: "Sessions", sub: "Matches recorded by TheTracker" },
+  leaderboard: { game: "dota", title: "Leaderboard", sub: "Personal bests and shared stats" },
 
-  dloverview: { game: "deadlock", title: "Overview", sub: "Your Deadlock account at a glance" },
-  dlmatches: { game: "deadlock", title: "Matches", sub: "Recent games for your linked account" },
-  dlmeta: { game: "deadlock", title: "Meta", sub: "Hero and item win rates across ranked matches" },
-  dlheroes: { game: "deadlock", title: "Heroes", sub: "Per-hero breakdown of your recent games" },
-  dlfavorite: { game: "deadlock", title: "Favorite Hero", sub: "Deep dive on your most-played pick" },
-  dlbuilds: { game: "deadlock", title: "Builds", sub: "Saved builds for Deadlock heroes" },
+  dloverview: { game: "deadlock", title: "Overview", sub: "Performance, form, and recent matches" },
+  dlmatches: { game: "deadlock", title: "Matches", sub: "Recent games and full details" },
+  dlmeta: { game: "deadlock", title: "Meta", sub: "Hero and item performance" },
+  dlheroes: { game: "deadlock", title: "Heroes", sub: "Your results by hero" },
+  dlfavorite: { game: "deadlock", title: "Hero Focus", sub: "Your most important hero" },
+  dlbuilds: { game: "deadlock", title: "Builds", sub: "Your saved item plans" },
 
-  overlaysettings: { game: null, title: "Overlay Settings", sub: "Position, opacity and what the overlay warns about" },
-  accounts: { game: null, title: "Account", sub: "Display name, cloud sync and linked Steam accounts" },
-  about: { game: null, title: "About & Updates", sub: "Version, update checks and data sources" },
+  overlaysettings: { game: null, title: "Overlay", sub: "Dota event reminders and placement" },
+  accounts: { game: null, title: "Account", sub: "Profile, sync, and linked accounts" },
+  about: { game: null, title: "About & Updates", sub: "Version and update status" },
 };
 
 /// Switches the top-level game tab. Views belonging to the other game are
@@ -1086,9 +1086,11 @@ function refreshLive() {
     const errBanner = document.getElementById("serverError");
     if (live.serverError) {
       errBanner.hidden = false;
-      errBanner.textContent = `⚠ ${live.serverError}`;
+      errBanner.textContent = "Live unavailable";
+      errBanner.title = live.serverError;
     } else {
       errBanner.hidden = true;
+      errBanner.removeAttribute("title");
     }
 
     // A match just finished while we were on the Live tab — refresh cached
@@ -1098,6 +1100,42 @@ function refreshLive() {
       loadHistory();
     }
   });
+}
+
+/// Refreshes the data source behind the visible page. This is intentionally
+/// scoped to the current view: it gives users a dependable "latest" control
+/// without spraying requests at OpenDota and the Deadlock community API.
+async function refreshCurrentView() {
+  const button = document.getElementById("refreshViewBtn");
+  if (button) {
+    button.classList.add("is-refreshing");
+    button.disabled = true;
+  }
+  try {
+    switch (state.view) {
+      case "live": await refreshLive(); break;
+      case "dotaoverview": await dtRefreshLink(); await dtLoad(true); renderDotaOverview(); break;
+      case "dotamatches": await dtLoad(true); dtRender(); break;
+      case "dotaheroes": await dtLoad(true); renderDotaHeroes(); break;
+      case "favorite": await dtLoad(true); renderFavoriteHero(); break;
+      case "dotameta": await loadDotaMeta(true); break;
+      case "dloverview":
+      case "dlmatches":
+      case "dlheroes":
+      case "dlfavorite":
+      case "dlbuilds": await dlLoad(true); dlRender(); break;
+      case "dlmeta": await loadDeadlockMeta(true); break;
+      case "history": await loadHistory(); renderHistory(); break;
+      case "leaderboard": await loadHistory(); renderLeaderboard(); break;
+      case "about": await checkForUpdate({ quiet: false }); break;
+      default: renderView(state.view); break;
+    }
+  } finally {
+    if (button) {
+      button.classList.remove("is-refreshing");
+      button.disabled = false;
+    }
+  }
 }
 
 /// The overlay is a separate always-on-top window. Opening it also drops
@@ -1160,6 +1198,7 @@ function paintIcons(root = document) {
 }
 
 function wireShell() {
+  document.getElementById("refreshViewBtn")?.addEventListener("click", refreshCurrentView);
   document.getElementById("trackingToggle").addEventListener("click", () => {
     const nowOn = !document.getElementById("trackingToggle").classList.contains("on");
     invoke("set_tracking", { enabled: nowOn }).then(refreshLive);

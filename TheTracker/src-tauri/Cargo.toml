@@ -1,6 +1,6 @@
 [package]
 name = "thetracker"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2021"
 description = "TheTracker — desktop match tracker for Dota 2 and Deadlock."
 
