@@ -175,7 +175,7 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.11.0";
+const APP_VERSION = "0.12.0";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 
@@ -926,6 +926,7 @@ const VIEWS = {
   dotaoverview: { game: "dota", title: "Overview", sub: "Your Dota 2 account at a glance" },
   live: { game: "dota", title: "Live", sub: "Real-time Dota 2 tracking via Valve's GSI feed" },
   dotamatches: { game: "dota", title: "Match History", sub: "Results, modes and scoreboards from OpenDota" },
+  dotameta: { game: "dota", title: "Meta", sub: "Strongest heroes right now, and which way they are moving" },
   dotaheroes: { game: "dota", title: "Heroes", sub: "Per-hero performance across your recent games" },
   favorite: { game: "dota", title: "Favorite Hero", sub: "Deep dive and improvement trend for your pick" },
   builds: { game: "dota", title: "Builds", sub: "Your saved item builds, stored on this PC" },
@@ -934,6 +935,7 @@ const VIEWS = {
 
   dloverview: { game: "deadlock", title: "Overview", sub: "Your Deadlock account at a glance" },
   dlmatches: { game: "deadlock", title: "Matches", sub: "Recent games for your linked account" },
+  dlmeta: { game: "deadlock", title: "Meta", sub: "Hero and item win rates across ranked matches" },
   dlheroes: { game: "deadlock", title: "Heroes", sub: "Per-hero breakdown of your recent games" },
   dlfavorite: { game: "deadlock", title: "Favorite Hero", sub: "Deep dive on your most-played pick" },
   dlbuilds: { game: "deadlock", title: "Builds", sub: "Saved builds for Deadlock heroes" },
@@ -974,6 +976,9 @@ function setView(view) {
   if (meta.game && meta.game !== state.game) setGame(meta.game);
 
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  const appBtn = document.getElementById("appMenuBtn");
+  if (appBtn) appBtn.classList.toggle("current", meta.game === null);
+  document.querySelectorAll(".appmenu-item").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   document.querySelectorAll(".view").forEach((p) => p.classList.toggle("active", p.id === `tab-${view}`));
   document.getElementById("viewTitle").textContent = meta.title;
   document.getElementById("viewSub").textContent = meta.sub;
@@ -1026,6 +1031,14 @@ function renderView(view) {
       break;
     case "builds":
       renderBuilds();
+      break;
+    case "dotameta":
+      loadDotaMeta();
+      break;
+    case "dlmeta":
+      // Deliberately not routed through dlRender: the meta needs no linked
+      // account, so it should work before anyone has connected Steam.
+      loadDeadlockMeta();
       break;
     case "dloverview":
     case "dlmatches":
@@ -1164,7 +1177,39 @@ function wireShell() {
 
   document.getElementById("overlayBtn").addEventListener("click", toggleOverlay);
 
+  // App settings, which belong to neither game and so are not in the
+  // sidebar. Opening a page from here closes the menu; so does clicking
+  // anywhere else, which the document handler below takes care of.
+  const appBtn = document.getElementById("appMenuBtn");
+  const appMenu = document.getElementById("appMenu");
+  if (appBtn && appMenu) {
+    appBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = appMenu.hidden;
+      appMenu.hidden = !open;
+      appBtn.setAttribute("aria-expanded", String(open));
+      appBtn.classList.toggle("on", open);
+    });
+    appMenu.querySelectorAll("[data-view]").forEach((el) =>
+      el.addEventListener("click", () => {
+        appMenu.hidden = true;
+        appBtn.setAttribute("aria-expanded", "false");
+        appBtn.classList.remove("on");
+        setView(el.dataset.view);
+      })
+    );
+  }
+
   document.addEventListener("click", () => {
+    const menu = document.getElementById("appMenu");
+    if (menu && !menu.hidden) {
+      menu.hidden = true;
+      const btn = document.getElementById("appMenuBtn");
+      if (btn) {
+        btn.setAttribute("aria-expanded", "false");
+        btn.classList.remove("on");
+      }
+    }
     if (state.openTypeMenu !== null) {
       state.openTypeMenu = null;
       if (state.view === "history") renderHistory();

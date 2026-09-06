@@ -140,7 +140,7 @@ pub struct DeadlockPopularItem {
 
 /// Deadlock item id -> display name, from the same assets endpoint the hero
 /// list comes from.
-async fn deadlock_item_names() -> HashMap<u64, String> {
+pub async fn deadlock_item_names() -> HashMap<u64, String> {
     let mut map = HashMap::new();
     let Ok(value) = crate::deadlock::get_json_public("/v1/assets/items").await else {
         return map;

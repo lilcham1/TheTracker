@@ -29,6 +29,28 @@
         <button class="pill pill-toggle" id="overlayBtn" type="button">
           <span class="nav-ico" data-icon="overlay"></span><span class="ghost-label">Overlay</span>
         </button>
+
+        <!-- App-level settings live here rather than in the sidebar. The
+             sidebar belongs to whichever game is selected; these three pages
+             belong to neither, and repeating them under both read as though
+             each game had its own copy. -->
+        <div class="appmenu-wrap">
+          <button class="pill pill-toggle" id="appMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="App settings">
+            <span class="nav-ico" data-icon="settings"></span><span class="ghost-label">Settings</span>
+          </button>
+          <div class="appmenu" id="appMenu" hidden>
+            <button class="appmenu-item" data-view="overlaysettings" type="button">
+              <span class="nav-ico" data-icon="overlay"></span><span>Overlay Settings</span>
+            </button>
+            <button class="appmenu-item" data-view="accounts" type="button">
+              <span class="nav-ico" data-icon="profile"></span><span>Account</span>
+            </button>
+            <button class="appmenu-item" data-view="about" type="button">
+              <span class="nav-ico" data-icon="about"></span><span>About &amp; Updates</span>
+            </button>
+          </div>
+        </div>
+
         <div class="user-chip" id="userChip">
           <div class="user-avatar" id="userAvatar"></div>
           <div class="user-meta">
@@ -49,6 +71,7 @@
               <span class="nav-ico live-ico"></span><span class="nav-label">Live</span>
             </button>
             <button class="nav-item" data-view="dotamatches"><span class="nav-ico" data-icon="matches"></span><span class="nav-label">Match History</span></button>
+            <button class="nav-item" data-view="dotameta"><span class="nav-ico" data-icon="meta"></span><span class="nav-label">Meta</span></button>
             <button class="nav-item" data-view="dotaheroes"><span class="nav-ico" data-icon="heroes"></span><span class="nav-label">Heroes</span></button>
             <button class="nav-item" data-view="favorite"><span class="nav-ico" data-icon="star"></span><span class="nav-label">Favorite Hero</span></button>
             <button class="nav-item" data-view="builds"><span class="nav-ico" data-icon="builds"></span><span class="nav-label">Builds</span></button>
@@ -60,17 +83,12 @@
             <span class="nav-group-label">Deadlock</span>
             <button class="nav-item" data-view="dloverview"><span class="nav-ico" data-icon="overview"></span><span class="nav-label">Overview</span></button>
             <button class="nav-item" data-view="dlmatches"><span class="nav-ico" data-icon="matches"></span><span class="nav-label">Matches</span></button>
+            <button class="nav-item" data-view="dlmeta"><span class="nav-ico" data-icon="meta"></span><span class="nav-label">Meta</span></button>
             <button class="nav-item" data-view="dlheroes"><span class="nav-ico" data-icon="heroes"></span><span class="nav-label">Heroes</span></button>
             <button class="nav-item" data-view="dlfavorite"><span class="nav-ico" data-icon="star"></span><span class="nav-label">Favorite Hero</span></button>
             <button class="nav-item" data-view="dlbuilds"><span class="nav-ico" data-icon="builds"></span><span class="nav-label">Builds</span></button>
           </div>
 
-          <div class="nav-group">
-            <span class="nav-group-label">App</span>
-            <button class="nav-item" data-view="overlaysettings"><span class="nav-ico" data-icon="overlay"></span><span class="nav-label">Overlay Settings</span></button>
-            <button class="nav-item" data-view="accounts"><span class="nav-ico" data-icon="accounts"></span><span class="nav-label">Account</span></button>
-            <button class="nav-item" data-view="about"><span class="nav-ico" data-icon="about"></span><span class="nav-label">About &amp; Updates</span></button>
-          </div>
         </nav>
 
         <div class="sidebar-foot">
@@ -92,6 +110,7 @@
           <section id="tab-dotaoverview" class="view active"></section>
           <section id="tab-live" class="view"></section>
           <section id="tab-dotamatches" class="view"></section>
+          <section id="tab-dotameta" class="view"></section>
           <section id="tab-dotaheroes" class="view"></section>
           <section id="tab-favorite" class="view"></section>
           <section id="tab-builds" class="view"></section>
@@ -100,6 +119,7 @@
 
           <section id="tab-dloverview" class="view"></section>
           <section id="tab-dlmatches" class="view"></section>
+          <section id="tab-dlmeta" class="view"></section>
           <section id="tab-dlheroes" class="view"></section>
           <section id="tab-dlfavorite" class="view"></section>
           <section id="tab-dlbuilds" class="view"></section>
@@ -123,6 +143,7 @@
   <script src="popular.js"></script>
   <script src="dlextras.js"></script>
   <script src="overlaysettings.js"></script>
+  <script src="meta.js"></script>
   <script src="boot.js"></script>
 </body>
 </html>

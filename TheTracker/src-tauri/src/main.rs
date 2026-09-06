@@ -21,6 +21,7 @@ mod dota_api;
 mod device_id;
 mod gsi;
 mod heroes;
+mod meta;
 mod model;
 mod overlay;
 mod popular;
@@ -48,6 +49,7 @@ struct AppState {
     heroes: deadlock::SharedHeroes,
     dota_heroes: dota_api::SharedDotaHeroes,
     items: popular::SharedItemNames,
+    meta: meta::SharedMeta,
 }
 
 #[derive(Serialize)]
@@ -511,6 +513,23 @@ fn spawn_game_type_backfill() {
     });
 }
 
+
+// ---------- Meta ----------
+
+/// Which heroes are strong right now, and which way they are moving.
+#[tauri::command]
+async fn dota_meta(app_state: tauri::State<'_, AppState>) -> Result<meta::DotaMeta, String> {
+    let cache = app_state.meta.clone();
+    meta::dota(&cache).await
+}
+
+#[tauri::command]
+async fn deadlock_meta(app_state: tauri::State<'_, AppState>) -> Result<meta::DeadlockMeta, String> {
+    let cache = app_state.meta.clone();
+    let heroes = app_state.heroes.clone();
+    meta::deadlock(&cache, &heroes).await
+}
+
 fn main() {
     // Must run before anything reads history/profile files.
     storage::migrate_legacy_dir();
@@ -557,6 +576,7 @@ fn main() {
                 heroes: Arc::new(Mutex::new(deadlock::HeroCache::default())),
                 dota_heroes: Arc::new(Mutex::new(dota_api::DotaHeroCache::default())),
                 items: Arc::new(Mutex::new(popular::ItemNameCache::default())),
+                meta: Arc::new(Mutex::new(meta::MetaCache::default())),
             });
 
             // Build the overlay once, hidden. Creating it on demand raced
@@ -626,6 +646,8 @@ fn main() {
             dota_unlink,
             dota_api_history,
             dota_match_detail,
+            dota_meta,
+            deadlock_meta,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -2465,3 +2465,195 @@ textarea.text-input {
 .res {
   border-radius: 0;
 }
+
+/* ---------- App settings menu ----------
+
+   These three pages belong to the app, not to either game, so they sit in
+   the top bar rather than the sidebar. Repeating them under both game
+   sections read as though Dota and Deadlock each had their own copy. */
+
+.appmenu-wrap { position: relative; }
+
+.pill-toggle.current {
+  border-color: var(--brand);
+  color: var(--brand-2);
+}
+
+.appmenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  min-width: 208px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+}
+
+.appmenu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  color: var(--text-2);
+  font-family: var(--ui);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.appmenu-item:hover { background: var(--panel-hi); color: var(--text); }
+
+.appmenu-item.active {
+  color: #fff;
+  border-left-color: var(--brand);
+  background: var(--panel-2);
+}
+
+/* ---------- Meta ---------- */
+
+.meta-head,
+.meta-row {
+  display: grid;
+  grid-template-columns: 34px minmax(140px, 1.4fr) 62px minmax(70px, 0.9fr) 64px 64px 84px 62px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+}
+
+.meta-head.dl,
+.meta-row.dl {
+  grid-template-columns: 34px minmax(140px, 1.6fr) 62px minmax(70px, 1fr) 64px 64px 74px;
+}
+
+.meta-head.items,
+.meta-row.items {
+  grid-template-columns: minmax(160px, 1.8fr) 62px minmax(70px, 1fr) 64px 72px;
+}
+
+.meta-head {
+  border-bottom: 1px solid var(--line);
+  color: var(--text-3);
+  font-family: var(--ui);
+  font-size: 9.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  padding-bottom: 8px;
+}
+
+.meta-row {
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+
+.meta-row:hover { background: var(--panel); }
+.meta-row.items { cursor: default; }
+.meta-row.items:hover { background: none; }
+
+.meta-name {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta-roles {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.meta-wr { font-weight: 700; }
+.meta-wr.good { color: var(--win); }
+.meta-wr.bad { color: var(--loss); }
+
+.meta-row .num,
+.meta-head .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Win rates live between roughly 42% and 58%, so a 0–100% bar would park
+   every hero in the middle. The scale is clamped to that band. */
+.meta-bar {
+  height: 4px;
+  background: var(--panel-hi);
+  overflow: hidden;
+}
+
+.meta-bar-fill { height: 100%; }
+.meta-bar-fill.good { background: var(--win); }
+.meta-bar-fill.even { background: var(--text-3); }
+.meta-bar-fill.bad { background: var(--loss); }
+
+.meta-trend {
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.meta-trend.up { color: var(--win); }
+.meta-trend.down { color: var(--loss); }
+.meta-trend.flat { color: var(--text-3); font-weight: 400; }
+
+.meta-movers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+}
+
+.meta-mover {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.meta-mover:hover { background: var(--panel); }
+
+.meta-mover-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta-mover-wr {
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+@media (max-width: 1100px) {
+  .meta-head > :nth-child(n + 6),
+  .meta-row > :nth-child(n + 6) { display: none; }
+  .meta-head,
+  .meta-row { grid-template-columns: 34px minmax(120px, 1.4fr) 62px minmax(60px, 1fr) 60px; }
+}
+
+/* Dota meta rows are read-only: the Heroes page shows your own heroes, and
+   most heroes in a meta table are ones you have never played, so sending a
+   click there would land on an empty page. */
+.meta-row.static,
+.meta-mover.static { cursor: default; }
+.meta-mover.static:hover { background: var(--bg); }
