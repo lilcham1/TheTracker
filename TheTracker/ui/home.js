@@ -170,7 +170,13 @@ function dotaOverviewBodyHtml() {
   }
 
   if (!DOTA.matches.length) {
-    if (DOTA.loading) {
+    // `loadedAt` is 0 until a fetch has actually completed. Without that
+    // check this page rendered its "no matches" state on every launch —
+    // the overview draws once before the loader is even called, so
+    // `loading` was still false and an app that had not tried yet reported
+    // failure. The data then arrived a moment later and replaced it, which
+    // is what made every start look like a failed load.
+    if (DOTA.loading || (!DOTA.loadedAt && !DOTA.error)) {
       return `
         <div class="skel-line lg skeleton"></div>
         <div class="skel-line sm skeleton"></div>
@@ -323,7 +329,9 @@ function renderDotaOverview() {
 
 function deadlockOverviewBodyHtml() {
   if (!DL.matches.length) {
-    if (DL.loading) {
+    // Same as the Dota side: nothing fetched yet is not the same as nothing
+    // to show, and only `loadedAt` can tell them apart.
+    if (DL.loading || (!DL.loadedAt && !DL.error)) {
       return `
         <div class="skel-line lg skeleton"></div>
         <div class="skel-line sm skeleton"></div>

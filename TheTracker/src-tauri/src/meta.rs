@@ -27,7 +27,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Meta moves on the scale of days, so a cached snapshot is fine and keeps
 /// the app off the network on every tab switch.
@@ -43,7 +43,7 @@ pub type SharedMeta = Arc<Mutex<MetaCache>>;
 
 // ---------- Dota ----------
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetaHero {
     pub id: u32,
     pub name: String,
@@ -75,7 +75,7 @@ pub struct MetaHero {
     pub turbo_win_rate: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DotaMeta {
     /// Public matches behind the sample, derived from total picks.
     pub matches: u64,
@@ -107,6 +107,16 @@ pub async fn dota(cache: &SharedMeta) -> Result<DotaMeta, String> {
             if at.elapsed() < TTL {
                 return Ok(meta.clone());
             }
+        }
+    }
+
+    // Warm start from the last run. The TTL above is measured with Instant,
+    // which lives in memory, so before this every launch refetched the meta
+    // from cold no matter how recently it had been read.
+    if let Some(cached) = crate::storage::read_cache("meta_dota", TTL.as_secs()) {
+        if let Ok(meta) = serde_json::from_value::<DotaMeta>(cached) {
+            cache.lock().unwrap().dota = Some((Instant::now(), meta.clone()));
+            return Ok(meta);
         }
     }
 
@@ -203,13 +213,16 @@ pub async fn dota(cache: &SharedMeta) -> Result<DotaMeta, String> {
         roles: roles.into_iter().map(|(r, _)| r).collect(),
     };
 
+    if let Ok(v) = serde_json::to_value(&meta) {
+        crate::storage::write_cache("meta_dota", &v);
+    }
     cache.lock().unwrap().dota = Some((Instant::now(), meta.clone()));
     Ok(meta)
 }
 
 // ---------- Deadlock ----------
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetaDlHero {
     pub id: u32,
     pub name: String,
@@ -226,7 +239,7 @@ pub struct MetaDlHero {
     pub avg_damage: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetaDlItem {
     pub id: u64,
     pub name: String,
@@ -249,7 +262,7 @@ pub struct MetaDlItem {
     pub buy_minute: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeadlockMeta {
     pub matches: u64,
     pub heroes: Vec<MetaDlHero>,
@@ -263,6 +276,13 @@ pub async fn deadlock(cache: &SharedMeta, hero_cache: &crate::deadlock::SharedHe
             if at.elapsed() < TTL {
                 return Ok(meta.clone());
             }
+        }
+    }
+
+    if let Some(cached) = crate::storage::read_cache("meta_deadlock", TTL.as_secs()) {
+        if let Ok(meta) = serde_json::from_value::<DeadlockMeta>(cached) {
+            cache.lock().unwrap().deadlock = Some((Instant::now(), meta.clone()));
+            return Ok(meta);
         }
     }
 
@@ -313,6 +333,9 @@ pub async fn deadlock(cache: &SharedMeta, hero_cache: &crate::deadlock::SharedHe
     let items = deadlock_items(item_rows.unwrap_or(serde_json::Value::Null), &item_names);
 
     let meta = DeadlockMeta { matches, heroes, items };
+    if let Ok(v) = serde_json::to_value(&meta) {
+        crate::storage::write_cache("meta_deadlock", &v);
+    }
     cache.lock().unwrap().deadlock = Some((Instant::now(), meta.clone()));
     Ok(meta)
 }

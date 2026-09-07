@@ -207,7 +207,7 @@ function dlRenderMatches() {
 
   const list = DL.heroFilter ? DL.matches.filter((m) => m.heroName === DL.heroFilter) : DL.matches;
   if (!list.length) {
-    root.innerHTML = `<div class="empty-state">${DL.loading ? "Loading…" : "No matches found for this account."}</div>`;
+    root.innerHTML = `<div class="empty-state">${DL.loading || (!DL.loadedAt && !DL.error) ? "Loading…" : "No matches found for this account."}</div>`;
     return;
   }
 
@@ -257,7 +257,7 @@ function dlRenderHeroes() {
     return;
   }
   if (!DL.matches.length) {
-    root.innerHTML = `<div class="empty-state">${DL.loading ? "Loading…" : "No matches to break down yet."}</div>`;
+    root.innerHTML = `<div class="empty-state">${DL.loading || (!DL.loadedAt && !DL.error) ? "Loading…" : "No matches to break down yet."}</div>`;
     return;
   }
 

@@ -59,6 +59,14 @@ pub async fn get_json_public(path: &str) -> Result<serde_json::Value, String> {
     get_json(path).await
 }
 
+/// How many times a request is attempted before the error reaches the UI.
+///
+/// OpenDota is free and frequently slow, and a single cold request timing out
+/// was enough to surface a hard failure on the page — which is what made the
+/// app look broken for the first few seconds after every launch. Three
+/// attempts with a growing pause turns the common blip into a delay instead.
+const ATTEMPTS: u32 = 3;
+
 async fn get_json(path: &str) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
         .user_agent(UA)
@@ -66,24 +74,58 @@ async fn get_json(path: &str) -> Result<serde_json::Value, String> {
         .build()
         .map_err(|e| format!("HTTP client error: {e}"))?;
 
+    let mut last = String::new();
+    for attempt in 0..ATTEMPTS {
+        if attempt > 0 {
+            // 400ms, then 1.6s. Short enough not to be felt as a hang, long
+            // enough to clear a rate-limit window.
+            let backoff = 400u64 * 4u64.pow(attempt - 1);
+            tokio::time::sleep(Duration::from_millis(backoff)).await;
+        }
+
+        match attempt_get(&client, path).await {
+            Ok(v) => return Ok(v),
+            // Only worth retrying what is plausibly transient. A 404 or a
+            // malformed body will fail the same way three times over.
+            Err((msg, retryable)) => {
+                last = msg;
+                if !retryable {
+                    return Err(last);
+                }
+            }
+        }
+    }
+    Err(last)
+}
+
+/// Returns the error text plus whether retrying it could plausibly help.
+async fn attempt_get(
+    client: &reqwest::Client,
+    path: &str,
+) -> Result<serde_json::Value, (String, bool)> {
     let resp = client.get(format!("{API}{path}")).send().await.map_err(|e| {
         if e.is_timeout() {
-            "OpenDota timed out — try again in a moment.".to_string()
+            ("OpenDota timed out — try again in a moment.".to_string(), true)
         } else if e.is_connect() {
-            "Couldn't reach OpenDota — check your connection.".to_string()
+            ("Couldn't reach OpenDota — check your connection.".to_string(), true)
         } else {
-            format!("Request failed: {e}")
+            (format!("Request failed: {e}"), false)
         }
     })?;
 
     let status = resp.status();
     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err("OpenDota is rate-limiting right now — try again shortly.".to_string());
+        return Err(("OpenDota is rate-limiting right now — try again shortly.".to_string(), true));
+    }
+    if status.is_server_error() {
+        return Err((format!("OpenDota returned {}.", status.as_u16()), true));
     }
     if !status.is_success() {
-        return Err(format!("OpenDota returned {}.", status.as_u16()));
+        return Err((format!("OpenDota returned {}.", status.as_u16()), false));
     }
-    resp.json().await.map_err(|e| format!("Couldn't parse the OpenDota response: {e}"))
+    resp.json()
+        .await
+        .map_err(|e| (format!("Couldn't parse the OpenDota response: {e}"), false))
 }
 
 // ---------- Hero constants (cached) ----------
@@ -104,8 +146,12 @@ pub struct DotaHeroCache {
 
 pub type SharedDotaHeroes = Arc<Mutex<DotaHeroCache>>;
 
+/// Hero names and portrait slugs. These change when Valve adds a hero, so a
+/// day-old copy is fine and a network round trip on every launch is not.
 pub async fn heroes(cache: &SharedDotaHeroes) -> HashMap<u32, DotaHero> {
     const TTL: Duration = Duration::from_secs(60 * 60 * 24);
+    const TTL_SECS: u64 = 60 * 60 * 24;
+
     {
         let c = cache.lock().unwrap();
         if let Some(at) = c.fetched_at {
@@ -115,10 +161,33 @@ pub async fn heroes(cache: &SharedDotaHeroes) -> HashMap<u32, DotaHero> {
         }
     }
 
+    // Warm start: last launch's copy, if it is still young enough. Without
+    // this the 24-hour TTL above only ever applied within one run.
+    if let Some(cached) = crate::storage::read_cache("dota_heroes", TTL_SECS) {
+        let map = parse_heroes(&cached);
+        if !map.is_empty() {
+            let mut c = cache.lock().unwrap();
+            c.heroes = map.clone();
+            c.fetched_at = Some(Instant::now());
+            return map;
+        }
+    }
+
     let Ok(value) = get_json("/heroes").await else {
         return cache.lock().unwrap().heroes.clone();
     };
 
+    let map = parse_heroes(&value);
+    if !map.is_empty() {
+        crate::storage::write_cache("dota_heroes", &value);
+        let mut c = cache.lock().unwrap();
+        c.heroes = map.clone();
+        c.fetched_at = Some(Instant::now());
+    }
+    map
+}
+
+fn parse_heroes(value: &serde_json::Value) -> HashMap<u32, DotaHero> {
     let mut map = HashMap::new();
     if let Some(list) = value.as_array() {
         for h in list {
@@ -133,12 +202,6 @@ pub async fn heroes(cache: &SharedDotaHeroes) -> HashMap<u32, DotaHero> {
                 },
             );
         }
-    }
-
-    if !map.is_empty() {
-        let mut c = cache.lock().unwrap();
-        c.heroes = map.clone();
-        c.fetched_at = Some(Instant::now());
     }
     map
 }

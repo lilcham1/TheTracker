@@ -386,7 +386,11 @@ function dtRender() {
   }
 
   if (!DOTA.matches.length) {
-    root.innerHTML = `<div class="empty-state">${DOTA.loading ? "Loading matches…" : "No matches found for this account."}</div>`;
+    // Nothing fetched yet reads as loading, not as an empty account:
+    // dtRender runs once before dtLoad is called, so `loading` is still
+    // false on the first paint of every launch.
+    const settling = DOTA.loading || (!DOTA.loadedAt && !DOTA.error);
+    root.innerHTML = `<div class="empty-state">${settling ? "Loading matches…" : "No matches found for this account."}</div>`;
     return;
   }
 
