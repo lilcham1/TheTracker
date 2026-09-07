@@ -175,9 +175,23 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.15.1";
+const APP_VERSION = "0.16.0";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
+
+// Whether Dota is actually configured to talk to us. Fetched once at boot
+// and after any change, so the Live tab can explain itself instead of just
+// saying nothing has arrived.
+let GSI = { status: null, busy: false, error: null };
+
+async function refreshGsi() {
+  try {
+    GSI.status = await invoke("gsi_status");
+    GSI.error = null;
+  } catch (e) {
+    GSI.error = String(e);
+  }
+}
 
 async function steamDetect(onDone) {
   STEAM_DETECT.busy = true;
@@ -274,7 +288,8 @@ function renderLive() {
   const m = state.live && state.live.current;
 
   if (!m) {
-    root.innerHTML = `<div class="empty-state">Waiting for a match to start&hellip;<br/>Launch Dota 2 with GSI enabled to begin tracking.</div>`;
+    root.innerHTML = gsiWaitingHtml();
+    wireGsiSetup(root);
     return;
   }
 
@@ -1434,6 +1449,7 @@ async function boot() {
   state.deviceId = await invoke("device_identity").catch(() => null);
   state.auth = (await invoke("auth_status").catch(() => null)) || { signedIn: false, email: null };
   state.overlay.visible = await invoke("overlay_visible").catch(() => false);
+  await refreshGsi();
 
   // Both links are local file reads; the match data behind them is only
   // fetched when the relevant view is actually opened.
@@ -1471,4 +1487,175 @@ async function boot() {
   };
   pollDeadlockLive();
   setInterval(pollDeadlockLive, 45000);
+}
+
+// ---------- GSI setup ----------
+//
+// Dota only sends data when two things are true: a config file naming our
+// port sits in its gamestate_integration folder, and -gamestateintegration
+// is in the launch options. The app writes the config itself at startup, so
+// what is left to say here is whether that worked and whether the launch
+// option — which cannot be set safely while Steam is running — is present.
+
+function gsiWaitingHtml() {
+  const s = GSI.status;
+  if (!s) return `<div class="empty-state">Waiting for a match to start&hellip;</div>`;
+
+  // No Dota install anywhere, so nothing else on this page would mean much.
+  if (!s.cfgDirs.length) {
+    return `
+      <div class="empty-state">
+        <div class="empty-title">Dota 2 not found</div>
+        <div class="empty-sub">
+          Live tracking reads Valve's Game State Integration feed, which needs
+          Dota installed through Steam on this PC. Match History and Meta work
+          without it.
+        </div>
+      </div>`;
+  }
+
+  const needsFlag = s.launchOption === false;
+  const ready = s.installed && !needsFlag;
+
+  const rows = [
+    s.installed
+      ? gsiRow(true, "Config installed", `Dota will post match data to localhost:${s.port}.`)
+      : gsiRow(false, "Config missing", "Dota has nothing telling it where to send match data."),
+  ];
+
+  if (s.launchOption === true) {
+    rows.push(gsiRow(true, "Launch option set", "Steam already passes -gamestateintegration to Dota."));
+  } else if (needsFlag) {
+    rows.push(
+      gsiRow(
+        false,
+        "Launch option not set",
+        "Dota only loads the config when started with a flag. Use the button below, or set it once in Steam."
+      )
+    );
+  }
+
+  const steps = needsFlag
+    ? `
+      <div class="gsi-steps">
+        <div class="gsi-steps-title">Or set it once, and launch Dota however you like</div>
+        <ol>
+          <li>In Steam, right-click <b>Dota 2</b> and choose <b>Properties</b>.</li>
+          <li>Under <b>General</b>, find <b>Launch Options</b>.</li>
+          <li>Add this, keeping anything already there:</li>
+        </ol>
+        <div class="gsi-copy">
+          <code>-gamestateintegration</code>
+          <button class="chip" id="gsiCopy" type="button">Copy</button>
+        </div>
+        <p class="hint" style="margin-top:8px">
+          The app cannot set this for you: Steam keeps that file open and
+          rewrites it from memory when it closes, so anything written while
+          Steam is running would be discarded.
+        </p>
+      </div>`
+    : "";
+
+  const whatChanged = s.installed
+    ? `
+      <details class="gsi-details">
+        <summary>What the app changed</summary>
+        <p class="hint">
+          A config file was written so Dota knows where to send match data.
+          Removing it stops live tracking; match history and meta are
+          unaffected.
+        </p>
+        <div class="gsi-paths">${s.cfgDirs
+          .map((d) => `<code>${escapeHtml(d)}\\gamestate_integration\\gamestate_integration_thetracker.cfg</code>`)
+          .join("")}</div>
+        <button class="btn btn-secondary" id="gsiRemove" type="button">Remove config</button>
+      </details>`
+    : "";
+
+  return `
+    <div class="empty-state">
+      <div class="empty-title">${ready ? "Waiting for a match to start" : "One step left"}</div>
+      <div class="empty-sub">
+        ${
+          ready
+            ? "Everything is set up. Start a Dota match and this fills in."
+            : "Dota is installed, but it is not sending anything yet."
+        }
+      </div>
+
+      <div class="gsi-rows">${rows.join("")}</div>
+
+      <div class="row" style="justify-content:center;margin-top:16px;flex-wrap:wrap">
+        <button class="btn" id="gsiPlay" type="button" ${GSI.busy ? "disabled" : ""}>
+          ${GSI.busy ? "Starting…" : "Play Dota with tracking"}
+        </button>
+        ${s.installed ? "" : `<button class="btn btn-secondary" id="gsiInstall" type="button">Install config</button>`}
+      </div>
+      <p class="hint" style="margin-top:8px;max-width:64ch">
+        Starts Dota through Steam with the flag attached, so nothing has to be
+        configured. This applies to launches started from here.
+      </p>
+
+      ${steps}
+      ${GSI.error ? `<div class="note err" style="margin-top:12px">${escapeHtml(GSI.error)}</div>` : ""}
+      ${whatChanged}
+
+      <p class="hint" style="margin-top:14px;max-width:70ch">
+        Restart Dota after any change &mdash; it reads the config once, at launch.
+      </p>
+    </div>`;
+}
+
+function gsiRow(ok, title, detail) {
+  return `
+    <div class="gsi-row ${ok ? "ok" : "bad"}">
+      <span class="gsi-dot"></span>
+      <div>
+        <div class="gsi-title">${title}</div>
+        <div class="gsi-detail">${detail}</div>
+      </div>
+    </div>`;
+}
+
+function wireGsiSetup(root) {
+  // Every control here does the same shape of thing: disable, call, refresh
+  // the status, redraw. Sharing it means none of them can forget a step and
+  // leave the panel showing something stale.
+  const run = async (fn) => {
+    GSI.busy = true;
+    GSI.error = null;
+    renderLive();
+    try {
+      await fn();
+    } catch (e) {
+      GSI.error = String(e);
+    }
+    await refreshGsi();
+    GSI.busy = false;
+    renderLive();
+  };
+
+  const play = root.querySelector("#gsiPlay");
+  if (play) play.addEventListener("click", () => run(() => invoke("launch_dota")));
+
+  const install = root.querySelector("#gsiInstall");
+  if (install) install.addEventListener("click", () => run(() => invoke("gsi_install")));
+
+  const remove = root.querySelector("#gsiRemove");
+  if (remove) remove.addEventListener("click", () => run(() => invoke("gsi_remove")));
+
+  const copy = root.querySelector("#gsiCopy");
+  if (copy) {
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText("-gamestateintegration");
+        copy.textContent = "Copied";
+        setTimeout(() => (copy.textContent = "Copy"), 1600);
+      } catch (_) {
+        // The clipboard can be refused; the flag is on screen to select.
+        copy.textContent = "Select it above";
+        setTimeout(() => (copy.textContent = "Copy"), 2000);
+      }
+    });
+  }
 }

@@ -20,6 +20,7 @@ mod deadlock;
 mod dota_api;
 mod device_id;
 mod gsi;
+mod gsi_setup;
 mod heroes;
 mod meta;
 mod model;
@@ -530,9 +531,42 @@ async fn deadlock_meta(app_state: tauri::State<'_, AppState>) -> Result<meta::De
     meta::deadlock(&cache, &heroes).await
 }
 
+
+// ---------- GSI setup ----------
+
+#[tauri::command]
+fn gsi_status() -> gsi_setup::GsiStatus {
+    gsi_setup::status()
+}
+
+#[tauri::command]
+fn gsi_install() -> Result<Vec<String>, String> {
+    gsi_setup::install()
+}
+
+#[tauri::command]
+fn gsi_remove() -> Result<Vec<String>, String> {
+    gsi_setup::remove()
+}
+
+/// Starts Dota with the GSI flag, so nothing has to be configured in Steam.
+#[tauri::command]
+fn launch_dota() -> Result<(), String> {
+    gsi_setup::launch_dota()
+}
+
 fn main() {
     // Must run before anything reads history/profile files.
     storage::migrate_legacy_dir();
+
+    // Write Dota's GSI config if it is missing or stale. Asking players to
+    // copy a file by hand meant it simply never happened, and the Live tab
+    // sat empty with nothing explaining why.
+    if let Some(written) = gsi_setup::ensure_installed() {
+        for path in written {
+            eprintln!("GSI config installed: {path}");
+        }
+    }
 
     let tracker = Arc::new(Mutex::new(Tracker::new()));
     let server_error: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
@@ -604,6 +638,10 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_live_state,
+            gsi_status,
+            gsi_install,
+            gsi_remove,
+            launch_dota,
             set_tracking,
             mark_roshan_death,
             set_live_game_type,

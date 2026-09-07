@@ -36,7 +36,7 @@ pub struct SteamAccount {
 }
 
 #[cfg(windows)]
-fn steam_path() -> Option<std::path::PathBuf> {
+pub fn steam_path() -> Option<std::path::PathBuf> {
     use winreg::enums::HKEY_CURRENT_USER;
     use winreg::RegKey;
 
@@ -47,7 +47,7 @@ fn steam_path() -> Option<std::path::PathBuf> {
 }
 
 #[cfg(not(windows))]
-fn steam_path() -> Option<std::path::PathBuf> {
+pub fn steam_path() -> Option<std::path::PathBuf> {
     let home = dirs::home_dir()?;
     for candidate in [".steam/steam", ".local/share/Steam", "Library/Application Support/Steam"] {
         let p = home.join(candidate);

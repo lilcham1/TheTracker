@@ -464,3 +464,26 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 /* A hero portrait whose CDN image failed keeps its footprint so the row
    stays aligned, instead of collapsing to a broken-image glyph. */
 img.portrait-missing { background: linear-gradient(135deg, var(--surface-3), var(--surface-2)); border: 1px solid var(--line-soft); }
+
+/* GSI setup status on the Live tab. */
+.gsi-rows { display: flex; flex-direction: column; gap: 10px; margin: 18px auto 0; max-width: 56ch; text-align: left; }
+.gsi-row { display: grid; grid-template-columns: 10px minmax(0,1fr); align-items: start; gap: 12px; padding: 11px 14px; border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--surface); }
+.gsi-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--faint); }
+.gsi-row.ok .gsi-dot { background: var(--good); }
+.gsi-row.bad .gsi-dot { background: var(--warn); }
+.gsi-title { font-weight: 650; }
+.gsi-detail { margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+/* Launch-option instructions and the disclosure of what was written. */
+.gsi-steps { max-width: 56ch; margin: 18px auto 0; padding: 14px 16px; border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--surface); text-align: left; }
+.gsi-steps-title { font-weight: 650; margin-bottom: 8px; }
+.gsi-steps ol { margin: 0; padding-left: 20px; color: var(--text-2); font-size: 12.5px; line-height: 1.7; }
+.gsi-copy { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.gsi-copy code { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--accent); user-select: all; }
+
+.gsi-details { max-width: 56ch; margin: 16px auto 0; text-align: left; }
+.gsi-details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.gsi-details summary:hover { color: var(--text-2); }
+.gsi-details > p { margin: 10px 0; }
+.gsi-paths { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.gsi-paths code { padding: 7px 10px; border: 1px solid var(--line-soft); border-radius: 5px; background: var(--bg); font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--muted); word-break: break-all; user-select: all; }
