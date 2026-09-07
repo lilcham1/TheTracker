@@ -159,8 +159,12 @@ function renderDotaMeta() {
         <div class="home-meta">${pool.length} shown</div>
       </div>
 
+      <p class="hint" style="margin:0 0 8px">
+        Filter by <b>hero tag</b> &mdash; Valve's own labels for what a hero
+        does. These are not positions one through five.
+      </p>
       <div class="chip-row" style="margin-bottom:10px">
-        <button class="chip ${role === "all" ? "selected" : ""}" data-meta-role="all" type="button">All roles</button>
+        <button class="chip ${role === "all" ? "selected" : ""}" data-meta-role="all" type="button">All heroes</button>
         ${d.roles
           .map(
             (r) =>
@@ -198,9 +202,12 @@ function renderDotaMeta() {
         )
         .join("")}
       <p class="hint" style="margin-top:12px;max-width:74ch">
-        Roles are Valve's own tags, not positions one through five — OpenDota
-        does not publish position data, and guessing it would be worse than
-        saying so. <b>Divine+</b> is the highest rank bracket with a sample.
+        <b>Why no Carry / Mid / Offlane / Support / Hard Support?</b>
+        OpenDota does not publish hero stats by position, and the lane data it
+        does expose cannot tell position 4 from position 5. Splitting these
+        into five columns would mean inventing the split, so the tags above
+        are shown for what they are instead. <b>Divine+</b> is the highest
+        rank bracket with a sample.
       </p>
     </section>`;
 

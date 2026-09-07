@@ -3,8 +3,8 @@
 //! # Inspiration, and the line
 //!
 //! The shape of these pages is borrowed from dota2protracker and Statlocker
-//! — strongest heroes grouped by role, a rating you can sort by, items that
-//! are trending, a sense of the patch. That framing is worth learning from.
+//! — strongest heroes, a rating you can sort by, items that are trending, a
+//! sense of the patch. That framing is worth learning from.
 //!
 //! None of the *data* comes from either site. Their numbers are collected
 //! and rated by them, and that collection is the product; D2PT's rating in
