@@ -105,13 +105,13 @@ function renderDotaMeta() {
 
   const role = META.dota.role;
   const pool = role === "all" ? d.heroes : d.heroes.filter((h) => h.roles.includes(role));
-  const rows = metaSorted(pool, META.dota.sort).slice(0, 40);
+  const rows = metaSorted(pool, META.dota.sort);
 
   // Movers are taken from heroes with a real sample, so a hero picked twice
   // last week cannot top the list on a fluke.
   const solid = d.heroes.filter((h) => h.pickRate >= 1.5);
-  const rising = metaSorted(solid, "trend").slice(0, 5);
-  const falling = [...solid].sort((a, b) => a.trend - b.trend).slice(0, 5);
+  const rising = metaSorted(solid.filter(h => h.trend >= 0.35), "trend").slice(0, 3);
+  const falling = [...solid].filter(h => h.trend <= -0.35).sort((a, b) => a.trend - b.trend).slice(0, 3);
   const contested = [...d.heroes].sort((a, b) => b.pickRate - a.pickRate).slice(0, 5);
 
   const moverRow = (h) => `
@@ -125,7 +125,7 @@ function renderDotaMeta() {
   root.innerHTML = `
     <section class="home-section" style="padding-top:0">
       <div class="home-head">
-        <h2 class="home-title">The meta right now</h2>
+        <h2 class="home-title">Meta report</h2>
         <div class="home-meta">public matches · ${metaUpdatedAt(META.dota.loadedAt)}</div>
         <button class="link-btn" data-meta-retry type="button">${META.dota.loading ? "Refreshing…" : "Refresh"}</button>
       </div>
@@ -139,25 +139,23 @@ function renderDotaMeta() {
         },
       ])}
       <p class="hint" style="margin-top:12px;max-width:74ch">
-        Picks and wins across public matches, from OpenDota. Trend compares
-        the recent half of the sample window against the earlier half, so a
-        hero has to move for several days before it shows.
+        Source: OpenDota public matches. Trend is the win-rate change between the recent and earlier halves of the sample.
       </p>
     </section>
 
     <section class="home-section">
-      <div class="home-head"><h2 class="home-title">On the way up</h2><div class="home-meta">win rate, last few days</div></div>
+      <div class="home-head"><h2 class="home-title">Rising heroes</h2><div class="home-meta">Win-rate change</div></div>
       <div class="meta-movers">${rising.map(moverRow).join("")}</div>
     </section>
 
     <section class="home-section">
-      <div class="home-head"><h2 class="home-title">On the way down</h2><div class="home-meta">win rate, last few days</div></div>
+      <div class="home-head"><h2 class="home-title">Falling heroes</h2><div class="home-meta">Win-rate change</div></div>
       <div class="meta-movers">${falling.map(moverRow).join("")}</div>
     </section>
 
     <section class="home-section">
       <div class="home-head">
-        <h2 class="home-title">Every hero</h2>
+        <h2 class="home-title">Hero rankings</h2>
         <div class="home-meta">${pool.length} shown</div>
       </div>
 
@@ -280,7 +278,7 @@ function renderDeadlockMeta() {
   root.innerHTML = `
     <section class="home-section" style="padding-top:0">
       <div class="home-head">
-        <h2 class="home-title">The meta right now</h2>
+        <h2 class="home-title">Meta report</h2>
         <div class="home-meta">ranked matches · ${metaUpdatedAt(META.dl.loadedAt)}</div>
         <button class="link-btn" data-meta-retry type="button">${META.dl.loading ? "Refreshing…" : "Refresh"}</button>
       </div>
@@ -294,8 +292,7 @@ function renderDeadlockMeta() {
         },
       ])}
       <p class="hint" style="margin-top:12px;max-width:74ch">
-        From the community Deadlock API, which is where every Deadlock number
-        in this app comes from — Valve publishes no feed of its own.
+        Source: community Deadlock API. Ranked match statistics.
       </p>
     </section>
 
@@ -336,13 +333,8 @@ function renderDeadlockMeta() {
                )
                .join("")}
              <p class="hint" style="margin-top:12px;max-width:74ch">
-               <b>Bought</b> is the average minute the item goes down, which the
-               Deadlock API publishes and the Dota side has no equivalent for.
-               <b>Matches</b> is a raw count, not a percentage: the item
-               endpoint samples a wider window than the hero one, so there is
-               no honest figure to divide it by. Only the common items are
-               listed &mdash; anything under an eighth as popular as the
-               busiest item is left out.
+               <b>Bought</b>: average purchase time. <b>Matches</b>: sampled games containing the item.
+               Includes items with at least 12% of the most-purchased item's sample count.
              </p>`
           : `<div class="meta-head dl">
                <span></span><span>Hero</span><span class="num">Win rate</span><span></span>

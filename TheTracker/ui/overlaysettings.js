@@ -48,19 +48,12 @@ function renderOverlaySettings() {
         <button class="link-btn" id="ovToggle" type="button">${open ? "Close overlay" : "Open overlay"}</button>
       </div>
       <p class="hint" style="max-width:70ch">
-        A separate always-on-top window that floats over the game. It is an
-        ordinary desktop window &mdash; nothing is injected into either game,
-        no game memory is read, and it only ever draws information you
-        already have.
+        Dota 2 event reminders, displayed over your game.
       </p>
       <p class="hint" style="max-width:70ch;margin-top:8px">
-        It draws one thing: a reminder in the <b>last ${o.leadSeconds ?? 5} seconds</b>
-        before an event. At every other moment &mdash; between matches,
-        during the draft, and most of the match itself &mdash; the window is
-        empty, so expect to see nothing until something is about to happen.
-        To place it, use <b>Unlock to move</b> below; a single marker stands
-        in while it is unlocked, since an empty transparent window cannot be
-        dragged anywhere you can see.
+        Reminders appear <b>${o.leadSeconds ?? 5} seconds before each event</b>
+        during an active match. Use <b>Unlock to move</b> to position the preview marker,
+        then lock it before playing.
       </p>
 
       <label class="switch-row" style="margin-top:10px">
@@ -112,9 +105,7 @@ function renderOverlaySettings() {
               .join("")}
           </select>
           <p class="field-hint" style="margin-top:6px">
-            Pick the screen you play on. Following the app window puts the
-            overlay wherever the tracker is, which is the wrong screen if you
-            keep it on a second monitor.
+            Choose your game monitor if the tracker is on another screen.
           </p>
         </div>
 
@@ -147,10 +138,8 @@ function renderOverlaySettings() {
         )
         .join("")}
       <p class="hint" style="margin-top:10px;max-width:72ch">
-        These are the timers every established Dota overlay shows, and all of
-        them are arithmetic on the match clock you can already see. Valve
-        ships Game State Integration specifically so tools can read this, and
-        it only ever exposes your own state &mdash; never an opponent's.
+        Reminders use the match clock from Dota 2 Game State Integration.
+        Neutral camp pull times vary by camp; :53 is a general reminder.
       </p>
     </section>
 

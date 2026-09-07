@@ -188,7 +188,15 @@ function dotaOverviewBodyHtml() {
       </div>`;
   }
 
-  const s = DOTA.summary || {};
+  const totals = DOTA.matches.reduce((a, m) => ({
+    wins: a.wins + Number(m.won), kills: a.kills + (m.kills || 0),
+    deaths: a.deaths + (m.deaths || 0), assists: a.assists + (m.assists || 0),
+    gpm: a.gpm + (m.goldPerMin || 0), xpm: a.xpm + (m.xpPerMin || 0),
+  }), { wins: 0, kills: 0, deaths: 0, assists: 0, gpm: 0, xpm: 0 });
+  const count = DOTA.matches.length;
+  const s = DOTA.summary || { ...totals, matches: count, losses: count - totals.wins,
+    winRate: totals.wins / count * 100, kda: (totals.kills + totals.assists) / Math.max(1, totals.deaths),
+    avgGpm: Math.round(totals.gpm / count), avgXpm: Math.round(totals.xpm / count) };
   const recent = DOTA.matches;
   const streak = streakOf(recent);
   const today = todayRecord(recent, (m) => m.startTime, (m) => m.won);
@@ -219,7 +227,7 @@ function dotaOverviewBodyHtml() {
     })}
 
     ${statsRowHtml([
-      { label: "Average KDA", value: (s.kda ?? 0).toFixed(2), sub: `${(s.kills / Math.max(1, s.matches)).toFixed(1)} / ${(s.deaths / Math.max(1, s.matches)).toFixed(1)} / ${(s.assists / Math.max(1, s.matches)).toFixed(1)}` },
+      { label: "Average KDA", value: (s.kda ?? 0).toFixed(2), sub: `${((s.kills ?? totals.kills) / Math.max(1, s.matches ?? count)).toFixed(1)} / ${((s.deaths ?? totals.deaths) / Math.max(1, s.matches ?? count)).toFixed(1)} / ${((s.assists ?? totals.assists) / Math.max(1, s.matches ?? count)).toFixed(1)}` },
       { label: "Gold per minute", value: s.avgGpm ?? 0, sub: `${s.avgXpm ?? 0} XPM` },
       {
         label: today.played ? "Today" : "No games today",

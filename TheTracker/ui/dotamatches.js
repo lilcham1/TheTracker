@@ -230,7 +230,7 @@ function dtRowHtml(m) {
 
 function dtTableHtml(list) {
   return `
-    <table class="dtable">
+    <div class="table-scroll" tabindex="0" aria-label="Match history"><table class="dtable">
       <thead>
         <tr>
           ${DT_COLUMNS.map(
@@ -242,7 +242,7 @@ function dtTableHtml(list) {
         </tr>
       </thead>
       <tbody>${dtSorted(list).map(dtRowHtml).join("")}</tbody>
-    </table>`;
+    </table></div>`;
 }
 
 function dtNotLinkedHtml() {

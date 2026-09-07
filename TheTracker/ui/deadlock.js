@@ -213,7 +213,7 @@ function dlRenderMatches() {
 
   root.innerHTML = `
     ${DL.heroFilter ? `<div class="chip-row"><button class="chip selected" data-dl-clearfilter>${escapeHtml(DL.heroFilter)} ✕</button></div>` : ""}
-    <table class="dtable">
+    <div class="table-scroll" tabindex="0" aria-label="Match history"><table class="dtable">
       <thead>
         <tr>
           ${DL_COLUMNS.map(
@@ -225,7 +225,7 @@ function dlRenderMatches() {
         </tr>
       </thead>
       <tbody>${dlSorted(list).map(dlRowHtml).join("")}</tbody>
-    </table>`;
+    </table></div>`;
 
   root.querySelectorAll("[data-dl-toggle]").forEach((el) =>
     el.addEventListener("click", () => dlToggleMatch(Number(el.dataset.dlToggle)))
