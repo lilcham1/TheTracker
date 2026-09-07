@@ -177,13 +177,29 @@ function dotaOverviewBodyHtml() {
         <div class="skel-row skeleton"></div>
         <div class="skel-row skeleton"></div>`;
     }
+    // A failed request and a genuinely empty result are not the same thing.
+    // Collapsing them meant an OpenDota timeout was reported as "no matches
+    // found, your profile may be private" — telling the player to change a
+    // setting that was never the problem.
+    if (DOTA.error) {
+      return `
+        <div class="empty-state">
+          <div class="empty-ico">${icon("matches", 20)}</div>
+          <div class="empty-title">Couldn't reach OpenDota</div>
+          <div class="empty-sub">${escapeHtml(DOTA.error)}</div>
+          <div class="row" style="justify-content:center;margin-top:14px">
+            <button class="btn btn-secondary" data-retry-dota type="button">Try again</button>
+          </div>
+        </div>`;
+    }
     return `
       <div class="empty-state">
         <div class="empty-ico">${icon("matches", 20)}</div>
         <div class="empty-title">No matches found</div>
         <div class="empty-sub">
-          Your Dota profile may be private. In Dota 2: Settings &rsaquo; Options
-          &rsaquo; Advanced Options &rsaquo; <b>Expose Public Match Data</b>.
+          OpenDota answered, but has no games for this account. If you have
+          played recently, check Dota 2: Settings &rsaquo; Options &rsaquo;
+          Advanced Options &rsaquo; <b>Expose Public Match Data</b>.
         </div>
       </div>`;
   }
@@ -292,6 +308,15 @@ function renderDotaOverview() {
   );
   const link = root.querySelector("[data-detect]");
   if (link) link.addEventListener("click", () => setView("dotamatches"));
+
+  const retry = root.querySelector("[data-retry-dota]");
+  if (retry) {
+    retry.addEventListener("click", async () => {
+      retry.disabled = true;
+      await dtLoad(true);
+      renderDotaOverview();
+    });
+  }
 }
 
 // ---------- Deadlock ----------
@@ -304,13 +329,26 @@ function deadlockOverviewBodyHtml() {
         <div class="skel-line sm skeleton"></div>
         <div class="skel-row skeleton"></div>`;
     }
+    // Same distinction as the Dota side: a failed call is not an empty one.
+    if (DL.error) {
+      return `
+        <div class="empty-state">
+          <div class="empty-ico">${icon("matches", 20)}</div>
+          <div class="empty-title">Couldn't reach the Deadlock API</div>
+          <div class="empty-sub">${escapeHtml(DL.error)}</div>
+          <div class="row" style="justify-content:center;margin-top:14px">
+            <button class="btn btn-secondary" data-retry-dl type="button">Try again</button>
+          </div>
+        </div>`;
+    }
     return `
       <div class="empty-state">
         <div class="empty-ico">${icon("matches", 20)}</div>
         <div class="empty-title">No matches found</div>
         <div class="empty-sub">
-          Deadlock data comes from a community API that Valve has been rate
-          limiting, so recent games can take a while to appear.
+          The API answered, but has no games for this account. Deadlock data
+          comes from a community API that Valve has been rate limiting, so
+          recent games can take a while to appear.
         </div>
       </div>`;
   }
@@ -418,6 +456,15 @@ function renderDeadlockOverview() {
   root.querySelectorAll("[data-goto]").forEach((el) =>
     el.addEventListener("click", () => setView(el.dataset.goto))
   );
+
+  const retry = root.querySelector("[data-retry-dl]");
+  if (retry) {
+    retry.addEventListener("click", async () => {
+      retry.disabled = true;
+      await dlLoad(true);
+      renderDeadlockOverview();
+    });
+  }
 }
 
 // ---------- Loaders ----------
