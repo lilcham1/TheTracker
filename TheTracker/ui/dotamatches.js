@@ -15,7 +15,11 @@ const DOTA = {
   open: new Set(),
   details: new Map(), // matchId -> scoreboard, fetched on first expand
   detailLoading: new Set(),
-  filter: "all", // all | ranked | all_pick | turbo | other
+  // Two independent axes, because a match is both at once. `filter` is the
+  // mode key (all | all_pick | turbo | random_draft | …) and `queue` is
+  // whether it came off the ranked ladder.
+  filter: "all",
+  queue: "all", // all | ranked | unranked
   sortKey: "startTime",
   sortDir: "desc",
   results: [],
@@ -209,7 +213,7 @@ function dtRowHtml(m) {
           ${img ? `<img src="${img}" alt="" />` : ""}
           <div style="min-width:0">
             <div class="cell-hero-name">${escapeHtml(m.heroName)}</div>
-            <div class="cell-sub">${escapeHtml(m.modeName)}${m.partySize && m.partySize > 1 ? ` · party ${m.partySize}` : ""}</div>
+            <div class="cell-sub">${escapeHtml(m.modeName)} · ${escapeHtml(m.lobbyName)}${m.partySize && m.partySize > 1 ? ` · party ${m.partySize}` : ""}</div>
           </div>
         </div>
       </td>
@@ -386,35 +390,65 @@ function dtRender() {
     return;
   }
 
-  const shown =
-    DOTA.filter === "all" ? DOTA.matches : DOTA.matches.filter((m) => m.gameType === DOTA.filter);
+  // Mode and queue are separate facts about a match, so they get separate
+  // filters. The old single row mixed them — picking "Ranked" hid every
+  // ranked Turbo game, and picking "Turbo" hid whether it was ranked — which
+  // is why the counts never matched what you actually played.
+  const shown = DOTA.matches.filter(
+    (m) =>
+      (DOTA.filter === "all" || m.modeKey === DOTA.filter) &&
+      (DOTA.queue === "all" || (DOTA.queue === "ranked") === !!m.ranked)
+  );
 
-  const filters = [
-    ["all", "All"],
-    ["ranked", "Ranked"],
-    ["all_pick", "All Pick"],
-    ["turbo", "Turbo"],
-    ["other", "Other"],
+  // Only offer modes that appear in the loaded matches, so the row does not
+  // list Ability Draft to someone who has never played it.
+  const present = new Map();
+  for (const m of DOTA.matches) if (m.modeKey) present.set(m.modeKey, m.modeName);
+  const modes = [["all", "All modes"], ...[...present].sort((a, b) => a[1].localeCompare(b[1]))];
+
+  const rankedCount = DOTA.matches.filter((m) => m.ranked).length;
+  const queues = [
+    ["all", `All queues (${DOTA.matches.length})`],
+    ["ranked", `Ranked (${rankedCount})`],
+    ["unranked", `Unranked (${DOTA.matches.length - rankedCount})`],
   ];
 
   root.innerHTML = `
     ${dtStatsHtml()}
     <div class="section-head">
       <div class="chip-row">
-        ${filters
+        ${modes
           .map(
             ([id, label]) =>
-              `<button class="chip ${DOTA.filter === id ? "selected" : ""}" data-dt-filter="${id}">${label}</button>`
+              `<button class="chip ${DOTA.filter === id ? "selected" : ""}" data-dt-filter="${escapeHtml(id)}">${escapeHtml(label)}</button>`
           )
           .join("")}
       </div>
       <button class="chip" id="dtRefresh" type="button">${DOTA.loading ? "Refreshing…" : "Refresh"}</button>
     </div>
-    ${shown.length ? dtTableHtml(shown) : `<div class="empty-state">No ${DOTA.filter} matches in the last ${DOTA.matches.length}.</div>`}`;
+    <div class="chip-row" style="margin-bottom:12px">
+      ${queues
+        .map(
+          ([id, label]) =>
+            `<button class="chip ${DOTA.queue === id ? "selected" : ""}" data-dt-queue="${id}">${label}</button>`
+        )
+        .join("")}
+    </div>
+    ${
+      shown.length
+        ? dtTableHtml(shown)
+        : `<div class="empty-state">Nothing matches that combination in the last ${DOTA.matches.length} games.</div>`
+    }`;
 
   root.querySelectorAll("[data-dt-filter]").forEach((el) =>
     el.addEventListener("click", () => {
       DOTA.filter = el.dataset.dtFilter;
+      dtRender();
+    })
+  );
+  root.querySelectorAll("[data-dt-queue]").forEach((el) =>
+    el.addEventListener("click", () => {
+      DOTA.queue = el.dataset.dtQueue;
       dtRender();
     })
   );

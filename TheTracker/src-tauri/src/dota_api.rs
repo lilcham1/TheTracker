@@ -145,14 +145,22 @@ pub async fn heroes(cache: &SharedDotaHeroes) -> HashMap<u32, DotaHero> {
 
 // ---------- Game type classification ----------
 
-/// Maps OpenDota's lobby/mode ids onto the four buckets the app compares
-/// against each other. Verified against OpenDota's own constants:
-/// lobby_type 7 = ranked, game_mode 23 = turbo, 22 = all draft (the ranked
-/// all-pick mode), 1 = all pick.
+/// Mode and queue are two independent facts about a match, and collapsing
+/// them into one bucket is why filtering was wrong.
 ///
-/// Turbo is checked before ranked on purpose — a ranked turbo game is still
-/// a turbo game, and comparing its last-hit counts against normal ranked
-/// games would be meaningless.
+/// `game_mode` says how heroes get picked — All Pick, Turbo, Random Draft,
+/// Ability Draft. `lobby_type` says which queue it came from — Ranked or
+/// unranked. A game is both at once: Ranked Turbo is a real thing, so is
+/// unranked All Pick. The old classifier forced a single answer in priority
+/// order, so a ranked All Pick game came back "ranked" with the mode thrown
+/// away, and a ranked Turbo came back "turbo" with the queue thrown away.
+///
+/// Both are now kept, and the UI filters on each axis separately.
+///
+/// `classify` stays because history.json, the leaderboard's type filter and
+/// the cloud rows are all keyed on it, and rewriting stored matches to a new
+/// scheme would lose the types the player set by hand. It is a comparison
+/// bucket, not a description of the match.
 pub fn classify(game_mode: u32, lobby_type: u32) -> &'static str {
     match (game_mode, lobby_type) {
         (23, _) => "turbo",
@@ -162,35 +170,85 @@ pub fn classify(game_mode: u32, lobby_type: u32) -> &'static str {
     }
 }
 
+/// Stable key for the mode filter. Modes 1 and 22 are both "All Pick" to a
+/// player — 22 is `all_draft`, the mode the ranked All Pick queue actually
+/// runs — so they share a key rather than splitting the filter in two.
+pub fn game_mode_key(id: u32) -> &'static str {
+    match id {
+        1 | 22 => "all_pick",
+        2 => "captains_mode",
+        3 => "random_draft",
+        4 => "single_draft",
+        5 => "all_random",
+        12 => "least_played",
+        16 => "captains_draft",
+        17 => "balanced_draft",
+        18 => "ability_draft",
+        20 => "ardm",
+        21 => "1v1_mid",
+        23 => "turbo",
+        24 => "mutation",
+        _ => "other",
+    }
+}
+
+/// Names taken from OpenDota's `constants/game_mode` table rather than
+/// memory. Everything it lists is here, so a match stops reporting
+/// "Unknown Mode" for a mode that has a perfectly good name.
 pub fn game_mode_name(id: u32) -> &'static str {
     match id {
-        1 => "All Pick",
+        1 | 22 => "All Pick",
         2 => "Captains Mode",
         3 => "Random Draft",
         4 => "Single Draft",
         5 => "All Random",
+        6 => "Intro",
+        7 => "Diretide",
+        8 => "Reverse Captains Mode",
+        9 => "Greeviling",
+        10 => "Tutorial",
+        11 => "Mid Only",
         12 => "Least Played",
+        13 => "Limited Heroes",
+        14 => "Compendium Matchmaking",
+        15 => "Custom Game",
         16 => "Captains Draft",
         17 => "Balanced Draft",
         18 => "Ability Draft",
+        19 => "Event",
         20 => "All Random Deathmatch",
         21 => "1v1 Mid",
-        22 => "All Pick",
         23 => "Turbo",
         24 => "Mutation",
+        25 => "Coaches Challenge",
         _ => "Unknown Mode",
     }
 }
 
+/// True only for the matchmaking queues that actually affect rank: ranked
+/// solo, ranked team, and plain ranked. Battle Cup and tournaments are
+/// competitive but are not the ranked ladder, so they are not folded in.
+pub fn is_ranked_lobby(lobby_type: u32) -> bool {
+    matches!(lobby_type, 5 | 6 | 7)
+}
+
+/// Also from OpenDota's `constants/lobby_type`.
 pub fn lobby_type_name(id: u32) -> &'static str {
     match id {
         0 => "Unranked",
         1 => "Practice",
         2 => "Tournament",
+        3 => "Tutorial",
         4 => "Bots",
         5 | 6 | 7 => "Ranked",
         8 => "1v1 Mid",
         9 => "Battle Cup",
+        10 => "Local Bots",
+        11 => "Spectator",
+        12 => "Event",
+        13 => "Gauntlet",
+        14 => "New Player",
+        15 => "Featured",
         _ => "Other",
     }
 }
@@ -232,10 +290,15 @@ pub struct DotaApiMatch {
     pub hero_healing: u64,
     #[serde(rename = "gameType")]
     pub game_type: String,
+    /// Stable key for the mode filter, independent of the queue.
+    #[serde(rename = "modeKey")]
+    pub mode_key: String,
     #[serde(rename = "modeName")]
     pub mode_name: String,
     #[serde(rename = "lobbyName")]
     pub lobby_name: String,
+    /// Whether this came from the ranked ladder, independent of the mode.
+    pub ranked: bool,
     #[serde(rename = "partySize")]
     pub party_size: Option<u32>,
     pub abandoned: bool,
@@ -281,8 +344,10 @@ fn parse_match(m: &serde_json::Value, heroes: &HashMap<u32, DotaHero>) -> Option
         tower_damage: m.get("tower_damage").and_then(|v| v.as_u64()).unwrap_or(0),
         hero_healing: m.get("hero_healing").and_then(|v| v.as_u64()).unwrap_or(0),
         game_type: classify(game_mode, lobby_type).to_string(),
+        mode_key: game_mode_key(game_mode).to_string(),
         mode_name: game_mode_name(game_mode).to_string(),
         lobby_name: lobby_type_name(lobby_type).to_string(),
+        ranked: is_ranked_lobby(lobby_type),
         party_size: m.get("party_size").and_then(|v| v.as_u64()).map(|p| p as u32),
         abandoned: m.get("leaver_status").and_then(|v| v.as_u64()).unwrap_or(0) > 1,
     })
@@ -630,5 +695,47 @@ mod tests {
                 "classify({mode},{lobby}) produced {t}, which the UI has no filter for"
             );
         }
+    }
+
+    #[test]
+    fn mode_and_queue_are_independent() {
+        // The whole point of splitting them. A ranked Turbo game is both
+        // ranked and Turbo; the old single bucket could only say one.
+        assert_eq!(game_mode_key(23), "turbo");
+        assert!(is_ranked_lobby(7));
+
+        // Same mode, different queues.
+        assert_eq!(game_mode_key(22), "all_pick");
+        assert!(is_ranked_lobby(7));
+        assert!(!is_ranked_lobby(0));
+
+        // Modes 1 and 22 are both All Pick to a player: 22 is `all_draft`,
+        // which is what the ranked All Pick queue actually runs. Splitting
+        // them would put a player's games in two filters for no reason.
+        assert_eq!(game_mode_key(1), game_mode_key(22));
+        assert_eq!(game_mode_name(1), game_mode_name(22));
+    }
+
+    #[test]
+    fn only_the_ranked_ladder_counts_as_ranked() {
+        // Battle Cup and tournaments are competitive but are not the ranked
+        // ladder, and folding them in would inflate a ranked win rate.
+        for ranked in [5, 6, 7] {
+            assert!(is_ranked_lobby(ranked), "lobby {ranked} is a ranked queue");
+        }
+        for other in [0, 1, 2, 4, 8, 9, 12, 14] {
+            assert!(!is_ranked_lobby(other), "lobby {other} is not the ranked ladder");
+        }
+    }
+
+    #[test]
+    fn known_modes_have_names() {
+        // Every id OpenDota's constants table lists should resolve. The old
+        // table stopped at a handful and everything else read "Unknown Mode"
+        // even though it had a perfectly good name.
+        for id in [1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25] {
+            assert_ne!(game_mode_name(id), "Unknown Mode", "mode {id} should have a name");
+        }
+        assert_eq!(game_mode_name(999), "Unknown Mode");
     }
 }
