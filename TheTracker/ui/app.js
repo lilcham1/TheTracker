@@ -175,7 +175,7 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.14.0";
+const APP_VERSION = "0.14.1";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 
@@ -201,13 +201,13 @@ function steamDetectHtml() {
   const rows = STEAM_DETECT.accounts
     .map(
       (a) => `
-      <div class="result-row" data-steam-pick="${a.accountId}" data-steam-name="${escapeHtml(a.personaname || "")}">
+      <button type="button" class="result-row" data-steam-pick="${a.accountId}" data-steam-name="${escapeHtml(a.personaname || "")}">
         <div class="grow">
           <div class="result-name">${escapeHtml(a.personaname || `Account ${a.accountId}`)}</div>
           <div class="result-id">${a.accountId} · ${escapeHtml(a.source)}</div>
         </div>
-        <span class="badge badge-brand">Use this</span>
-      </div>`
+        <span class="badge badge-brand">Connect</span>
+      </button>`
     )
     .join("");
 
@@ -229,9 +229,16 @@ function wireSteamDetect(root, rerender, onPick) {
   if (btn) btn.addEventListener("click", () => steamDetect(rerender));
 
   root.querySelectorAll("[data-steam-pick]").forEach((el) =>
-    el.addEventListener("click", () =>
-      onPick(Number(el.dataset.steamPick), el.dataset.steamName || `Account ${el.dataset.steamPick}`)
-    )
+    el.addEventListener("click", async () => {
+      el.disabled = true;
+      try {
+        STEAM_DETECT.error = null;
+        await onPick(Number(el.dataset.steamPick), el.dataset.steamName || `Account ${el.dataset.steamPick}`);
+      } catch (e) {
+        STEAM_DETECT.error = `Couldn't connect this Steam account: ${String(e)}`;
+        rerender();
+      } finally { el.disabled = false; }
+    })
   );
 }
 
@@ -809,8 +816,11 @@ function wireAccountCard(root) {
   if (passEl) passEl.addEventListener("input", (e) => (state.authForm.password = e.target.value));
 
   const submit = async (flow) => {
-    const email = state.authForm.email.trim();
-    const password = state.authForm.password;
+    if (state.authForm.busy) return;
+    const email = (root.querySelector("#authEmail")?.value || "").trim();
+    const password = root.querySelector("#authPassword")?.value || "";
+    state.authForm.email = email;
+    state.authForm.password = password;
     if (!email || !password) {
       state.authForm.error = "Enter an email and password.";
       renderAccounts();
@@ -823,12 +833,13 @@ function wireAccountCard(root) {
       state.auth = await invoke("sign_in", { email, password, flow });
       state.authForm = { email: "", password: "", error: null, busy: false };
       // Publish anything that was waiting on an account.
-      await invoke("sync_all");
+      await invoke("sync_all").catch(() => {});
     } catch (e) {
       state.authForm.busy = false;
       state.authForm.error = String(e);
     }
     renderAccounts();
+    renderUserChip();
     refreshSyncStatus();
   };
 
@@ -836,6 +847,9 @@ function wireAccountCard(root) {
   const upBtn = root.querySelector("#signUpBtn");
   if (inBtn) inBtn.addEventListener("click", () => submit("signIn"));
   if (upBtn) upBtn.addEventListener("click", () => submit("signUp"));
+  [emailEl, passEl].filter(Boolean).forEach(el => el.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); submit("signIn"); }
+  }));
 
   const outBtn = root.querySelector("#signOutBtn");
   if (outBtn)
@@ -1080,6 +1094,7 @@ function refreshLive() {
 
     const trackBtn = document.getElementById("trackingToggle");
     trackBtn.classList.toggle("on", live.trackingEnabled);
+    trackBtn.setAttribute("aria-pressed", String(!!live.trackingEnabled));
     trackBtn.classList.toggle("off", !live.trackingEnabled);
     trackBtn.querySelector(".label").textContent = live.trackingEnabled ? "Tracking" : "Paused";
 
@@ -1166,6 +1181,7 @@ function renderOverlayToggle() {
   const btn = document.getElementById("overlayBtn");
   if (!btn) return;
   btn.classList.toggle("on", state.overlay.visible);
+  btn.setAttribute("aria-pressed", String(!!state.overlay.visible));
   btn.querySelector(".ghost-label").textContent = state.overlay.visible ? "Overlay on" : "Overlay";
 }
 
@@ -1199,9 +1215,18 @@ function paintIcons(root = document) {
 
 function wireShell() {
   document.getElementById("refreshViewBtn")?.addEventListener("click", refreshCurrentView);
-  document.getElementById("trackingToggle").addEventListener("click", () => {
-    const nowOn = !document.getElementById("trackingToggle").classList.contains("on");
-    invoke("set_tracking", { enabled: nowOn }).then(refreshLive);
+  document.getElementById("trackingToggle").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    if (button.disabled) return;
+    button.disabled = true;
+    const nowOn = !button.classList.contains("on");
+    try { await invoke("set_tracking", { enabled: nowOn }); await refreshLive(); }
+    catch (e) {
+      const error = document.getElementById("serverError");
+      error.hidden = false;
+      error.textContent = "Tracking update failed";
+      error.title = String(e);
+    } finally { button.disabled = false; }
   });
 
   document.getElementById("gameTabs").addEventListener("click", (e) => {
@@ -1299,7 +1324,7 @@ function renderAccounts() {
         </div>
         <div class="acct-side">
           <span class="acct-note">${powers}</span>
-          ${linked ? `<button class="btn btn-secondary" data-unlink="${game === "Dota 2" ? "dota" : "deadlock"}" type="button">Unlink</button>` : ""}
+          ${linked ? `<button class="btn btn-secondary" data-unlink="${game === "Dota 2" ? "dota" : "deadlock"}" type="button">Unlink</button>` : `<button class="btn btn-secondary" data-link-game="${game === "Dota 2" ? "dotamatches" : "dlmatches"}" type="button">Connect Steam</button>`}
         </div>
       </div>`;
   };
@@ -1368,6 +1393,8 @@ function renderAccounts() {
   });
   renderCloudSection();
 
+  root.querySelectorAll("[data-link-game]").forEach(el =>
+    el.addEventListener("click", () => setView(el.dataset.linkGame)));
   root.querySelectorAll("[data-unlink]").forEach((el) =>
     el.addEventListener("click", async () => {
       if (el.dataset.unlink === "dota") {

@@ -54,6 +54,12 @@ html[data-game="deadlock"] { --accent: #b4a07b; --accent-rgb: 180,160,123; --acc
 .top-action, .pill { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 11px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--text-2); white-space: nowrap; cursor: pointer; }
 .top-action:hover, .pill:hover { background: var(--surface-2); color: var(--text); border-color: #353d49; }
 .pill-toggle.active { background: var(--accent-soft); color: var(--text); border-color: rgba(var(--accent-rgb),.42); }
+.pill-toggle.on, .pill-toggle.current { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
+.pill-toggle.on .dot { background: var(--good); box-shadow: 0 0 0 3px rgba(115,185,154,.15); }
+.pill-toggle.off { color: var(--muted); }
+.appmenu-item.active { color: var(--accent); background: var(--accent-soft); }
+.sync-pill.ok .sync-dot { background: var(--good); }
+.sync-pill.err .sync-dot { background: var(--bad); }
 .pill-error { max-width: 280px; overflow: hidden; text-overflow: ellipsis; color: #efb0b5; border-color: rgba(212,119,127,.4); }
 .dot, .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: 0 0 auto; }
 .pill-toggle.active .dot { background: var(--good); box-shadow: 0 0 0 3px rgba(115,185,154,.1); }
@@ -241,6 +247,9 @@ tr.detail-row { display: table-row; }
 .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .result-row { grid-template-columns: 40px minmax(0,1fr); cursor: pointer; }
 .result-row img { width: 36px; height: 36px; border-radius: 6px; }
+.result-row[data-steam-pick] { width: 100%; grid-template-columns: minmax(0,1fr) auto; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 6px; text-align: left; padding: 14px 16px; }
+.result-row[data-steam-pick]:hover { background: var(--accent-soft); border-color: var(--accent); }
+.result-row[data-steam-pick]:disabled { opacity: .6; cursor: wait; }
 .dl-result { display: flex; align-items: center; gap: 14px; padding: 16px; cursor: pointer; }
 .dl-result-main { text-align: left; }
 .build-items img, .pop-items img { width: 44px; height: 32px; object-fit: cover; }
@@ -397,3 +406,61 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   .hero-row { grid-template-columns: 48px minmax(0,1fr) 36px; }
   .hero-row > .form-strip { display: none; }
 }
+
+/* Components the markup renders that had no rule yet. Same tokens and the
+   same one-rule-per-line shape as everything above. */
+
+/* Win-rate bars on Heroes and the Deadlock hero list. Without these the
+   fill had no height and read as a hairline. */
+.meter { position: relative; width: 100%; height: 4px; overflow: hidden; border-radius: 2px; background: var(--line-soft); }
+.meter-fill { height: 100%; border-radius: 2px; background: var(--good); transition: width .25s ease; }
+.meter-fill.low { background: var(--bad); }
+
+/* Comparison rows in an expanded session, and on the hero pages. */
+.cmp-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line-soft); }
+.cmp-row:first-of-type { border-top: 0; }
+.cmp-label { color: var(--text-2); font-size: 12px; }
+.cmp-value { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+/* The retry control on a failed Deadlock fetch. */
+.roshan-btn { padding: 7px 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--text); font-weight: 600; cursor: pointer; }
+.roshan-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.rosh-body { min-width: 0; }
+.summary-title { margin: 0 0 10px; color: var(--text); font: 650 14px/1.3 var(--display); }
+.cloud-note { margin: 8px 0 0; max-width: 68ch; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.col-label { color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+
+/* Items in a build being edited are removable, so they say so on hover. */
+.build-items.editable img { cursor: pointer; border-radius: 4px; transition: opacity .12s ease, outline-color .12s ease; outline: 1px solid transparent; }
+.build-items.editable img:hover { opacity: .55; outline-color: var(--bad); }
+
+.caret { margin-left: 4px; color: var(--faint); font-size: 9px; }
+.clock { color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+/* Scoreboard header row: same grid as the rows, quieter type. */
+.board-row.head { color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+.board-row.head:hover { background: transparent; }
+
+/* Personal / global switch on the leaderboard. */
+.scope { padding: 6px 14px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--muted); font-weight: 600; cursor: pointer; }
+.scope:hover { color: var(--text-2); border-color: var(--line); background: rgba(255,255,255,.025); }
+.scope.selected { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+
+/* Meta rows that are read-only rather than clickable. */
+.meta-mover.static, .meta-row.static { cursor: default; }
+.meta-mover.static:hover, .meta-row.static:hover { background: var(--surface); }
+
+/* A live match puts a pulse on the Live nav item. */
+.nav-item.is-live { color: var(--text); }
+.nav-item.is-live .nav-ico { color: var(--good); animation: livePulse 1.8s ease-in-out infinite; }
+@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* The refresh control spins while its page is reloading. */
+.top-action.is-refreshing { color: var(--accent); pointer-events: none; }
+.top-action.is-refreshing .ico { animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* A hero portrait whose CDN image failed keeps its footprint so the row
+   stays aligned, instead of collapsing to a broken-image glyph. */
+img.portrait-missing { background: linear-gradient(135deg, var(--surface-3), var(--surface-2)); border: 1px solid var(--line-soft); }
