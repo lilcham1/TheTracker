@@ -295,6 +295,7 @@ async function dtLinkAccount(accountId, personaname, avatar) {
   DOTA.results = [];
   DOTA.loadedAt = 0;
   renderUserChip();
+  showToast(`Dota 2 connected to ${personaname || `account ${accountId}`}`);
   await dtLoad(true);
 }
 

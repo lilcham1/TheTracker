@@ -33,6 +33,7 @@ mod storage;
 mod updates;
 
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::Manager;
@@ -60,6 +61,70 @@ struct LiveStatus {
     tracking_enabled: bool,
     #[serde(rename = "serverError")]
     server_error: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ServiceCheck {
+    name: &'static str,
+    ok: bool,
+    detail: String,
+    #[serde(rename = "latencyMs")]
+    latency_ms: Option<u128>,
+}
+
+#[derive(Serialize)]
+struct Diagnostics {
+    steam: ServiceCheck,
+    gsi: ServiceCheck,
+    convex: ServiceCheck,
+    opendota: ServiceCheck,
+    deadlock: ServiceCheck,
+}
+
+async fn probe_service(name: &'static str, url: &str) -> ServiceCheck {
+    let started = Instant::now();
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .user_agent("TheTracker diagnostics")
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => return ServiceCheck { name, ok: false, detail: error.to_string(), latency_ms: None },
+    };
+    match client.get(url).send().await {
+        Ok(response) => ServiceCheck {
+            name,
+            ok: response.status().is_success() || response.status().is_client_error(),
+            detail: format!("HTTP {}", response.status().as_u16()),
+            latency_ms: Some(started.elapsed().as_millis()),
+        },
+        Err(error) => ServiceCheck { name, ok: false, detail: error.to_string(), latency_ms: None },
+    }
+}
+
+#[tauri::command]
+async fn run_diagnostics() -> Diagnostics {
+    let accounts = steam::detect();
+    let steam = ServiceCheck {
+        name: "Steam",
+        ok: !accounts.is_empty(),
+        detail: if accounts.is_empty() { "No local Steam identity found".into() } else { format!("{} local account(s) found", accounts.len()) },
+        latency_ms: None,
+    };
+    let status = gsi_setup::status();
+    let gsi = ServiceCheck {
+        name: "Dota GSI",
+        ok: status.installed,
+        detail: if status.installed { format!("Configured on port {}", status.port) } else { "Configuration not installed".into() },
+        latency_ms: None,
+    };
+    let convex_url = convex_sync::convex_url();
+    let (convex, opendota, deadlock) = tokio::join!(
+        probe_service("Cloud sync", &convex_url),
+        probe_service("OpenDota", "https://api.opendota.com/api/constants/heroes"),
+        probe_service("Deadlock API", "https://api.deadlock-api.com/v1/assets/heroes"),
+    );
+    Diagnostics { steam, gsi, convex, opendota, deadlock }
 }
 
 #[tauri::command]
@@ -638,6 +703,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_live_state,
+            run_diagnostics,
             gsi_status,
             gsi_install,
             gsi_remove,

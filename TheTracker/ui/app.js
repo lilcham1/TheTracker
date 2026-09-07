@@ -175,7 +175,7 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.16.0";
+const APP_VERSION = "0.16.1";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 
@@ -277,6 +277,7 @@ const state = {
   sync: null,
   auth: { signedIn: false, email: null },
   authForm: { email: "", password: "", error: null, busy: false },
+  diagnostics: { running: false, result: null, error: null },
   openHistory: new Set(),
   openTypeMenu: null,
 };
@@ -847,6 +848,7 @@ function wireAccountCard(root) {
     try {
       state.auth = await invoke("sign_in", { email, password, flow });
       state.authForm = { email: "", password: "", error: null, busy: false };
+      showToast(flow === "signUp" ? "Account created and signed in" : "Signed in successfully");
       // Publish anything that was waiting on an account.
       await invoke("sync_all").catch(() => {});
     } catch (e) {
@@ -1312,6 +1314,36 @@ function renderUserChip() {
   avatarEl.style.backgroundImage = avatar ? `url("${avatar}")` : "none";
 }
 
+function showToast(message, tone = "ok") {
+  const toast = document.getElementById("toast");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.className = `toast ${tone}`;
+  toast.hidden = false;
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(() => (toast.hidden = true), 3000);
+}
+
+function diagnosticsHtml() {
+  const d = state.diagnostics;
+  const checks = d.result ? [d.result.steam, d.result.gsi, d.result.convex, d.result.opendota, d.result.deadlock] : [];
+  return `
+    <section class="home-section">
+      <div class="home-head">
+        <h2 class="home-title">Connections &amp; Diagnostics</h2>
+        <button class="btn btn-secondary" id="runDiagnosticsBtn" type="button" ${d.running ? "disabled" : ""}>${d.running ? "Checking…" : "Run checks"}</button>
+      </div>
+      <p class="hint">Checks local Steam identity, Dota GSI configuration, and service availability. It never reads or displays passwords, cookies, Steam authentication files, or account tokens.</p>
+      ${d.error ? `<div class="note err">${escapeHtml(d.error)}</div>` : ""}
+      ${checks.length ? `<div class="diag-list">${checks.map(check => `
+        <div class="diag-row">
+          <span class="diag-dot ${check.ok ? "ok" : "err"}"></span>
+          <div class="diag-main"><strong>${escapeHtml(check.name)}</strong><span>${escapeHtml(check.detail)}</span></div>
+          <span class="diag-latency">${check.latencyMs == null ? "Local" : `${check.latencyMs} ms`}</span>
+        </div>`).join("")}</div>` : ""}
+    </section>`;
+}
+
 /// Accounts view: cloud sign-in plus the two linked game accounts, all in
 /// one place rather than buried in each game's own tab.
 function renderAccounts() {
@@ -1386,7 +1418,8 @@ function renderAccounts() {
       </div>
       ${linkRow("Dota 2", DOTA.link, "Match History, modes and scoreboards, via OpenDota", "open <b>Match History</b> to search for your profile")}
       ${linkRow("Deadlock", DL.link, "Every Deadlock view, via the community Deadlock API", "open <b>Deadlock &rsaquo; Overview</b> to search for your profile")}
-    </section>`;
+    </section>
+    ${diagnosticsHtml()}`;
 
   // ---- wiring ----
 
@@ -1403,8 +1436,28 @@ function renderAccounts() {
 
   wireAccountCard(root);
 
-  root.querySelector("#syncAllBtn").addEventListener("click", () => {
-    invoke("sync_all").then(() => flash("syncFlash"));
+  root.querySelector("#runDiagnosticsBtn")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    state.diagnostics = { running: true, result: null, error: null };
+    button.disabled = true;
+    button.textContent = "Checking…";
+    try {
+      state.diagnostics.result = await invoke("run_diagnostics");
+      showToast("Connection checks finished");
+    } catch (e) {
+      state.diagnostics.error = String(e);
+      showToast("Diagnostics could not finish", "err");
+    }
+    state.diagnostics.running = false;
+    renderAccounts();
+  });
+
+  root.querySelector("#syncAllBtn").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try { await invoke("sync_all"); flash("syncFlash"); showToast("Sync queued"); }
+    catch (e) { showToast(`Sync failed: ${String(e)}`, "err"); }
+    finally { button.disabled = false; }
   });
   renderCloudSection();
 

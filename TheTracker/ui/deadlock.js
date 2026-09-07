@@ -374,6 +374,7 @@ async function dlLinkAccount(accountId, personaname, avatar) {
   DL.search.results = [];
   DL.loadedAt = 0;
   renderUserChip();
+  showToast(`Deadlock connected to ${personaname || `account ${accountId}`}`);
   await dlLoad(true);
 }
 
