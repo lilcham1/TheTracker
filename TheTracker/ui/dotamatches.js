@@ -101,7 +101,11 @@ function dtStatsHtml() {
       label: "Win rate",
       value: `${s.winRate.toFixed(0)}%`,
       tone: s.winRate >= 50 ? "win" : "loss",
-      sub: `${s.wins}W – ${s.losses}L of ${s.matches}`,
+      // Says whose 50 matches these are. OpenDota's per-player history is
+      // not always complete — Turbo games in particular can be absent from
+      // it entirely — so a bare "of 50" reads as "of everything you played"
+      // when it is only "of what OpenDota holds".
+      sub: `${s.wins}W – ${s.losses}L of ${s.matches} on OpenDota`,
       spark: sparkline(winSeries),
     },
     {
@@ -443,7 +447,14 @@ function dtRender() {
       shown.length
         ? dtTableHtml(shown)
         : `<div class="empty-state">Nothing matches that combination in the last ${DOTA.matches.length} games.</div>`
-    }`;
+    }
+    <p class="hint" style="margin-top:14px;max-width:76ch">
+      This page is OpenDota's record of your account, and it is not always
+      complete &mdash; Turbo games in particular can be missing from it
+      entirely, in which case the figures above cover only the modes it does
+      hold. <b>Sessions</b> is recorded by this app from Dota's own live feed
+      and captures every match you play, whatever the mode.
+    </p>`;
 
   root.querySelectorAll("[data-dt-filter]").forEach((el) =>
     el.addEventListener("click", () => {

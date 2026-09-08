@@ -243,7 +243,10 @@ function dotaOverviewBodyHtml() {
     ${headlineHtml({
       value: `${wr.toFixed(0)}%`,
       tone: wr >= 50 ? "win" : "loss",
-      caption: `Win rate &middot; ${s.wins ?? 0}W &ndash; ${s.losses ?? 0}L across ${recent.length} matches`,
+      // Same overclaim as the Match History rail: these come from OpenDota,
+      // which can be missing whole modes, so the caption names its source
+      // rather than implying it covers everything played.
+      caption: `Win rate &middot; ${s.wins ?? 0}W &ndash; ${s.losses ?? 0}L across ${recent.length} matches on OpenDota`,
       meter: wr,
       trend: sparkline(winTrend, { color: wr >= 50 ? "var(--win)" : "var(--loss)" }),
     })}
