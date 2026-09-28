@@ -37,7 +37,7 @@ export const globalTop = query({
     const ranked = rows
       .filter((r) => r[field] !== null && r[field] !== undefined)
       .sort((a, b) => (higherIsBetter ? b[field] - a[field] : a[field] - b[field]))
-      .slice(0, args.limit ?? 10);
+      .slice(0, Math.min(Math.max(args.limit ?? 10, 1), 100));
 
     // Readable by anyone, signed in or not — only *publishing* needs an
     // account. `userId` is returned so the app can mark your own rows.

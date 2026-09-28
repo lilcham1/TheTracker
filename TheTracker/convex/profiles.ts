@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { MAX_USERNAME } from "./matches";
 
 /**
  * Display name/rank/role for the signed-in account. Upserted whenever the
@@ -16,6 +17,11 @@ export const upsert = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Sign in to save a profile");
+    if (args.deviceId.length > 64) throw new Error("deviceId too long");
+    if (args.username.length > MAX_USERNAME) throw new Error("username too long");
+    if ((args.rank?.length ?? 0) > 32 || (args.role?.length ?? 0) > 32) {
+      throw new Error("rank/role too long");
+    }
 
     const existing = await ctx.db
       .query("profiles")

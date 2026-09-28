@@ -1384,7 +1384,7 @@ function renderAccounts() {
         while you are signed in.
       </p>
       <div class="row">
-        <input class="text-input grow" id="usernameInput" type="text" placeholder="Your name"
+        <input class="text-input grow" id="usernameInput" type="text" placeholder="Your name" maxlength="40"
                value="${escapeHtml(state.profileDraft.username || "")}" style="max-width:340px" />
         <button class="btn" id="saveProfileBtn" type="button">Save</button>
         <span class="flash" id="saveFlash">Saved</span>

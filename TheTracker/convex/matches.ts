@@ -28,6 +28,46 @@ const matchFields = {
   keyItems: v.array(v.object({ clock: v.string(), item: v.string() })),
 };
 
+// Accounts are free, so reject values no real game produces — otherwise
+// anyone could top the public leaderboard with made-up numbers. Bounds are
+// deliberately generous so genuine outliers still go through.
+export const MAX_USERNAME = 40;
+
+function checkRange(name: string, value: number | null, max: number) {
+  if (value === null) return;
+  if (!Number.isFinite(value) || value < 0 || value > max) {
+    throw new Error(`${name} out of range`);
+  }
+}
+
+function checkLength(name: string, value: string | null, max: number) {
+  if (value !== null && value.length > max) throw new Error(`${name} too long`);
+}
+
+function validateMatch(args: {
+  deviceId: string; username: string; matchid: string; heroName: string | null;
+  date: string; duration: string; gameType: string; kills: number;
+  totalDeaths: number; totalGoldLost: number; roshanDeaths: number;
+  lastHits25: number | null; checkpoints: Record<string, unknown>;
+  deaths: unknown[]; keyItems: unknown[];
+}) {
+  checkLength("deviceId", args.deviceId, 64);
+  checkLength("username", args.username, MAX_USERNAME);
+  checkLength("matchid", args.matchid, 32);
+  checkLength("heroName", args.heroName, 64);
+  checkLength("date", args.date, 64);
+  checkLength("duration", args.duration, 16);
+  checkLength("gameType", args.gameType, 32);
+  checkRange("kills", args.kills, 150);
+  checkRange("totalDeaths", args.totalDeaths, 150);
+  checkRange("totalGoldLost", args.totalGoldLost, 1_000_000);
+  checkRange("roshanDeaths", args.roshanDeaths, 50);
+  checkRange("lastHits25", args.lastHits25, 1500);
+  if (Object.keys(args.checkpoints).length > 100) throw new Error("Too many checkpoints");
+  if (args.deaths.length > 300) throw new Error("Too many deaths");
+  if (args.keyItems.length > 200) throw new Error("Too many items");
+}
+
 /**
  * Insert a match, or update it if this account already published that
  * matchid. Idempotent on (userId, matchid), so re-syncing a whole local
@@ -40,6 +80,7 @@ export const upsert = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Sign in to publish matches");
+    validateMatch(args);
 
     const existing = await ctx.db
       .query("matches")
@@ -76,6 +117,9 @@ export const claimDevice = mutation({
     let claimed = 0;
     for (const row of rows) {
       if (row.userId === userId) continue;
+      // Never take a match another existing account owns — deviceId comes
+      // from the caller, so it alone doesn't prove the rows are theirs.
+      if (row.userId && (await ctx.db.get(row.userId)) !== null) continue;
       // Don't steal a match another account already published.
       const clash = await ctx.db
         .query("matches")
