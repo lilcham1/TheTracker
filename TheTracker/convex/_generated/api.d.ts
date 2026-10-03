@@ -13,6 +13,7 @@ import type * as http from "../http.js";
 import type * as leaderboard from "../leaderboard.js";
 import type * as matches from "../matches.js";
 import type * as profiles from "../profiles.js";
+import type * as steam from "../steam.js";
 
 import type {
   ApiFromModules,
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   leaderboard: typeof leaderboard;
   matches: typeof matches;
   profiles: typeof profiles;
+  steam: typeof steam;
 }>;
 
 /**

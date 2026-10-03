@@ -212,6 +212,10 @@ view("cs-overview", {
       : emptyState("No CS2 matches recorded yet", "Keep TheTracker running while you play and each match is saved when it ends, round by round: kills, damage, headshots, weapon and side.",
           `<span class="row"><button class="btn" data-act="go" data-view="cs-live" type="button">Check the live setup</button><button class="btn ghost" data-act="cs-sim" type="button">Watch a test match</button></span>`);
 
+    // Steam's all-time totals are an optional extra of the cloud service:
+    // where it isn't switched on, the page simply doesn't mention them.
+    const l = csLife.data;
+    if (!l || (!l.available && l.reason === "not_set_up")) return recorded;
     return `<div class="sec-head"><h3>Recorded by TheTracker</h3></div>${recorded}
       <div class="sec-head" style="margin-top:34px"><h3>All-time, from Steam</h3></div>${csLifetimeHtml()}`;
   },
