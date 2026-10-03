@@ -175,7 +175,12 @@ func cleanServerError(raw string) string {
 // as opposed to having looked at the sign-in and refused it.
 func cloudUnavailable(err error) bool {
 	msg := err.Error()
-	return strings.Contains(msg, "Couldn't reach") || strings.Contains(msg, "unexpected reply") || strings.Contains(msg, "is not configured")
+	return strings.Contains(msg, "Couldn't reach") || strings.Contains(msg, "unexpected reply") || strings.Contains(msg, "is not configured") ||
+		// A production deployment hides a function's own error behind
+		// "[Request ID: …] Server Error", so a deployment without the Steam
+		// provider says only that. Treating it as unavailable is safe: the
+		// sign-in is then confirmed with Steam from this PC instead.
+		strings.HasSuffix(strings.TrimSpace(msg), "Server Error")
 }
 
 // exchange calls the sign-in action and returns the session tokens. The

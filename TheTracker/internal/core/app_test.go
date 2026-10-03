@@ -234,6 +234,9 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 			case steamMode == "unconfigured":
 				fail("Uncaught Error: Provider `steam` is not configured, available providers are `password`.")
 				return
+			case steamMode == "redacted":
+				fail("[Request ID: 29305b355fafee2a] Server Error")
+				return
 			case steamMode == "reject":
 				fail("Uncaught Error: Steam did not confirm that sign-in.\n    at authorize (../convex/auth.ts:59:10)")
 				return

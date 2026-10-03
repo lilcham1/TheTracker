@@ -144,7 +144,7 @@ func TestSteamSignInSetsUpEverythingAtOnce(t *testing.T) {
 func TestSteamSignInStillWorksWhenTheLeaderboardServiceCannot(t *testing.T) {
 	// A cloud deployment that has not been updated to know Steam sign-in, or
 	// is simply unreachable, must not block signing in.
-	for _, mode := range []string{"unconfigured", "down"} {
+	for _, mode := range []string{"unconfigured", "redacted", "down"} {
 		h := newLoginHarness(t)
 		if mode == "down" {
 			h.cloud.srv.Close()
