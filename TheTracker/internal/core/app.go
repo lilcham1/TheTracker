@@ -196,9 +196,11 @@ func (a *App) Simulating() bool {
 // page and the overlay can be seen working without launching Dota. The match
 // is marked simulated and is never saved or synced.
 //
-// The clock starts just before the 4:00 runes and runs at four game seconds
-// per real second, so a stack pull, the bounty and water runes and a lotus
-// all go past within the first minute.
+// The clock starts at 3:40 and runs at real speed, one game second per
+// second, so every countdown lasts exactly as long as it would in a match:
+// the camp pull from 3:45 to 3:52, the bounty and water runes into 4:00, and
+// the next pull from 4:45. Run faster, a seven-second warning was gone in
+// under two.
 func (a *App) StartSimulation(seconds int) error {
 	if a.Tracker.IsLive() && !a.Simulating() {
 		return errors.New("A real match is running. The simulator would interrupt it.")
@@ -217,8 +219,8 @@ func (a *App) StartSimulation(seconds int) error {
 			SimulatedMarker: true,
 			"map":           jsonMap{"matchid": matchID, "clock_time": clock, "game_state": state, "win_team": winner},
 			"player": jsonMap{
-				"activity": "playing", "team_name": "radiant", "kills": float64(2 + int(clock)/240),
-				"assists": float64(3 + int(clock)/200), "last_hits": 20 + clock/7.5, "denies": float64(4 + int(clock)/120),
+				"activity": "playing", "team_name": "radiant", "kills": float64(2 + int(clock-220)/20),
+				"assists": float64(3 + int(clock-220)/15), "last_hits": 38 + (clock-220)/4, "denies": float64(4 + int(clock)/120),
 				"gold": float64(gold), "gpm": 520.0, "xpm": 610.0,
 			},
 			"hero": jsonMap{"name": "npc_dota_hero_juggernaut", "alive": alive, "level": float64(min(1+int(clock)/75, 30))},
@@ -230,7 +232,7 @@ func (a *App) StartSimulation(seconds int) error {
 	}
 
 	go func() {
-		clock := 200.0
+		clock := 220.0
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		for i := 0; i < seconds; i++ {
@@ -246,7 +248,7 @@ func (a *App) StartSimulation(seconds int) error {
 				i = seconds
 			case <-ticker.C:
 			}
-			clock += 4
+			clock++
 		}
 		send(clock, statePostGame, true, 1700, "radiant")
 		a.simMu.Lock()

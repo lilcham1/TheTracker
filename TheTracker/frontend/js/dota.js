@@ -428,7 +428,7 @@ act("copy-launch", async () => {
   }
 });
 act("sim-start", async () => {
-  if (await attempt(() => invoke("sim_start", { seconds: 90 }), "Test match started. It runs for 90 seconds and isn't saved.")) pollLive();
+  if (await attempt(() => invoke("sim_start", { seconds: 90 }), "Test match started at 3:40 on the game clock. It runs for 90 seconds in real time and isn't saved.")) pollLive();
 });
 act("sim-stop", async () => {
   await attempt(() => invoke("sim_stop"));

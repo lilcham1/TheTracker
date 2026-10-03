@@ -100,7 +100,7 @@ act("ov-test", async () => {
     await attempt(() => invoke("overlay_show"));
     S.overlayVisible = true;
     paintTop();
-    toast("Test match running for 90 seconds. Reminders appear on the overlay as events come up.");
+    toast("Test match running: camp pull at 3:45, runes at 3:55, next pull at 4:45. It lasts 90 seconds.");
     pollLive();
   }
 });
