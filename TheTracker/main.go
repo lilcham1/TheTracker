@@ -143,6 +143,7 @@ type shell struct {
 }
 
 func (s *shell) buildMainWindow(hidden bool) {
+	chrome := application.NewRGBPtr(12, 14, 19) // --bg in style.css
 	opts := application.WebviewWindowOptions{
 		Name: "main", Title: "TheTracker", URL: "/",
 		Width: 1240, Height: 800, MinWidth: 960, MinHeight: 620,
@@ -150,7 +151,19 @@ func (s *shell) buildMainWindow(hidden bool) {
 		// The page's own background, so there is no white flash while the
 		// webview starts.
 		BackgroundColour: application.NewRGB(12, 14, 19),
-		Windows:          application.WindowsWindow{Theme: application.Dark},
+		// The title bar and window border take the page's own colour, so the
+		// minimise, maximise and close buttons sit in the app rather than in
+		// a system-coloured strip above it, and Windows' accent-coloured
+		// border does not frame it. The title text is drawn in the same
+		// colour: the name is already in the sidebar.
+		Windows: application.WindowsWindow{
+			Theme:       application.Dark,
+			DisableIcon: true,
+			CustomTheme: application.ThemeSettings{
+				DarkModeActive:   &application.WindowTheme{BorderColour: chrome, TitleBarColour: chrome, TitleTextColour: chrome},
+				DarkModeInactive: &application.WindowTheme{BorderColour: chrome, TitleBarColour: chrome, TitleTextColour: chrome},
+			},
+		},
 	}
 	// Reopen where it was left, if that place still exists. A monitor that
 	// has since been unplugged would otherwise leave the window off-screen.
