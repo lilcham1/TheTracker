@@ -126,8 +126,8 @@ function overlayHtml() {
       <h3>Reminders</h3>
       <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="runes" ${o.dota.runes ? "checked" : ""} /><span>Runes <span class="muted">(bounty, water, power and wisdom)</span></span></label>
       <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="lotus" ${o.dota.lotus ? "checked" : ""} /><span>Healing lotus</span></label>
-      <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="stacks" ${o.dota.stacks ? "checked" : ""} /><span>Stack pull <span class="muted">(at :53 each minute)</span></span></label>
-      <label class="field"><span>Warn me <b id="ovLeadVal">${o.leadSeconds} s</b> before each one</span>
+      <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="stacks" ${o.dota.stacks ? "checked" : ""} /><span>Camp pull <span class="muted">(at :52 each minute from 1:52; its countdown always starts 7 seconds before)</span></span></label>
+      <label class="field"><span>Warn me <b id="ovLeadVal">${o.leadSeconds} s</b> before runes and lotuses</span>
         <input type="range" id="ovLead" min="3" max="30" step="1" value="${o.leadSeconds}" data-input="ov-range" data-unit="s" data-change="ov-save" data-key="leadSeconds" /></label>
     </section>
     <section class="set">

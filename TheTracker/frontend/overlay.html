@@ -6,17 +6,31 @@
   <style>
     html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; }
     body { font-family: Bahnschrift, "Segoe UI", sans-serif; color: #f2f4f7; }
-    #chips { display: flex; flex-direction: column; gap: 8px; padding: 6px; transform-origin: top left; }
+    #chips { display: flex; flex-direction: column; gap: 7px; padding: 6px; transform-origin: top left; }
     body.right #chips { align-items: flex-end; transform-origin: top right; }
     body.bottom { display: flex; flex-direction: column; justify-content: flex-end; height: 100vh; }
     body.bottom #chips { transform-origin: bottom left; }
     body.bottom.right #chips { transform-origin: bottom right; }
-    .chip { display: inline-flex; align-items: baseline; gap: 12px; width: fit-content; padding: 8px 16px 8px 14px; border-radius: 8px;
-      background: rgba(13, 16, 22, .88); border-left: 4px solid #d8a23a; box-shadow: 0 2px 12px rgba(0, 0, 0, .45); }
-    .chip .label { font-size: 17px; font-weight: 600; letter-spacing: .01em; }
-    .chip .secs { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 1.2em; text-align: right; color: #f3c766; }
-    .chip.soon { border-left-color: #e8684a; }
-    .chip.soon .secs { color: #ff9478; }
+
+    /* Each reminder carries its own colour in --c: the icon, the number and
+       the draining bar all take it, so the kind of event reads at a glance. */
+    .chip { position: relative; display: grid; grid-template-columns: 40px minmax(118px, auto) 46px; align-items: center; column-gap: 11px;
+      width: fit-content; padding: 7px 14px 10px 8px; border-radius: 10px; overflow: hidden;
+      background: linear-gradient(90deg, color-mix(in srgb, var(--c) 20%, rgba(11, 13, 18, .93)), rgba(11, 13, 18, .93) 62%);
+      border: 1px solid color-mix(in srgb, var(--c) 42%, transparent); box-shadow: 0 3px 14px rgba(0, 0, 0, .5); }
+    .chip .icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--c);
+      background: color-mix(in srgb, var(--c) 17%, transparent); border: 1.5px solid color-mix(in srgb, var(--c) 60%, transparent); }
+    .chip .icon svg { width: 24px; height: 24px; }
+    .chip .label { font-size: 17px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+    .chip .secs { font-size: 32px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; color: var(--c);
+      text-shadow: 0 0 12px color-mix(in srgb, var(--c) 45%, transparent); }
+    /* How much of the warning is left, draining towards zero. */
+    .chip .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, .08); }
+    .chip .bar i { display: block; height: 100%; background: var(--c); transition: width .4s linear; }
+    /* The last three seconds: the frame lights up in the chip's own colour. */
+    .chip.soon { border-color: var(--c); box-shadow: 0 0 0 1px var(--c), 0 3px 18px color-mix(in srgb, var(--c) 40%, transparent); }
+    .chip.soon .icon { background: color-mix(in srgb, var(--c) 32%, transparent); }
+    @media (prefers-reduced-motion: reduce) { .chip .bar i { transition: none; } }
   </style>
 </head>
 <body>

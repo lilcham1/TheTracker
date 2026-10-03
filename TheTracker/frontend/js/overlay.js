@@ -15,11 +15,47 @@ const WATER_TIMES = [120, 240];
 const POWER_FROM = 360;
 const POWER_EVERY = 120;
 const WISDOM_EVERY = 420;
-// Neutral camps spawn on the minute, so the stack pull goes out at :53.
-const STACK_AT = 53;
 // Lotuses: first at 3:00, then every 3 minutes. Turbo halves both.
 const LOTUS_FROM = 180;
 const LOTUS_EVERY = 180;
+// The camp pull is timed at :52 of every minute, starting at 1:52 — camps
+// first spawn at 1:00, so there is nothing to stack before that. Its
+// countdown always starts 7 seconds ahead, whatever the lead-time setting:
+// that is the time it takes to get to the camp and line the pull up, and a
+// shorter warning would arrive too late to act on.
+const STACK_FROM = 112;
+const STACK_LEAD = 7;
+
+// One look per kind of reminder: its own colour and its own icon, so which
+// rune it is can be read from the corner of the eye without reading a word.
+// The icons are drawn here rather than loaded, so the overlay never waits on
+// the network mid-fight.
+const KINDS = {
+  bounty: {
+    label: "Bounty runes", color: "#f4c34f",
+    icon: '<circle cx="12" cy="12" r="8"/><path d="M12 7l3 5-3 5-3-5z" fill="currentColor" stroke="none"/>',
+  },
+  water: {
+    label: "Water runes", color: "#56b8f5",
+    icon: '<path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z" fill="currentColor" fill-opacity="0.25"/><path d="M9 14a3 3 0 0 0 3 3"/>',
+  },
+  power: {
+    label: "Power rune", color: "#ff8452",
+    icon: '<path d="M14 2L5 14h6l-1 8 9-12h-6z" fill="currentColor" fill-opacity="0.25"/>',
+  },
+  wisdom: {
+    label: "Wisdom runes", color: "#b48cff",
+    icon: '<path d="M12 7c-2-2-5-2-8-1v12c3-1 6-1 8 1 2-2 5-2 8-1V6c-3-1-6-1-8 1z" fill="currentColor" fill-opacity="0.2"/><path d="M12 7v12"/>',
+  },
+  lotus: {
+    label: "Lotus", color: "#ff8fb8",
+    icon: '<path d="M12 4c2 2 3 4 3 7s-1 4-3 6c-2-2-3-3-3-6s1-5 3-7z" fill="currentColor" fill-opacity="0.3"/><path d="M4 11c3 0 6 2 8 6 2-4 5-6 8-6 0 5-3 8-8 8s-8-3-8-8z"/>',
+  },
+  stack: {
+    label: "Pull the camp", color: "#84d46c",
+    icon: '<path d="M12 3l9 5-9 5-9-5z" fill="currentColor" fill-opacity="0.25"/><path d="M3 12l9 5 9-5M3 16l9 5 9-5"/>',
+  },
+};
 
 let settings = { opacity: 0.85, scale: 1, leadSeconds: 5, corner: "top-left", dota: { runes: true, lotus: true, stacks: true } };
 
@@ -36,26 +72,37 @@ function untilNext(clock, every, from = 0) {
   return into === 0 ? 0 : every - into;
 }
 
+/// The reminders due now: [{kind, secs, lead}], soonest first.
 function upcoming(clock, gameType) {
   const d = settings.dota || {};
+  const lead = settings.leadSeconds || 5;
   const events = [];
   if (d.runes) {
-    events.push(["Bounty runes", untilNext(clock, BOUNTY_EVERY)]);
-    events.push(["Power rune", untilNext(clock, POWER_EVERY, POWER_FROM)]);
-    events.push(["Wisdom runes", untilNext(clock, WISDOM_EVERY, WISDOM_EVERY)]);
+    events.push({ kind: "bounty", secs: untilNext(clock, BOUNTY_EVERY), lead });
+    events.push({ kind: "power", secs: untilNext(clock, POWER_EVERY, POWER_FROM), lead });
+    events.push({ kind: "wisdom", secs: untilNext(clock, WISDOM_EVERY, WISDOM_EVERY), lead });
     const water = WATER_TIMES.find((t) => t > clock);
-    if (water !== undefined) events.push(["Water runes", water - clock]);
+    if (water !== undefined) events.push({ kind: "water", secs: water - clock, lead });
   }
   if (d.lotus) {
     const turbo = gameType === "turbo";
-    events.push(["Lotus", untilNext(clock, turbo ? LOTUS_EVERY / 2 : LOTUS_EVERY, turbo ? LOTUS_FROM / 2 : LOTUS_FROM)]);
+    events.push({ kind: "lotus", secs: untilNext(clock, turbo ? LOTUS_EVERY / 2 : LOTUS_EVERY, turbo ? LOTUS_FROM / 2 : LOTUS_FROM), lead });
   }
   if (d.stacks) {
-    const into = clock % 60;
-    events.push(["Stack", into <= STACK_AT ? STACK_AT - into : 60 + STACK_AT - into]);
+    events.push({ kind: "stack", secs: untilNext(clock, 60, STACK_FROM), lead: STACK_LEAD });
   }
-  const lead = settings.leadSeconds || 5;
-  return events.filter(([, secs]) => secs > 0 && secs <= lead).sort((a, b) => a[1] - b[1]);
+  return events.filter((e) => e.secs > 0 && e.secs <= e.lead).sort((a, b) => a.secs - b.secs);
+}
+
+function chipHtml(e) {
+  const k = KINDS[e.kind];
+  const left = Math.max(0, Math.min(100, (e.secs / e.lead) * 100));
+  return `<div class="chip ${e.secs <= 3 ? "soon" : ""}" style="--c:${k.color}">
+    <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${k.icon}</svg></span>
+    <span class="label">${k.label}</span>
+    <span class="secs">${Math.ceil(e.secs)}</span>
+    <span class="bar"><i style="width:${left.toFixed(0)}%"></i></span>
+  </div>`;
 }
 
 let lastHtml = "";
@@ -84,12 +131,7 @@ async function tick() {
   // The draft and strategy time report a clock too; countdowns there would
   // be to events in a game that has not started.
   if (!live.live || !m || !m.inProgress || m.lastClockTime <= 0) return paint("");
-  const clock = Math.floor(m.lastClockTime);
-  paint(
-    upcoming(clock, m.gameType)
-      .map(([label, secs]) => `<div class="chip ${secs <= 3 ? "soon" : ""}"><span class="label">${label}</span><span class="secs">${Math.ceil(secs)}</span></div>`)
-      .join("")
-  );
+  paint(upcoming(Math.floor(m.lastClockTime), m.gameType).map(chipHtml).join(""));
 }
 
 async function loadSettings() {
@@ -107,4 +149,4 @@ if (typeof document !== "undefined") {
   setInterval(loadSettings, 2500);
   setInterval(tick, 400);
 }
-if (typeof module !== "undefined") module.exports = { upcoming, untilNext, setSettings: (s) => (settings = s) };
+if (typeof module !== "undefined") module.exports = { upcoming, untilNext, chipHtml, KINDS, setSettings: (s) => (settings = s) };
