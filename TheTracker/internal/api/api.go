@@ -48,18 +48,13 @@ type Boot struct {
 	Profile    core.Profile            `json:"profile"`
 	DotaLink   core.Link               `json:"dotaLink"`
 	DlLink     core.Link               `json:"deadlockLink"`
+	OwLink     core.OwLink             `json:"overwatchLink"`
 	Auth       core.AuthState          `json:"auth"`
 	Background core.BackgroundSettings `json:"background"`
 	Gsi        core.GsiStatus          `json:"gsi"`
 	Overlay    bool                    `json:"overlayVisible"`
 	DataDir    string                  `json:"dataDir"`
 	ExportDir  string                  `json:"exportDir"`
-}
-
-type linkArgs struct {
-	AccountID   uint64  `json:"accountId"`
-	Personaname string  `json:"personaname"`
-	Avatar      *string `json:"avatar"`
 }
 
 type enabledArg struct {
@@ -83,15 +78,13 @@ type queryArg struct {
 	Query string `json:"query"`
 }
 
-type pathArg struct {
-	Path string `json:"path"`
+type regionArg struct {
+	Region string `json:"region"`
+	Force  bool   `json:"force"`
 }
 
-func linkOf(a linkArgs) (core.Link, error) {
-	if a.AccountID == 0 {
-		return core.Link{}, errors.New("That account has no id.")
-	}
-	return core.Link{AccountID: &a.AccountID, Personaname: &a.Personaname, Avatar: a.Avatar}, nil
+type pathArg struct {
+	Path string `json:"path"`
 }
 
 func searchQuery(q string) (string, error) {
@@ -115,7 +108,7 @@ func commands(a *core.App) map[string]command {
 		"boot": none(func() (any, error) {
 			return Boot{
 				Version: core.Version, Prefs: s.LoadPrefs(), Profile: s.LoadProfile(),
-				DotaLink: s.LoadLink("dota"), DlLink: s.LoadLink("deadlock"), Auth: a.Cloud.Auth(),
+				DotaLink: s.LoadLink("dota"), DlLink: s.LoadLink("deadlock"), OwLink: a.Ow.Link(), Auth: a.Cloud.Auth(),
 				Background: a.Background(), Gsi: a.Gsi.Status(), Overlay: a.Shell.OverlayVisible(),
 				DataDir: s.Dir, ExportDir: core.ExportDir(),
 			}, nil
@@ -260,6 +253,7 @@ func commands(a *core.App) map[string]command {
 			return p, nil
 		}),
 		"save_goals": in(func(g core.Goals) (any, error) { return s.SaveGoals(g), nil }),
+		"save_games": in(func(g core.Games) (any, error) { return a.SetGames(g) }),
 
 		// ----- Running in the background -----
 		"background_settings": none(func() (any, error) { return a.Background(), nil }),
@@ -272,29 +266,13 @@ func commands(a *core.App) map[string]command {
 		"dismiss_autostart_prompt": none(func() (any, error) { return a.DismissAutostartPrompt(), nil }),
 
 		// ----- Dota live feed setup -----
-		"gsi_status":     none(func() (any, error) { return a.Gsi.Status(), nil }),
-		"gsi_install":    none(func() (any, error) { _, err := a.Gsi.Install(); return a.Gsi.Status(), err }),
-		"gsi_remove":     none(func() (any, error) { a.Gsi.Remove(); return a.Gsi.Status(), nil }),
-		"launch_dota":    none(func() (any, error) { return ok, a.Gsi.LaunchDota() }),
-		"steam_accounts": none(func() (any, error) { return core.DetectSteamAccounts(), nil }),
+		"gsi_status":  none(func() (any, error) { return a.Gsi.Status(), nil }),
+		"gsi_install": none(func() (any, error) { _, err := a.Gsi.Install(); return a.Gsi.Status(), err }),
+		"gsi_remove":  none(func() (any, error) { a.Gsi.Remove(); return a.Gsi.Status(), nil }),
+		"launch_dota": none(func() (any, error) { return ok, a.Gsi.LaunchDota() }),
 
 		// ----- Dota (OpenDota) -----
-		"dota_link_status": none(func() (any, error) { return s.LoadLink("dota"), nil }),
-		"dota_search": in(func(p queryArg) (any, error) {
-			q, err := searchQuery(p.Query)
-			if err != nil {
-				return nil, err
-			}
-			return a.Dota.Search(q)
-		}),
-		"dota_link": in(func(p linkArgs) (any, error) {
-			l, err := linkOf(p)
-			if err != nil {
-				return nil, err
-			}
-			return l, s.SaveLink("dota", l)
-		}),
-		"dota_unlink":       none(func() (any, error) { return core.Link{}, s.SaveLink("dota", core.Link{}) }),
+		"dota_link_status":  none(func() (any, error) { return s.LoadLink("dota"), nil }),
 		"dota_history":      in(func(p forceArg) (any, error) { return a.Dota.History(p.Limit, p.Force) }),
 		"dota_match_detail": in(func(p matchArg) (any, error) { return a.Dota.Detail(p.MatchID) }),
 		"dota_player":       in(func(p forceArg) (any, error) { return a.Dota.Player(p.Force) }),
@@ -309,43 +287,65 @@ func commands(a *core.App) map[string]command {
 			return a.Dota.DraftAdvice(p.Enemies)
 		}),
 		"dota_popular_builds": in(func(p heroArg) (any, error) { return a.Dota.PopularBuilds(p.HeroID) }),
+		"dota_leaderboard":    in(func(p regionArg) (any, error) { return a.Dota.Leaderboard(p.Region, p.Force) }),
 
 		// ----- Deadlock -----
-		"deadlock_link_status": none(func() (any, error) { return s.LoadLink("deadlock"), nil }),
-		"deadlock_search": in(func(p queryArg) (any, error) {
-			q, err := searchQuery(p.Query)
-			if err != nil {
-				return nil, err
-			}
-			return a.Deadlock.Search(q)
-		}),
-		"deadlock_link": in(func(p linkArgs) (any, error) {
-			l, err := linkOf(p)
-			if err != nil {
-				return nil, err
-			}
-			return l, s.SaveLink("deadlock", l)
-		}),
-		"deadlock_unlink":        none(func() (any, error) { return core.Link{}, s.SaveLink("deadlock", core.Link{}) }),
+		"deadlock_link_status":   none(func() (any, error) { return s.LoadLink("deadlock"), nil }),
 		"deadlock_overview":      in(func(p forceArg) (any, error) { return a.Deadlock.Overview(p.Limit, p.Force) }),
 		"deadlock_live":          none(func() (any, error) { return a.Deadlock.Live() }),
 		"deadlock_match_detail":  in(func(p matchArg) (any, error) { return a.Deadlock.Detail(p.MatchID) }),
 		"deadlock_heroes":        none(func() (any, error) { return a.Deadlock.HeroList(), nil }),
 		"deadlock_meta":          in(func(p forceArg) (any, error) { return a.Deadlock.Meta(p.Force) }),
 		"deadlock_popular_items": in(func(p heroArg) (any, error) { return a.Deadlock.PopularItems(p.HeroID) }),
+		"deadlock_leaderboard":   in(func(p regionArg) (any, error) { return a.Deadlock.Leaderboard(p.Region, p.Force) }),
+
+		// ----- Counter-Strike 2 -----
+		"cs2_status":  none(func() (any, error) { return a.Cs2.Status(), nil }),
+		"cs2_history": none(func() (any, error) { return a.Cs2.History(), nil }),
+		"cs2_delete": in(func(p struct {
+			ID string `json:"id"`
+		}) (any, error) {
+			return a.Cs2.Delete(p.ID)
+		}),
+		"cs2_setup": none(func() (any, error) { return a.Cs2.Setup(a.Gsi.Port(), a.Gsi.Token()), nil }),
+		"cs2_install": none(func() (any, error) {
+			err := a.Cs2.Install(a.Gsi.Port(), a.Gsi.Token())
+			return a.Cs2.Setup(a.Gsi.Port(), a.Gsi.Token()), err
+		}),
+
+		// ----- Overwatch -----
+		"ow_link_status": none(func() (any, error) { return a.Ow.Link(), nil }),
+		"ow_search": in(func(p queryArg) (any, error) {
+			q, err := searchQuery(p.Query)
+			if err != nil {
+				return nil, err
+			}
+			return a.Ow.Search(q)
+		}),
+		"ow_link": in(func(l core.OwLink) (any, error) {
+			if l.PlayerID == "" {
+				return nil, errors.New("That profile has no id.")
+			}
+			return l, a.Ow.SetLink(l)
+		}),
+		"ow_unlink": none(func() (any, error) { return core.OwLink{}, a.Ow.SetLink(core.OwLink{}) }),
+		"ow_overview": in(func(p struct {
+			Mode  string `json:"mode"`
+			Force bool   `json:"force"`
+		}) (any, error) {
+			return a.Ow.Overview(p.Mode, p.Force)
+		}),
 
 		// ----- Account and cloud -----
 		"auth_status": none(func() (any, error) { return a.Cloud.Auth(), nil }),
-		"sign_in": in(func(p struct {
-			Email    string `json:"email"`
-			Password string `json:"password"`
-			Flow     string `json:"flow"`
-		}) (any, error) {
-			return a.Cloud.SignIn(p.Email, p.Password, p.Flow)
-		}),
-		"sign_out":    none(func() (any, error) { return a.Cloud.SignOut(), nil }),
-		"sync_status": none(func() (any, error) { return a.Cloud.Status(), nil }),
-		"sync_all":    none(func() (any, error) { return map[string]int{"queued": a.Cloud.SyncAll()}, nil }),
+		// One way in. The browser does the signing in; these start it, report
+		// on it, and call it off.
+		"steam_login_start":  none(func() (any, error) { return a.SteamLoginStatus(), a.StartSteamLogin() }),
+		"steam_login_status": none(func() (any, error) { return a.SteamLoginStatus(), nil }),
+		"steam_login_cancel": none(func() (any, error) { a.CancelSteamLogin(); return a.SteamLoginStatus(), nil }),
+		"sign_out":           none(func() (any, error) { return a.SignOut(), nil }),
+		"sync_status":        none(func() (any, error) { return a.Cloud.Status(), nil }),
+		"sync_all":           none(func() (any, error) { return map[string]int{"queued": a.Cloud.SyncAll()}, nil }),
 		"delete_cloud_data": none(func() (any, error) {
 			n, err := a.Cloud.DeleteCloudData()
 			return map[string]int{"deleted": n}, err
@@ -387,7 +387,8 @@ func commands(a *core.App) map[string]command {
 // at all — the backend makes those.
 const csp = "default-src 'self'; " +
 	"img-src 'self' data: https://cdn.cloudflare.steamstatic.com https://assets-bucket.deadlock-api.com " +
-	"https://avatars.steamstatic.com https://avatars.akamai.steamstatic.com https://avatars.cloudflare.steamstatic.com; " +
+	"https://avatars.steamstatic.com https://avatars.akamai.steamstatic.com https://avatars.cloudflare.steamstatic.com " +
+	"https://d15f34w2p8l1cc.cloudfront.net https://static.playoverwatch.com https://blz-contentstack-images.akamaized.net; " +
 	"style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
 
 // New returns the handler the window loads: /api/* for commands, everything

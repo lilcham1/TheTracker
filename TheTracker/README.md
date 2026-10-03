@@ -1,6 +1,6 @@
 # TheTracker
 
-A desktop match tracker for Dota 2 and Deadlock. One Windows executable,
+A desktop match tracker for Dota 2, Deadlock, Counter-Strike 2 and Overwatch. One Windows executable,
 written in Go, with its interface drawn in the system's WebView2.
 
 ## What it does
@@ -30,6 +30,35 @@ written in Go, with its interface drawn in the system's WebView2.
 items) and builds, from the community Deadlock API. Deadlock has no live
 feed, so there is no live page or overlay for it.
 
+**Counter-Strike 2** – live tracking of your own matches from Valve's Game
+State Integration (score, kills, deaths, headshots), saved as you play, with
+per-map records. Valve publishes no CS2 match history or leaderboard for apps,
+so only matches played while the app runs are shown.
+
+**Overwatch** – career stats by mode, role and hero from your public profile,
+via the community OverFast API. Blizzard publishes no match list.
+
+**Valorant is not supported.** Riot only allows match data through a
+production API key it grants per application after review, with each player
+signing in through Riot. Until this project holds such a key there is no
+legitimate way to read Valorant matches, and the app does not pretend to.
+
+Each game can be switched off under Settings; a first-run screen asks which
+ones you play.
+
+## Signing in
+
+One method: **Sign in with Steam**. Steam's own login page opens in the
+browser (OpenID); the app receives a signed statement of which account
+logged in, and the cloud function in `convex/auth.ts` verifies it with Steam
+before opening a session. That one sign-in links Dota 2 and Deadlock, names
+the leaderboard profile, and never involves a password or API key. If the
+cloud service is unreachable the app verifies the statement itself and
+everything except the shared leaderboard works. Overwatch is connected
+separately by BattleTag, since it is not a Steam account.
+
+After changing anything in `convex/`, deploy it with `npx convex deploy`.
+
 ## Where the data comes from
 
 | Source | Used for | Notes |
@@ -37,6 +66,9 @@ feed, so there is no live page or overlay for it.
 | Valve Game State Integration | Live Dota tracking | Dota posts your own state to `127.0.0.1` on this PC. Nothing reads game memory. |
 | [OpenDota](https://www.opendota.com) API | Dota history, heroes, meta, matchups | Public, no key. Keyed on your Steam account id. |
 | [Deadlock API](https://deadlock-api.com) | Everything Deadlock | Community-run, rate-limited by Valve; can be late or incomplete. |
+| Valve Game State Integration (CS2) | Live CS2 tracking | Same local feed as Dota; needs no launch option. |
+| Valve's Dota leaderboard web API | Dota top players by region | Names and ranks only. |
+| [OverFast API](https://overfast-api.tekrop.fr) | Overwatch career stats | Community-run; reads Blizzard's public career pages. Profile must be public. |
 | Convex (optional account) | Sync and the shared leaderboard | Only if you sign in. `convex/` holds the server functions. |
 
 Nothing is scraped from any other tracker's site, and nothing is shown about

@@ -78,9 +78,17 @@ type App struct {
 	Gsi      *Gsi
 	Dota     *Dota
 	Deadlock *Deadlock
+	Cs2      *Cs2
+	Ow       *Overwatch
 	Cloud    *Cloud
 	Updater  *Updater
 	Shell    Shell
+
+	// Opens a link in the player's browser. Replaced in tests.
+	OpenURL func(string) error
+
+	login      steamLogin
+	manageDota bool
 
 	simMu   sync.Mutex
 	simStop chan struct{}
@@ -90,11 +98,14 @@ type App struct {
 
 func NewApp(dataDir string, shell Shell) *App {
 	store := NewStore(dataDir)
-	a := &App{Store: store, Shell: shell}
+	a := &App{Store: store, Shell: shell, OpenURL: openInBrowser}
 	a.Tracker = NewTracker(store)
 	a.Gsi = NewGsi(store, a.Tracker)
 	a.Dota = NewDota(store)
 	a.Deadlock = NewDeadlock(store)
+	a.Cs2 = NewCs2(store)
+	a.Ow = NewOverwatch(store)
+	a.Gsi.OnCs2 = a.Cs2.HandleUpdate
 	a.Cloud = NewCloud(store)
 	a.Updater = NewUpdater()
 	a.Tracker.OnSaved = a.Cloud.PushMatch
@@ -108,14 +119,55 @@ func NewApp(dataDir string, shell Shell) *App {
 // rewrite the config in a real Dota install to point at a test listener.
 func (a *App) Start(manageDota bool) {
 	a.Store.MigrateLegacyDir()
-	a.Gsi.Start()
-	if manageDota {
-		a.Gsi.EnsureInstalled()
-		a.Gsi.RemoveLegacyConfigs()
-	}
+	a.manageDota = manageDota
+	a.applyGames(a.Store.LoadPrefs().Games)
 	a.Cloud.Restore()
 	go a.overlayWatcher()
 	go a.backfillLoop()
+}
+
+// applyGames starts or stops what each game needs. With Dota off the app
+// does not listen for the live feed and takes its config back out of Dota's
+// folder, so a Deadlock-only player has nothing of Dota's running.
+func (a *App) applyGames(g Games) {
+	// Dota and CS2 both post to the one local listener; it runs while either
+	// is on.
+	if g.Dota || g.CS2 {
+		a.Gsi.Start()
+	} else {
+		a.Gsi.Stop()
+	}
+	if !g.Dota {
+		a.StopSimulation()
+	}
+	if !a.manageDota {
+		return
+	}
+	if g.Dota {
+		a.Gsi.EnsureInstalled()
+		a.Gsi.RemoveLegacyConfigs()
+	} else {
+		a.Gsi.Remove()
+	}
+	if g.CS2 {
+		if s := a.Cs2.Setup(a.Gsi.Port(), a.Gsi.Token()); len(s.CfgDirs) > 0 && !s.Installed {
+			_ = a.Cs2.Install(a.Gsi.Port(), a.Gsi.Token())
+		}
+	} else {
+		a.Cs2.Remove()
+	}
+}
+
+// SetGames records which games the player uses and applies it at once. At
+// least one stays on: an app with no game has nothing to show.
+func (a *App) SetGames(g Games) (Prefs, error) {
+	if !g.Dota && !g.Deadlock && !g.CS2 && !g.Overwatch {
+		return a.Store.LoadPrefs(), errors.New("Keep at least one game switched on.")
+	}
+	g.Chosen = true
+	p := a.Store.UpdatePrefs(func(p *Prefs) { p.Games = g })
+	a.applyGames(p.Games)
+	return p, nil
 }
 
 func (a *App) Stop() {
@@ -633,5 +685,7 @@ func (a *App) InstallUpdate() error {
 func (a *App) SetAPIBases(dota, deadlock, cloud string) {
 	a.Dota.api.Base, a.Deadlock.api.Base, a.Cloud.base = dota, deadlock, cloud
 	a.Dota.api.Attempts, a.Deadlock.api.Attempts = 1, 1
+	a.Dota.valve.Base, a.Dota.valve.Attempts = dota, 1
+	a.Ow.api.Base, a.Ow.api.Attempts = deadlock, 1
 	a.Updater.FeedURL = cloud + "/latest.json"
 }

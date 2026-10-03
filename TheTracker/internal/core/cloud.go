@@ -32,10 +32,17 @@ func convexURL() string {
 }
 
 type AuthState struct {
-	SignedIn  bool    `json:"signedIn"`
-	Email     *string `json:"email"`
-	UserID    *string `json:"userId"`
+	// A cloud session is open: recorded games are published to the shared
+	// leaderboard.
+	SignedIn bool `json:"signedIn"`
+	// Set only for a session carried over from before 1.0, when accounts
+	// were an email and password.
+	Email  *string `json:"email"`
+	UserID *string `json:"userId"`
+	// Why the leaderboard is not connected, when it is not.
 	LastError *string `json:"lastError"`
+	// The Steam account the player signed in with. Nil when signed out.
+	Steam *SteamIdentity `json:"steam"`
 }
 
 type SyncStatus struct {
@@ -112,10 +119,23 @@ func (c *Cloud) call(kind, path string, args any, token string) (any, error) {
 }
 
 // ---------- Auth ----------
+//
+// One way in: Sign in with Steam (see steamlogin.go). A session is a Steam
+// identity that Steam itself confirmed, plus — when the cloud service is
+// reachable — a cloud session for the shared leaderboard.
+
+// SteamIdentity is the account a Steam sign-in proved.
+type SteamIdentity struct {
+	SteamID   string  `json:"steamId"`   // 64-bit id, as text
+	AccountID uint64  `json:"accountId"` // the 32-bit id OpenDota and the Deadlock API use
+	Name      string  `json:"name"`
+	Avatar    *string `json:"avatar"`
+}
 
 type storedAuth struct {
-	Email        *string `json:"email"`
-	RefreshToken *string `json:"refreshToken"`
+	Email        *string        `json:"email,omitempty"`
+	RefreshToken *string        `json:"refreshToken,omitempty"`
+	Steam        *SteamIdentity `json:"steam,omitempty"`
 }
 
 func (c *Cloud) Auth() AuthState {
@@ -130,36 +150,47 @@ func (c *Cloud) signedIn() (string, bool) {
 	return c.token, c.auth.SignedIn && c.token != ""
 }
 
-// friendlyAuthError turns Convex's long provider error strings into something
-// worth showing a person.
-func friendlyAuthError(raw string) string {
-	lower := strings.ToLower(raw)
-	switch {
-	case strings.Contains(lower, "invalidsecret"), strings.Contains(lower, "invalid password"), strings.Contains(lower, "invalidaccountid"):
-		return "Wrong email or password."
-	case strings.Contains(lower, "already exists"), strings.Contains(lower, "account already"):
-		return "An account with that email already exists. Try signing in."
-	case strings.Contains(lower, "password") && strings.Contains(lower, "8"):
-		return "Password must be at least 8 characters."
-	case strings.Contains(lower, "invalid") && strings.Contains(lower, "email"):
-		return "That doesn't look like a valid email address."
-	case strings.Contains(lower, "couldn't reach"):
-		return raw
+func (c *Cloud) persistLocked() {
+	s := storedAuth{Email: c.auth.Email, Steam: c.auth.Steam}
+	if c.refreshToken != "" {
+		s.RefreshToken = &c.refreshToken
 	}
-	return "Sign-in failed: " + strings.SplitN(raw, "\n", 2)[0]
+	_ = c.store.writeJSON("auth.json", s)
 }
 
+// cleanServerError strips the wrapping Convex puts around a function's own
+// error message, leaving the sentence the function wrote.
+func cleanServerError(raw string) string {
+	line := strings.SplitN(raw, "\n", 2)[0]
+	for _, prefix := range []string{"Uncaught Error: ", "Error: "} {
+		if i := strings.Index(line, prefix); i >= 0 {
+			line = line[i+len(prefix):]
+		}
+	}
+	return strings.TrimSpace(line)
+}
+
+// cloudUnavailable reports whether an error means the cloud service could not
+// be used at all — offline, down, or not yet updated to know Steam sign-in —
+// as opposed to having looked at the sign-in and refused it.
+func cloudUnavailable(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "Couldn't reach") || strings.Contains(msg, "unexpected reply") || strings.Contains(msg, "is not configured")
+}
+
+// exchange calls the sign-in action and returns the session tokens. The
+// error is the server's own, unedited.
 func (c *Cloud) exchange(args map[string]any) (token, refresh string, err error) {
 	v, err := c.call("action", "auth:signIn", args, "")
 	if err != nil {
-		return "", "", errors.New(friendlyAuthError(err.Error()))
+		return "", "", err
 	}
 	m, _ := v.(map[string]any)
 	tokens := sub(m, "tokens")
 	token, _ = getStr(tokens, "token")
 	refresh, _ = getStr(tokens, "refreshToken")
 	if token == "" || refresh == "" {
-		return "", "", errors.New("The cloud service didn't return a session. Check the email and password.")
+		return "", "", errors.New("The cloud service didn't return a session.")
 	}
 	return token, refresh, nil
 }
@@ -173,66 +204,71 @@ func (c *Cloud) fetchUserID(token string) *string {
 	return jStrPtr(m, "userId")
 }
 
-// SignIn creates an account (flow "signUp") or signs into one ("signIn"),
-// then claims matches this install synced before it had an account and pushes
-// anything waiting locally.
-func (c *Cloud) SignIn(email, password, flow string) (AuthState, error) {
-	email = strings.TrimSpace(email)
-	if email == "" || password == "" {
-		return c.Auth(), errors.New("Enter an email and a password.")
-	}
-	if flow != "signUp" {
-		flow = "signIn"
-	}
+// SteamSignIn opens a cloud session from a Steam sign-in statement, which the
+// server verifies with Steam itself. On success the identity is stored and
+// anything waiting locally is pushed.
+func (c *Cloud) SteamSignIn(id SteamIdentity, openid map[string]string) error {
 	token, refresh, err := c.exchange(map[string]any{
-		"provider": "password",
-		"params":   map[string]any{"email": email, "password": password, "flow": flow},
+		"provider": "steam",
+		"params":   map[string]any{"openid": openid, "name": id.Name},
 	})
 	if err != nil {
-		return c.Auth(), err
+		return err
 	}
 	userID := c.fetchUserID(token)
-	_ = c.store.writeJSON("auth.json", storedAuth{Email: &email, RefreshToken: &refresh})
-
 	c.mu.Lock()
-	c.auth = AuthState{SignedIn: true, Email: &email, UserID: userID}
+	c.auth = AuthState{SignedIn: true, UserID: userID, Steam: &id}
 	c.token, c.refreshToken = token, refresh
 	c.status.NeedsSignIn = false
+	c.persistLocked()
 	c.mu.Unlock()
 
 	// Best-effort: a failure here must not undo a good sign-in.
 	_, _ = c.call("mutation", "matches:claimDevice", map[string]any{"deviceId": c.store.DeviceID()}, token)
 	c.SyncAll()
-	return c.Auth(), nil
+	return nil
+}
+
+// SetLocalIdentity records a Steam identity that was verified on this PC
+// while the cloud service could not be used. Everything except the shared
+// leaderboard works; note says why the leaderboard does not.
+func (c *Cloud) SetLocalIdentity(id SteamIdentity, note string) {
+	c.mu.Lock()
+	c.auth = AuthState{Steam: &id, LastError: &note}
+	c.token, c.refreshToken = "", ""
+	c.persistLocked()
+	c.mu.Unlock()
 }
 
 // refresh trades the stored refresh token for a fresh JWT.
 func (c *Cloud) refresh() error {
 	c.mu.Lock()
-	rt, email := c.refreshToken, c.auth.Email
+	rt := c.refreshToken
 	c.mu.Unlock()
 	if rt == "" {
 		return errors.New("Not signed in")
 	}
 	token, newRefresh, err := c.exchange(map[string]any{"refreshToken": rt})
 	if err != nil {
-		// Only a rejected token ends the session. Being offline at launch
-		// must not sign the player out.
-		if !strings.Contains(err.Error(), "Couldn't reach") {
-			_ = os.Remove(c.store.path("auth.json"))
+		// Only a rejected token ends the cloud session. Being offline at
+		// launch must not sign the player out, and the Steam identity stays
+		// either way: it is what links their games.
+		if !cloudUnavailable(err) {
 			c.mu.Lock()
-			c.auth = AuthState{Email: email, LastError: ptr("Your session expired. Sign in again.")}
+			c.auth.SignedIn, c.auth.UserID = false, nil
+			c.auth.LastError = ptr("Your leaderboard session expired. Sign in with Steam again to publish.")
 			c.token, c.refreshToken = "", ""
+			c.persistLocked()
 			c.mu.Unlock()
 		}
 		return err
 	}
 	userID := c.fetchUserID(token)
-	_ = c.store.writeJSON("auth.json", storedAuth{Email: email, RefreshToken: &newRefresh})
 	c.mu.Lock()
-	c.auth = AuthState{SignedIn: true, Email: email, UserID: userID}
+	c.auth.SignedIn, c.auth.UserID, c.auth.LastError = true, userID, nil
 	c.token, c.refreshToken = token, newRefresh
 	c.status.NeedsSignIn = false
+	c.persistLocked()
 	c.mu.Unlock()
 	return nil
 }
@@ -240,14 +276,19 @@ func (c *Cloud) refresh() error {
 // Restore rebuilds the session from disk at startup.
 func (c *Cloud) Restore() {
 	var s storedAuth
-	if !c.store.readJSON("auth.json", &s) || s.RefreshToken == nil || *s.RefreshToken == "" {
+	if !c.store.readJSON("auth.json", &s) {
 		return
 	}
 	c.mu.Lock()
-	c.auth.Email = s.Email
-	c.refreshToken = *s.RefreshToken
+	c.auth.Email, c.auth.Steam = s.Email, s.Steam
+	if s.RefreshToken != nil {
+		c.refreshToken = *s.RefreshToken
+	}
+	hasSession := c.refreshToken != ""
 	c.mu.Unlock()
-	go func() { _ = c.refresh() }()
+	if hasSession {
+		go func() { _ = c.refresh() }()
+	}
 }
 
 func (c *Cloud) SignOut() AuthState {

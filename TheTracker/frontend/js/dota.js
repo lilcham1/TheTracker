@@ -4,6 +4,30 @@ const dHist = resource("dotaHistory", "dota_history", { args: () => ({ limit: D.
 const dPlayer = resource("dotaPlayer", "dota_player", { ttl: 30 * 60000 });
 const dHeroes = resource("dotaHeroes", "dota_heroes", { ttl: 6 * 3600000 });
 const dInsights = resource("insights", "insights", { ttl: 30000 });
+const dLeaders = resource("dotaLeaders", "dota_leaderboard", { args: () => ({ region: D.lbRegion }), ttl: 30 * 60000 });
+
+/// A region-by-region ranked ladder, shared by every game that has one.
+/// `state` holds the chosen region and the name filter.
+function topBoardHtml(res, scopes, action, regionKey, state, rowHtml, headHtml, footnote) {
+  const wait = gate(res, "Loading the leaderboard…");
+  const d = res.data;
+  const regions = d ? d.regions : [];
+  const filters = `<div class="filters">${scopes}
+    <div class="row"><div class="chips">${regions.map((r) => `<button class="chip ${state[regionKey] === r.id ? "on" : ""}" data-act="${action}" data-axis="${regionKey}" data-value="${esc(r.id)}" type="button">${esc(r.label)}</button>`).join("")}</div>
+      <input class="input" id="lbQuery-${regionKey}" type="search" placeholder="Find a player" value="${esc(state.lbQuery || "")}" data-input="lb-query" data-key="${regionKey}" /></div></div>`;
+  if (wait) return (d ? filters : scopes) + wait;
+  const q = (state.lbQuery || "").trim().toLowerCase();
+  const rows = d.players.filter((p) => !q || p.name.toLowerCase().includes(q));
+  return `${staleNote(res)}${filters}
+    ${rows.length ? `<div class="table-wrap"><table class="table"><thead><tr><th class="num">Rank</th>${headHtml}</tr></thead>
+      <tbody>${rows.slice(0, 300).map((p) => `<tr class="${p.isMe ? "me" : ""}"><td class="num display">${p.rank}</td>${rowHtml(p)}</tr>`).join("")}</tbody></table></div>` : emptyState("Nobody by that name in the top " + d.players.length)}
+    <p class="hint">${footnote} Showing ${Math.min(rows.length, 300)} of ${d.players.length}${d.postedAt ? `, posted ${ago(d.postedAt)}` : ""}.</p>`;
+}
+
+onChange("lb-query", (el) => {
+  (el.dataset.key === "lbRegion" ? D : DL).lbQuery = el.value;
+  rerender();
+});
 
 const D = {
   limit: 100,
@@ -18,7 +42,9 @@ const D = {
   heroSort: "games",
   openSessions: new Set(),
   typeMenu: null,
-  lbScope: "personal",
+  lbScope: "top",
+  lbRegion: "europe",
+  lbQuery: "",
   lbMetric: "last_hits_25",
   lbType: "all",
   lbGlobal: { rows: null, error: null, loading: false, key: "" },
@@ -40,99 +66,75 @@ async function ensureHeroList() {
   }
 }
 
-// ---------- Linking a Steam account (shared with Deadlock) ----------
+// ---------- Sign in with Steam ----------
+//
+// The one way in. Steam's own login page opens in the browser; when the
+// player comes back the app knows which account is theirs, and both games
+// read from it.
 
-const LINK = { accounts: null, busy: false, results: {}, searching: false, error: {} };
+const LOGIN = { pending: false, error: null, timer: null };
 
-function linkPanelHtml(game) {
-  const label = game === "deadlock" ? "Deadlock" : "Dota 2";
-  const source = game === "deadlock" ? "the community Deadlock API" : "OpenDota";
-  const accounts = LINK.accounts || [];
-  const results = LINK.results[game] || [];
-  return `<div class="panel narrow">
-    <h2>Connect your Steam account</h2>
-    <p class="muted">Your ${label} match history comes from ${source}, looked up by your Steam account. It's public data: no password, no API key, and nothing is read from the game.</p>
-
-    <h3>Accounts on this PC</h3>
-    ${
-      LINK.accounts === null
-        ? `<p class="muted">Looking for Steam…</p>`
-        : accounts.length
-          ? `<div class="pick-list">${accounts
-              .map(
-                (a) => `<button class="pick" data-act="link-account" data-game="${game}" data-id="${a.accountId}" data-name="${esc(a.personaname || "")}" type="button">
-                  <span><b>${esc(a.personaname || "Account " + a.accountId)}</b><span class="muted"> ${esc(a.source)}</span></span>
-                  <span class="muted">Use this account</span></button>`
-              )
-              .join("")}</div>`
-          : `<p class="muted">No Steam account was found on this PC. Search by name instead.</p>`
-    }
-
-    <h3>Or search by Steam name</h3>
-    <div class="row">
-      <input class="input grow" id="linkQuery-${game}" type="text" placeholder="Steam display name" data-enter="link-search" data-game="${game}" />
-      <button class="btn" data-act="link-search" data-game="${game}" type="button" ${LINK.searching ? "disabled" : ""}>${LINK.searching ? "Searching…" : "Search"}</button>
-    </div>
-    ${LINK.error[game] ? `<div class="note err">${esc(LINK.error[game])}</div>` : ""}
-    <div class="pick-list">${results
-      .map(
-        (r) => `<button class="pick" data-act="link-account" data-game="${game}" data-id="${r.accountId}" data-name="${esc(r.personaname)}" data-avatar="${esc(r.avatar || "")}" type="button">
-          <span class="row">${imgHtml(r.avatar, "avatar small")}<span><b>${esc(r.personaname)}</b><span class="muted"> account ${r.accountId}</span></span></span>
-          <span class="muted">Use this account</span></button>`
-      )
-      .join("")}</div>
-    ${
-      game === "dota"
-        ? `<p class="hint">Can't find your matches after linking? In Dota 2 open Settings, then Social, and turn on "Expose Public Match Data".</p>`
-        : ""
-    }
+/// Shown wherever a page needs an account and nobody is signed in.
+function linkPanelHtml() {
+  return `<div class="panel narrow signin">
+    <h2>Sign in with Steam</h2>
+    <p class="muted">Your match history is looked up by your Steam account. Signing in opens Steam's own login page in your browser, so TheTracker never sees your password. It links Dota 2 and Deadlock at once and puts your name on the leaderboard.</p>
+    ${LOGIN.pending
+      ? `<div class="row"><div class="spinner" aria-hidden="true"></div><span>Waiting for you to finish signing in on Steam's page in your browser…</span></div>
+         <div class="row"><button class="btn ghost" data-act="steam-login-cancel" type="button">Cancel</button><button class="link" data-act="steam-login" type="button">Open the page again</button></div>`
+      : `<button class="btn steam" data-act="steam-login" type="button">Sign in with Steam</button>`}
+    ${LOGIN.error ? `<div class="note err">${esc(LOGIN.error)}</div>` : ""}
+    <p class="hint">Can't see your Dota matches after signing in? In Dota 2 open Settings, then Social, and turn on "Expose Public Match Data".</p>
   </div>`;
 }
 
-async function loadSteamAccounts() {
-  if (LINK.accounts !== null || LINK.busy) return;
-  LINK.busy = true;
+// Kept so pages can call it unconditionally; there is nothing to preload.
+const loadSteamAccounts = () => Promise.resolve();
+
+async function afterSignIn() {
+  S.boot = await invoke("boot");
+  for (const r of Object.values(RES)) r.clear();
+  toast(`Signed in as ${S.boot.auth.steam ? S.boot.auth.steam.name : "your Steam account"}.`);
+  paintTop();
+  ACTIONS.refresh();
+}
+
+async function pollSteamLogin() {
+  let st;
   try {
-    LINK.accounts = await invoke("steam_accounts");
+    st = await invoke("steam_login_status");
   } catch (_) {
-    LINK.accounts = [];
+    return;
   }
-  LINK.busy = false;
+  if (st.pending) return;
+  clearInterval(LOGIN.timer);
+  LOGIN.timer = null;
+  LOGIN.pending = false;
+  LOGIN.error = st.error || null;
+  if (!st.error && st.auth.steam) await afterSignIn();
   rerender();
 }
 
-act("link-search", async (el) => {
-  const game = el.dataset.game;
-  const q = ($(`#linkQuery-${game}`) || {}).value || "";
-  LINK.searching = true;
-  LINK.error[game] = null;
-  LINK.results[game] = [];
-  rerender();
+act("steam-login", async () => {
+  LOGIN.error = null;
   try {
-    LINK.results[game] = await invoke(game === "deadlock" ? "deadlock_search" : "dota_search", { query: q });
-    if (!LINK.results[game].length) LINK.error[game] = "No Steam profiles match that name.";
+    await invoke("steam_login_start");
   } catch (e) {
-    LINK.error[game] = e.message;
+    LOGIN.error = e.message;
+    return rerender();
   }
-  LINK.searching = false;
+  LOGIN.pending = true;
+  clearInterval(LOGIN.timer);
+  LOGIN.timer = setInterval(pollSteamLogin, 1000);
   rerender();
 });
 
-act("link-account", async (el) => {
-  const game = el.dataset.game;
-  const args = { accountId: Number(el.dataset.id), personaname: el.dataset.name || `Account ${el.dataset.id}`, avatar: el.dataset.avatar || null };
-  const link = await attempt(() => invoke(game === "deadlock" ? "deadlock_link" : "dota_link", args));
-  if (!link) return;
-  if (game === "deadlock") {
-    S.boot.deadlockLink = link;
-    dlOverview.clear();
-  } else {
-    S.boot.dotaLink = link;
-    dHist.clear();
-    dPlayer.clear();
-  }
-  toast(`${game === "deadlock" ? "Deadlock" : "Dota 2"} connected to ${args.personaname}.`);
-  ACTIONS.refresh();
+act("steam-login-cancel", async () => {
+  clearInterval(LOGIN.timer);
+  LOGIN.timer = null;
+  LOGIN.pending = false;
+  await invoke("steam_login_cancel").catch(() => {});
+  rerender();
 });
 
 // ---------- The merged timeline ----------
@@ -1044,21 +1046,28 @@ async function loadGlobalBoard(force) {
 act("lb-set", (el) => {
   D[el.dataset.axis] = el.dataset.value;
   if (D.lbScope === "global") loadGlobalBoard();
+  if (D.lbScope === "top") dLeaders.load();
   rerender();
 });
 
 view("leaderboard", {
   game: "dota", nav: true, icon: "leaderboard", title: "Leaderboard",
-  sub: () => (D.lbScope === "global" ? "Best recorded games from everyone who syncs" : "Your own best recorded games"),
+  sub: () => (D.lbScope === "top" ? "Valve's official ranked leaderboard" : D.lbScope === "global" ? "Best recorded games from everyone who syncs" : "Your own best recorded games"),
   load(force) {
+    if (D.lbScope === "top") return dLeaders.load(force);
     if (D.lbScope === "global") loadGlobalBoard(force);
     return loadHistory();
   },
   render() {
     const metric = LB_METRICS.find((m) => m.key === D.lbMetric);
     const chip = (axis, value, label) => `<button class="chip ${D[axis] === value ? "on" : ""}" data-act="lb-set" data-axis="${axis}" data-value="${value}" type="button">${esc(label)}</button>`;
+    if (D.lbScope === "top") {
+      const scopes = `<div class="chips">${chip("lbScope", "top", "Top players")}${chip("lbScope", "personal", "My best games")}${chip("lbScope", "global", "Everyone's best games")}</div>`;
+      return topBoardHtml(dLeaders, scopes, "lb-set", "lbRegion", D, (p) => `<td><b>${esc(p.name)}</b>${p.team ? ` <span class="muted">${esc(p.team)}</span>` : ""}</td><td class="muted">${esc((p.country || "").toUpperCase())}</td>`,
+        "<th>Player</th><th>Country</th>", "Valve's official leaderboard, the same list the Dota client shows. Valve publishes names and ranks only, so there are no stats beside them.");
+    }
     const head = `<div class="filters">
-      <div class="chips">${chip("lbScope", "personal", "Just me")}${chip("lbScope", "global", "Everyone")}</div>
+      <div class="chips">${chip("lbScope", "top", "Top players")}${chip("lbScope", "personal", "My best games")}${chip("lbScope", "global", "Everyone's best games")}</div>
       <div class="chips">${LB_METRICS.map((m) => chip("lbMetric", m.key, m.label)).join("")}</div>
       <div class="chips">${chip("lbType", "all", "All game types")}${GAME_TYPES.map((t) => chip("lbType", t.id, t.label)).join("")}</div></div>`;
 

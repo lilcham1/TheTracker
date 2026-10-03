@@ -1,12 +1,9 @@
 // Settings: how the app runs, the overlay, the account, and about/updates.
 
 const SET = {
-  monitors: null, authFlow: "signIn", authBusy: false, authError: null,
+  monitors: null,
   diag: null, diagRunning: false, backups: null, backupPath: null, restoreArmed: null,
 };
-
-const RANKS = ["Herald", "Guardian", "Crusader", "Archon", "Legend", "Ancient", "Divine", "Immortal"];
-const ROLES = ["Carry", "Mid", "Offlane", "Support", "Hard support"];
 
 const SETTINGS_TABS = [["general", "General"], ["overlay", "Overlay"], ["account", "Account"], ["about", "About and updates"]];
 
@@ -24,6 +21,19 @@ onChange("bg-start", async (el) => {
 onChange("bg-tray", async (el) => {
   const bg = await attempt(() => invoke("set_close_to_tray", { enabled: el.checked }));
   if (bg) S.boot.background = bg;
+  lastHtml = null;
+  rerender();
+});
+onChange("game-toggle", async (el) => {
+  const next = { ...S.boot.prefs.games, [el.dataset.game]: el.checked };
+  try {
+    S.boot.prefs = await invoke("save_games", next);
+    S.boot.gsi = await invoke("gsi_status");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+  renderNav();
+  renderBanners();
   lastHtml = null;
   rerender();
 });
@@ -57,7 +67,17 @@ function generalHtml() {
   const bg = S.boot.background;
   const backups = SET.backups || [];
   const name = (p) => p.split(/[\\/]/).pop().replace("TheTracker-backup_", "").replace(".zip", "").replace("_", " at ").replace(/(\d{2})(\d{2})(\d{2})$/, "$1:$2");
+  const g = S.boot.prefs.games;
+  const gameRow = (key, label, note) => `<label class="switch"><input type="checkbox" data-change="game-toggle" data-game="${key}" ${g[key] ? "checked" : ""} /><span>${label} <span class="muted">${note}</span></span></label>`;
   return `<section class="set">
+      <h3>Games</h3>
+      <p class="muted">Switch off a game you don't play and its pages disappear. With Dota 2 or CS2 off, TheTracker also stops listening for that game and takes its small config file back out of the game's folder.</p>
+      ${gameRow("dota", "Dota 2", "live tracking, overlay, match history")}
+      ${gameRow("deadlock", "Deadlock", "match history and meta")}
+      ${gameRow("cs2", "Counter-Strike 2", "live tracking of your own matches")}
+      ${gameRow("overwatch", "Overwatch", "career stats from your public profile")}
+    </section>
+    <section class="set">
       <h3>Running in the background</h3>
       <p class="muted">TheTracker records a match only while it's running. If it's closed when you play, that game never reaches your Sessions.</p>
       <label class="switch"><input type="checkbox" data-change="bg-start" ${bg.startWithWindows ? "checked" : ""} /><span>Start with Windows <span class="muted">(opens in the tray, not on screen)</span></span></label>
@@ -145,35 +165,11 @@ function overlayHtml() {
 
 // ---------- Account ----------
 
-act("profile-save", async () => {
-  const p = { username: $("#profName").value, rank: $("#profRank").value || null, role: $("#profRole").value || null };
-  const saved = await attempt(() => invoke("save_profile", p), "Profile saved.");
-  if (saved) S.boot.profile = saved;
-  rerender();
-});
-act("auth-flow", (el) => {
-  SET.authFlow = el.dataset.flow;
-  SET.authError = null;
-  rerender();
-});
-act("auth-submit", async () => {
-  const email = $("#authEmail").value, password = $("#authPassword").value;
-  SET.authBusy = true;
-  SET.authError = null;
-  rerender();
-  try {
-    S.boot.auth = await invoke("sign_in", { email, password, flow: SET.authFlow });
-    toast(SET.authFlow === "signUp" ? "Account created. Your sessions are syncing." : "Signed in. Your sessions are syncing.");
-  } catch (e) {
-    SET.authError = e.message;
-  }
-  SET.authBusy = false;
-  pollSlow();
-  rerender();
-});
 act("sign-out", async () => {
-  const auth = await attempt(() => invoke("sign_out"), "Signed out. Your sessions stay on this PC.");
-  if (auth) S.boot.auth = auth;
+  const auth = await attempt(() => invoke("sign_out"), "Signed out. Your recorded sessions and settings stay on this PC.");
+  if (!auth) return;
+  S.boot = await invoke("boot");
+  for (const r of Object.values(RES)) r.clear();
   pollSlow();
   rerender();
 });
@@ -192,59 +188,53 @@ act("cloud-delete", async (el) => {
   if (out) toast(`Deleted ${out.deleted} published sessions. Your local copies are untouched.`);
   rerender();
 });
-act("unlink", async (el) => {
-  const game = el.dataset.game;
-  const link = await attempt(() => invoke(game === "deadlock" ? "deadlock_unlink" : "dota_unlink"), "Account disconnected.");
-  if (!link) return;
-  if (game === "deadlock") {
-    S.boot.deadlockLink = link;
-    dlOverview.clear();
-  } else {
-    S.boot.dotaLink = link;
-    dHist.clear();
-    dPlayer.clear();
+act("ow-unlink", async () => {
+  const link = await attempt(() => invoke("ow_unlink"), "Overwatch profile disconnected.");
+  if (link) {
+    S.boot.overwatchLink = link;
+    owOverview.clear();
   }
   rerender();
 });
 
 function accountHtml() {
-  const p = S.boot.profile, auth = S.boot.auth, sync = S.sync || {};
-  const linkRow = (game, label, link) => `<div class="line static">${imgHtml(link.avatar, "avatar small")}
-    <span class="grow"><b>${label}</b><span class="sub">${link.accountId ? `${esc(link.personaname || "")} (Steam account ${link.accountId})` : "Not connected"}</span></span>
-    ${link.accountId ? `<button class="link" data-act="unlink" data-game="${game}" type="button">Disconnect</button>` : `<button class="link" data-act="go" data-view="${game === "deadlock" ? "dl-overview" : "overview"}" type="button">Connect</button>`}</div>`;
-  return `<section class="set">
-      <h3>Steam accounts</h3>
-      <p class="muted">Which Steam account each game's match history is read for.</p>
-      <div class="lines">${linkRow("dota", "Dota 2", S.boot.dotaLink)}${linkRow("deadlock", "Deadlock", S.boot.deadlockLink)}</div>
-    </section>
-    <section class="set">
-      <h3>Leaderboard profile</h3>
-      <p class="muted">The name shown beside your games on the shared leaderboard.</p>
-      <div class="form-grid">
-        <label class="field"><span>Display name</span><input class="input" id="profName" type="text" maxlength="40" value="${esc(p.username)}" placeholder="Your name" /></label>
-        <label class="field"><span>Rank</span><select class="input" id="profRank"><option value="">Not set</option>${RANKS.map((r) => `<option ${p.rank === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
-        <label class="field"><span>Role</span><select class="input" id="profRole"><option value="">Not set</option>${ROLES.map((r) => `<option ${p.role === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
-      </div>
-      <button class="btn" data-act="profile-save" type="button">Save profile</button>
-    </section>
-    <section class="set">
-      <h3>TheTracker account</h3>
-      ${auth.signedIn ? `
-        <p class="muted">Signed in as <b>${esc(auth.email || "")}</b>. Recorded sessions are published to the shared leaderboard as they finish.</p>
-        <p class="muted">${sync.pending ? `Syncing ${sync.pending}…` : sync.lastError ? `<span class="loss">Last sync failed: ${esc(sync.lastError)}</span>` : sync.lastSync ? `Last synced at ${esc(sync.lastSync)}.` : "Up to date."}${sync.synced ? ` ${sync.synced} sent this session.` : ""}</p>
-        <div class="row wrap"><button class="btn" data-act="sync-all" type="button">Sync everything now</button><button class="btn ghost" data-act="sign-out" type="button">Sign out</button>
-          <span class="grow"></span><button class="link danger" data-act="cloud-delete" type="button">Delete what I've published</button></div>`
-      : `
-        <p class="muted">Optional. An account publishes your recorded sessions to the shared leaderboard. Without one, everything stays on this PC and nothing is sent anywhere.</p>
-        ${auth.lastError ? `<div class="note warn">${esc(auth.lastError)}</div>` : ""}
-        <div class="chips"><button class="chip ${SET.authFlow === "signIn" ? "on" : ""}" data-act="auth-flow" data-flow="signIn" type="button">Sign in</button><button class="chip ${SET.authFlow === "signUp" ? "on" : ""}" data-act="auth-flow" data-flow="signUp" type="button">Create an account</button></div>
-        <div class="form-grid">
-          <label class="field"><span>Email</span><input class="input" id="authEmail" type="email" autocomplete="username" data-enter="auth-submit" /></label>
-          <label class="field"><span>Password${SET.authFlow === "signUp" ? " (at least 8 characters)" : ""}</span><input class="input" id="authPassword" type="password" autocomplete="${SET.authFlow === "signUp" ? "new-password" : "current-password"}" data-enter="auth-submit" /></label>
-        </div>
-        ${SET.authError ? `<div class="note err">${esc(SET.authError)}</div>` : ""}
-        <button class="btn" data-act="auth-submit" type="button" ${SET.authBusy ? "disabled" : ""}>${SET.authBusy ? "Working…" : SET.authFlow === "signUp" ? "Create account" : "Sign in"}</button>`}
-    </section>`;
+  const auth = S.boot.auth, sync = S.sync || {}, id = auth.steam;
+  const legacy = S.boot.dotaLink.accountId || S.boot.deadlockLink.accountId;
+  const ow = S.boot.overwatchLink;
+  const games = S.boot.prefs.games;
+
+  let main;
+  if (id) {
+    const board = auth.signedIn
+      ? `<p class="muted">${sync.pending ? `Publishing ${sync.pending} sessions…` : sync.lastError ? `<span class="loss">The last sync failed: ${esc(sync.lastError)}</span>` : sync.lastSync ? `Your recorded sessions are published to the shared leaderboard. Last synced at ${esc(sync.lastSync)}.` : "Your recorded sessions are published to the shared leaderboard as they finish."}</p>`
+      : `<div class="note warn">${esc(auth.lastError || "The shared leaderboard isn't connected.")} <button class="link" data-act="steam-login" type="button">Try signing in again</button></div>`;
+    main = `<div class="account-card">${imgHtml(id.avatar, "avatar large")}
+        <div class="grow"><h2 class="display">${esc(id.name)}</h2>
+          <p class="muted">Signed in with Steam${S.boot.profile.rank ? `, ${esc(S.boot.profile.rank)}` : ""}. Steam account ${id.accountId}.</p></div>
+        <button class="btn ghost" data-act="sign-out" type="button">Sign out</button></div>
+      ${board}
+      ${auth.signedIn ? `<div class="row wrap"><button class="btn ghost" data-act="sync-all" type="button">Sync everything now</button><span class="grow"></span>
+        <button class="link danger" data-act="cloud-delete" type="button">Delete what I've published</button></div>` : ""}`;
+  } else {
+    main = `<p class="muted">${legacy
+        ? `This PC is still using the Steam account that was connected before sign-in existed (${esc(S.boot.dotaLink.personaname || S.boot.deadlockLink.personaname || "account")}). Your pages keep working. Sign in to confirm it's yours and to put your games on the shared leaderboard.`
+        : "Sign in once and everything is set up: Dota 2 and Deadlock read your matches, and your name goes on the leaderboard. Steam's own login page opens in your browser, so TheTracker never sees your password."}</p>
+      ${LOGIN.pending
+        ? `<div class="row"><div class="spinner" aria-hidden="true"></div><span>Waiting for you to finish signing in on Steam's page in your browser…</span></div>
+           <div class="row"><button class="btn ghost" data-act="steam-login-cancel" type="button">Cancel</button><button class="link" data-act="steam-login" type="button">Open the page again</button></div>`
+        : `<button class="btn steam" data-act="steam-login" type="button">Sign in with Steam</button>`}
+      ${LOGIN.error ? `<div class="note err">${esc(LOGIN.error)}</div>` : ""}
+      ${auth.email ? `<p class="hint">An older email account (${esc(auth.email)}) is still connected for the leaderboard. Signing in with Steam replaces it.</p>` : ""}
+      ${legacy ? `<button class="link danger" data-act="sign-out" type="button">Disconnect this account</button>` : ""}`;
+  }
+
+  return `<section class="set"><h3>Your account</h3>${main}</section>
+    ${games.overwatch ? `<section class="set"><h3>Overwatch profile</h3>
+      <p class="muted">Overwatch runs on Battle.net, not Steam, so its profile is connected separately.</p>
+      <div class="lines"><div class="line static">${imgHtml(ow.avatar, "avatar small")}<span class="grow"><b>${ow.playerId ? esc(ow.name) : "Not connected"}</b></span>
+        ${ow.playerId ? `<button class="link" data-act="ow-unlink" type="button">Disconnect</button>` : `<button class="link" data-act="go" data-view="ow-overview" type="button">Connect</button>`}</div></div></section>` : ""}
+    <section class="set"><h3>What signing in does</h3>
+      <p class="muted">It proves which Steam account is yours, nothing more. TheTracker gets your public Steam ID from Steam and reads your public match data with it. It cannot post, trade, or see anything private, and it stores no Steam password or key.</p></section>`;
 }
 
 // ---------- About ----------

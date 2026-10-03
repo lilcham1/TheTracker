@@ -91,6 +91,10 @@ type Gsi struct {
 	notice string
 	server *http.Server
 
+	// Where Counter-Strike 2's payloads go. Both games post to the same
+	// listener and say which they are.
+	OnCs2 func(map[string]any)
+
 	// Overridable for tests: where Steam libraries are looked for.
 	steamRoot func() string
 }
@@ -100,6 +104,8 @@ func NewGsi(store *Store, tracker *Tracker) *Gsi {
 }
 
 // token returns the shared secret written into the config, creating it once.
+func (g *Gsi) Token() string { return g.token() }
+
 func (g *Gsi) token() string {
 	if raw, err := os.ReadFile(g.store.path("gsi_token.txt")); err == nil {
 		if t := strings.TrimSpace(string(raw)); t != "" {
@@ -117,6 +123,13 @@ func (g *Gsi) token() string {
 // posts to localhost, so nothing legitimate ever arrives from another
 // machine.
 func (g *Gsi) Start() {
+	g.mu.Lock()
+	running := g.server != nil
+	g.mu.Unlock()
+	if running {
+		return
+	}
+
 	var ln net.Listener
 	var err error
 	port := DefaultGsiPort
@@ -150,6 +163,7 @@ func (g *Gsi) Start() {
 func (g *Gsi) Stop() {
 	g.mu.Lock()
 	srv := g.server
+	g.server = nil
 	g.mu.Unlock()
 	if srv != nil {
 		_ = srv.Close()
@@ -185,6 +199,12 @@ func (g *Gsi) Accept(r *http.Request, body []byte) error {
 		if tok, _ := getStr(auth, "token"); tok != g.token() {
 			return errRejected
 		}
+	}
+	if jI64(sub(payload, "provider"), "appid") == cs2AppID {
+		if g.OnCs2 != nil {
+			g.OnCs2(payload)
+		}
+		return nil
 	}
 	g.tracker.HandleUpdate(payload)
 	return nil

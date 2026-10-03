@@ -348,7 +348,7 @@ function gate(r, loadingText) {
 // ---------- Views and navigation ----------
 
 const VIEWS = {};
-const NAV = { dota: [], deadlock: [] };
+const NAV = { dota: [], deadlock: [], cs2: [], overwatch: [] };
 
 /// Registers a page. `render` returns HTML for the current state; `load`
 /// starts whatever it needs and is called on entry and on Refresh.
@@ -366,17 +366,43 @@ function renderNav() {
         <span class="ico">${icon(v.icon)}</span><span>${esc(v.title)}</span>${liveDot}</button>`;
     })
     .join("");
-  document.querySelectorAll(".game").forEach((b) => b.classList.toggle("on", b.dataset.game === S.game));
+  // Only the games the player switched on get a tab, and with a single game
+  // there is nothing to switch between.
+  const games = enabledGames();
+  const switcher = $("#games");
+  switcher.hidden = games.length < 2;
+  switcher.style.gridTemplateColumns = `repeat(${Math.min(games.length, 2)}, 1fr)`;
+  switcher.innerHTML = games
+    .map((g) => `<button class="game ${g === S.game ? "on" : ""}" data-act="game" data-game="${g}" type="button">${GAMES[g].label}</button>`)
+    .join("");
   const settingsBtn = $('.side-foot [data-view="settings"]');
   if (settingsBtn) settingsBtn.classList.toggle("on", S.view === "settings");
   $("#shell").dataset.game = S.game;
 }
 
-const LAST_VIEW = { dota: "overview", deadlock: "dl-overview" };
+const GAMES = {
+  dota: { label: "Dota 2", home: "overview" },
+  deadlock: { label: "Deadlock", home: "dl-overview" },
+  cs2: { label: "CS2", home: "cs-live" },
+  overwatch: { label: "Overwatch", home: "ow-overview" },
+};
+const LAST_VIEW = { dota: "overview", deadlock: "dl-overview", cs2: "cs-live", overwatch: "ow-overview" };
+
+function enabledGames() {
+  const g = (S.boot && S.boot.prefs.games) || {};
+  const on = Object.keys(GAMES).filter((k) => g[k]);
+  return on.length ? on : ["dota"];
+}
 
 function go(id, params = {}) {
   if (!VIEWS[id]) id = "overview";
+  // A page of a game that is switched off goes to one that is on.
+  if (VIEWS[id].game && !enabledGames().includes(VIEWS[id].game)) {
+    id = GAMES[enabledGames()[0]].home;
+    params = {};
+  }
   const v = VIEWS[id];
+  $("#shell").classList.toggle("bare", !!v.bare);
   S.view = id;
   S.params = params;
   if (v.game) {
@@ -581,7 +607,7 @@ function paintTop() {
   const auth = S.boot && S.boot.auth;
   if (!auth || !auth.signedIn) {
     line.textContent = "Saved on this PC";
-    line.title = "Your matches are stored locally. Sign in under Settings to publish to the leaderboard.";
+    line.title = auth && auth.steam ? auth.lastError || "The shared leaderboard isn't connected." : "Your matches are stored locally. Sign in with Steam under Settings to publish to the leaderboard.";
   } else if (sync && sync.pending) {
     line.textContent = `Syncing ${sync.pending}…`;
     line.title = "";
@@ -667,7 +693,10 @@ function renderBanners() {
     </div>`);
   }
   const bg = b.background;
-  if (bg && bg.trayAvailable && !bg.startWithWindows && !bg.autostartAsked) {
+  // Only live tracking needs the app running, so only games with a live
+  // feed raise the question.
+  const liveGames = b.prefs.games.dota || b.prefs.games.cs2;
+  if (bg && liveGames && b.prefs.games.chosen && bg.trayAvailable && !bg.startWithWindows && !bg.autostartAsked) {
     out.push(`<div class="banner">
       <span><b>TheTracker only records matches while it's running.</b> Start it with Windows and it's always there when you play. It opens in the tray, not on screen.</span>
       <button class="btn small" data-act="autostart-yes" type="button">Start with Windows</button>

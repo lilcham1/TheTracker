@@ -194,6 +194,9 @@ type fakeConvex struct {
 	calls     []map[string]any
 	tokens    []string
 	expireJWT bool
+	// How the Steam provider answers: "" accepts, "unconfigured" behaves like
+	// a server that predates Steam sign-in, "reject" refuses the statement.
+	steamMode string
 	srv       *httptest.Server
 }
 
@@ -206,7 +209,7 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 		f.mu.Lock()
 		f.calls = append(f.calls, body)
 		f.tokens = append(f.tokens, r.Header.Get("Authorization"))
-		expire := f.expireJWT
+		expire, steamMode := f.expireJWT, f.steamMode
 		f.mu.Unlock()
 
 		reply := func(v any) { json.NewEncoder(w).Encode(map[string]any{"status": "success", "value": v}) }
@@ -223,8 +226,16 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 				return
 			}
 			params, _ := args["params"].(map[string]any)
-			if params["password"] != "correct horse" {
-				fail("Uncaught Error: InvalidSecret")
+			openid, _ := params["openid"].(map[string]any)
+			switch {
+			case args["provider"] != "steam" || openid["openid.claimed_id"] == nil:
+				fail("Uncaught Error: Missing Steam sign-in details.")
+				return
+			case steamMode == "unconfigured":
+				fail("Uncaught Error: Provider `steam` is not configured, available providers are `password`.")
+				return
+			case steamMode == "reject":
+				fail("Uncaught Error: Steam did not confirm that sign-in.\n    at authorize (../convex/auth.ts:59:10)")
 				return
 			}
 			reply(map[string]any{"tokens": map[string]any{"token": "jwt-1", "refreshToken": "refresh-1"}})
@@ -290,6 +301,13 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", what)
 }
 
+var testIdentity = SteamIdentity{SteamID: "76561198810668586", AccountID: 850402858, Name: "lilcham"}
+
+var testOpenID = map[string]string{
+	"openid.mode": "id_res", "openid.sig": "good",
+	"openid.claimed_id": "https://steamcommunity.com/openid/id/76561198810668586",
+}
+
 func sampleMatch(id string) MatchSummary {
 	return MatchSummary{
 		MatchID: id, HeroName: ptr("npc_dota_hero_axe"), Date: "2026-10-03T10:00:00.000Z", Duration: "30:00", Kills: 7,
@@ -300,28 +318,18 @@ func sampleMatch(id string) MatchSummary {
 	}
 }
 
-func TestSignInWrongPasswordReadsAsSuch(t *testing.T) {
-	c, _, _ := newTestCloud(t)
-	_, err := c.SignIn("me@example.com", "wrong", "signIn")
-	if err == nil || err.Error() != "Wrong email or password." {
-		t.Fatalf("expected a plain message, got %v", err)
-	}
-	if c.Auth().SignedIn {
-		t.Fatal("a failed sign-in left the app signed in")
-	}
-	if _, err := c.SignIn("", "", "signIn"); err == nil {
-		t.Fatal("empty credentials should be refused before any request")
-	}
-}
-
 func TestSigningInClaimsTheDeviceAndSyncsHistory(t *testing.T) {
 	c, f, store := newTestCloud(t)
 	store.SaveHistory([]MatchSummary{sampleMatch("1"), sampleMatch("2")})
 	store.SaveProfile(Profile{Username: "lilcham"})
 
-	auth, err := c.SignIn(" me@example.com ", "correct horse", "signIn")
-	if err != nil || !auth.SignedIn || *auth.Email != "me@example.com" || *auth.UserID != "user-1" {
+	err := c.SteamSignIn(testIdentity, testOpenID)
+	auth := c.Auth()
+	if err != nil || !auth.SignedIn || auth.Steam == nil || auth.Steam.AccountID != 850402858 || *auth.UserID != "user-1" {
 		t.Fatalf("sign in: %v %+v", err, auth)
+	}
+	if sent := f.argsFor("auth:signIn"); sent["provider"] != "steam" || sent["params"].(map[string]any)["openid"].(map[string]any)["openid.sig"] != "good" {
+		t.Fatalf("the server must be handed Steam's statement to verify for itself: %v", sent)
 	}
 	raw, _ := json.Marshal(auth)
 	if strings.Contains(string(raw), "jwt") || strings.Contains(string(raw), "refresh") {
@@ -385,7 +393,7 @@ func TestSignedOutMatchesAreHeldNotLost(t *testing.T) {
 
 func TestAnExpiredTokenIsRefreshedAndTheMatchStillLands(t *testing.T) {
 	c, f, _ := newTestCloud(t)
-	if _, err := c.SignIn("me@example.com", "correct horse", "signIn"); err != nil {
+	if err := c.SteamSignIn(testIdentity, testOpenID); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, "sign-in sync to settle", func() bool { return c.Status().Pending == 0 })

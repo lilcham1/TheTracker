@@ -369,7 +369,44 @@ button.line:hover { background: var(--panel); }
 }
 
 /* The connection light, the recording switch and the overlay are all about
-   Dota's live feed. Deadlock has none, so they have no place on its pages. */
-.shell[data-game="deadlock"] #dotaPill,
-.shell[data-game="deadlock"] #trackPill,
-.shell[data-game="deadlock"] #overlayPill { display: none; }
+   Dota's live feed, so they show on Dota's pages only. */
+.shell:not([data-game="dota"]) #dotaPill,
+.shell:not([data-game="dota"]) #trackPill,
+.shell:not([data-game="dota"]) #overlayPill { display: none; }
+
+/* ---------- More games ---------- */
+
+.shell[data-game="cs2"] { --accent: #6aa5ee; --accent-ink: #04101f; --accent-soft: rgba(106, 165, 238, .14); }
+.shell[data-game="overwatch"] { --accent: #f68a3c; --accent-ink: #1c0d02; --accent-soft: rgba(246, 138, 60, .14); }
+.games[hidden] { display: none; }
+
+/* A page with nothing around it: the first-run question. */
+.shell.bare { grid-template-columns: 1fr; }
+.shell.bare .side, .shell.bare .top, .shell.bare .banners { display: none; }
+.welcome { display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 760px; margin: 6vh auto 0; text-align: center; }
+.welcome img { border-radius: 12px; }
+.welcome h1 { font-size: 34px; }
+.welcome .btn { height: 42px; padding: 0 28px; margin-top: 6px; }
+.game-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; margin: 10px 0; text-align: left; }
+.game-card { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 18px 18px 18px 50px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); cursor: pointer; font-size: 13px; }
+.game-card:hover { border-color: var(--faint); }
+.game-card input { position: absolute; left: 18px; top: 21px; width: 18px; height: 18px; accent-color: var(--card); }
+.game-card-name { font-size: 19px; }
+.game-card[data-theme="dota"] { --card: #d9a441; }
+.game-card[data-theme="deadlock"] { --card: #58c2ae; }
+.game-card[data-theme="cs2"] { --card: #6aa5ee; }
+.game-card[data-theme="overwatch"] { --card: #f68a3c; }
+.game-card.on { border-color: var(--card); background: color-mix(in srgb, var(--card) 9%, var(--panel)); }
+.game-card.on .game-card-name { color: var(--card); }
+
+/* ---------- Account ---------- */
+
+.btn.steam { height: 42px; padding: 0 22px; background: #1b2838; color: #fff; border-color: #2a475e; font-weight: 600; }
+.btn.steam:hover:not(:disabled) { background: #2a475e; filter: none; }
+.signin .row { align-items: center; }
+.signin .spinner, .set .spinner { width: 18px; height: 18px; border-width: 2px; flex: none; }
+.account-card { display: flex; align-items: center; gap: 18px; padding: 16px 18px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); }
+.account-card h2 { font-size: 24px; }
+.ranks { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.rank { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 13px; }
+.rank-icon { width: 28px; height: 28px; object-fit: contain; }

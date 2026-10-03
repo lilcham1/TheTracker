@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 
 ## What this is
 
-**TheTracker** — a desktop match tracker for Dota 2 and Deadlock, in
+**TheTracker** — a desktop match tracker for Dota 2, Deadlock, CS2 and
+Overwatch, in
 `TheTracker/`. Written in **Go**: the backend is plain Go, the window shell is
 Wails v3 (WebView2, no CGO), and the interface is plain HTML/CSS/JS embedded
 in the exe. See `TheTracker/README.md` for the feature list, layout, build
@@ -42,6 +43,16 @@ Three sources, deliberately not blurred together:
 - **Deadlock** — the community Deadlock API (`internal/core/deadlock.go`).
   Post-match only. Do not add anything that surfaces information a player
   could not already see in-game.
+
+- **CS2** — Game State Integration again (`internal/core/cs2.go`), on the
+  same listener, routed by `provider.appid`. There is no public CS2 match
+  history or leaderboard; do not invent one.
+- **Overwatch** — the community OverFast API (`internal/core/overwatch.go`):
+  career totals only, public profiles only.
+- **Valorant** — deliberately absent. It needs a Riot production API key
+  granted to this project; without one there is no legitimate source.
+- **Sign-in** — Steam OpenID only (`steamlogin.go`, verified server-side in
+  `convex/auth.ts`). No email/password, no manual account linking.
 
 Do not scrape other trackers' sites, work around their sign-ins, or copy
 their ratings. `convex/` holds the cloud functions for optional sync and the

@@ -12,19 +12,19 @@ async function boot() {
   }
   S.overlayVisible = S.boot.overlayVisible;
 
-  let start = "overview";
+  let start = GAMES[enabledGames()[0]].home;
   try {
     const saved = localStorage.getItem("tt.view");
-    if (saved && VIEWS[saved] && saved !== "settings") start = saved;
+    if (saved && VIEWS[saved] && VIEWS[saved].game) start = saved;
   } catch (_) {
     /* storage is a convenience */
   }
-  // First run with nothing linked: the Live page explains the setup.
-  if (!dotaLinked() && !dlLinked() && start === "overview") start = "overview";
 
   await Promise.all([pollLive(), loadHistory()]);
   // A match in progress is what the player opened the app to see.
-  if (S.live && S.live.live) start = "live";
+  if (S.live && S.live.live && S.boot.prefs.games.dota) start = "live";
+  // First run: ask which games before showing any of them.
+  if (!S.boot.prefs.games.chosen) start = "welcome";
 
   renderBanners();
   go(start);
@@ -35,7 +35,7 @@ async function boot() {
   // Not at once: startup should not wait on the network.
   setTimeout(() => checkForUpdate(true), 8000);
   setInterval(() => checkForUpdate(true), 6 * 3600 * 1000);
-  ensureHeroList();
+  if (S.boot.prefs.games.dota) ensureHeroList();
 }
 
 act("reload", () => location.reload());

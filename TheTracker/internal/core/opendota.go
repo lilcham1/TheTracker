@@ -19,10 +19,16 @@ import (
 type Dota struct {
 	store *Store
 	api   *service
+	// Valve's own web API, for the official leaderboard.
+	valve *service
 }
 
 func NewDota(store *Store) *Dota {
-	return &Dota{store: store, api: &service{Name: "OpenDota", Base: "https://api.opendota.com/api", Attempts: 3}}
+	return &Dota{
+		store: store,
+		api:   &service{Name: "OpenDota", Base: "https://api.opendota.com/api", Attempts: 3},
+		valve: &service{Name: "Dota's leaderboard", Base: "https://www.dota2.com/webapi", Attempts: 2},
+	}
 }
 
 func (d *Dota) account() (uint64, error) {

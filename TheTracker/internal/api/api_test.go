@@ -36,7 +36,7 @@ func call(t *testing.T, srv *httptest.Server, cmd, body string) (int, map[string
 
 // These reach outside the app — they start Dota, write into the real Dota
 // install, or open Explorer — so they are not fired blindly from a test.
-var outward = map[string]bool{"launch_dota": true, "gsi_install": true, "gsi_remove": true, "quit": true}
+var outward = map[string]bool{"launch_dota": true, "gsi_install": true, "gsi_remove": true, "quit": true, "cs2_install": true, "steam_login_start": true, "save_games": true}
 
 func TestEveryCommandAnswersWithJSON(t *testing.T) {
 	srv, app := newServer(t)
@@ -69,7 +69,7 @@ func TestBootHasEverythingTheFirstFrameNeeds(t *testing.T) {
 	if status != 200 {
 		t.Fatalf("boot failed: %s", raw)
 	}
-	for _, key := range []string{"version", "prefs", "profile", "dotaLink", "deadlockLink", "auth", "background", "gsi", "overlayVisible", "dataDir", "exportDir"} {
+	for _, key := range []string{"version", "prefs", "profile", "dotaLink", "deadlockLink", "overwatchLink", "auth", "background", "gsi", "overlayVisible", "dataDir", "exportDir"} {
 		if _, ok := boot[key]; !ok {
 			t.Errorf("boot is missing %s", key)
 		}
@@ -91,19 +91,31 @@ func TestCommandsRoundTrip(t *testing.T) {
 		t.Fatal("build not saved")
 	}
 
-	if status, _, _ := call(t, srv, "dota_link", `{"accountId":0,"personaname":"x"}`); status != 400 {
-		t.Fatal("linking account 0 should be refused")
+	// Games can be switched off, but never all of them.
+	if status, _, raw := call(t, srv, "save_games", `{"dota":false,"deadlock":false,"cs2":false,"overwatch":false}`); status != 400 || !strings.Contains(raw, "at least one") {
+		t.Fatalf("switching every game off should be refused: %d %s", status, raw)
 	}
-	call(t, srv, "dota_link", `{"accountId":42,"personaname":"me","avatar":null}`)
-	if id := app.Store.LoadLink("dota").AccountID; id == nil || *id != 42 {
-		t.Fatal("link not stored")
+	_, prefs, _ = call(t, srv, "save_games", `{"dota":false,"deadlock":true,"cs2":false,"overwatch":true}`)
+	games := prefs["games"].(map[string]any)
+	if games["dota"] != false || games["overwatch"] != true || games["chosen"] != true {
+		t.Fatalf("games not saved: %v", games)
 	}
-	if app.Store.LoadLink("deadlock").AccountID != nil {
-		t.Fatal("linking Dota must not link Deadlock")
+	if status, _, _ := call(t, srv, "sim_start", `{"seconds":10}`); status != 200 {
+		t.Fatal("the test match should still be startable")
 	}
-	call(t, srv, "dota_unlink", "")
-	if app.Store.LoadLink("dota").AccountID != nil {
-		t.Fatal("unlink failed")
+	call(t, srv, "sim_stop", "")
+	call(t, srv, "save_games", `{"dota":true,"deadlock":true}`)
+
+	if status, _, _ := call(t, srv, "ow_link", `{"playerId":""}`); status != 400 {
+		t.Fatal("linking an Overwatch profile with no id should be refused")
+	}
+	call(t, srv, "ow_link", `{"playerId":"Name-1234","name":"Name"}`)
+	if app.Ow.Link().PlayerID != "Name-1234" {
+		t.Fatal("Overwatch link not stored")
+	}
+	call(t, srv, "ow_unlink", "")
+	if app.Ow.Link().PlayerID != "" {
+		t.Fatal("Overwatch unlink failed")
 	}
 
 	if status, _, raw := call(t, srv, "save_profile", `{"username":"`+strings.Repeat("x", 41)+`"}`); status != 400 {

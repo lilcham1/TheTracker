@@ -61,6 +61,17 @@ type Goals struct {
 	MinGPM     int `json:"minGpm"`     // finish with at least this GPM
 }
 
+// Games is which games the player uses the app for. A game that is off has
+// no pages, and for Dota no live listener and no config in the game's folder.
+type Games struct {
+	Dota      bool `json:"dota"`
+	Deadlock  bool `json:"deadlock"`
+	CS2       bool `json:"cs2"`
+	Overwatch bool `json:"overwatch"`
+	// False until the player has answered the first-run question.
+	Chosen bool `json:"chosen"`
+}
+
 // WindowState is the main window's last size and position.
 type WindowState struct {
 	X      int  `json:"x"`
@@ -77,6 +88,7 @@ type Prefs struct {
 	General   GeneralPrefs    `json:"general"`
 	Goals     Goals           `json:"goals"`
 	Window    WindowState     `json:"window"`
+	Games     Games           `json:"games"`
 }
 
 func defaultOverlay() OverlaySettings {
@@ -92,6 +104,7 @@ func defaultPrefs() Prefs {
 		Builds:  []Build{},
 		Overlay: defaultOverlay(),
 		General: GeneralPrefs{CloseToTray: true},
+		Games:   Games{Dota: true, Deadlock: true},
 	}
 }
 

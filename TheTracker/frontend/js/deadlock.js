@@ -10,6 +10,7 @@ const DL = {
   open: new Set(), details: new Map(), live: undefined, liveAt: 0,
   metaTab: "heroes", metaSort: "winRate", metaDir: "desc", metaQuery: "",
   popular: new Map(),
+  dlRegion: "Europe", lbQuery: "",
 };
 
 const dlLinked = () => !!(S.boot && S.boot.deadlockLink && S.boot.deadlockLink.accountId);
@@ -342,5 +343,27 @@ view("dl-builds", {
     }
     return `<div class="sec-head"><h3>${builds.length} saved</h3><button class="btn" data-act="build-new" data-game="deadlock" type="button">New build</button></div>
       ${builds.sort((a, b) => a.hero.localeCompare(b.hero)).map((b) => buildCardHtml(b, true)).join("")}`;
+  },
+});
+
+// ---------- Leaderboard ----------
+
+const dlLeaders = resource("dlLeaders", "deadlock_leaderboard", { args: () => ({ region: DL.dlRegion }), ttl: 30 * 60000 });
+
+act("dl-region", (el) => {
+  DL.dlRegion = el.dataset.value;
+  dlLeaders.load();
+  rerender();
+});
+
+view("dl-leaderboard", {
+  game: "deadlock", nav: true, icon: "leaderboard", title: "Leaderboard",
+  sub: () => "Deadlock's ranked leaderboard, by region",
+  load: (force) => dlLeaders.load(force),
+  render() {
+    return topBoardHtml(dlLeaders, "", "dl-region", "dlRegion", DL,
+      (p) => `<td><b>${esc(p.name)}</b>${p.isMe ? ` <span class="accent">you</span>` : ""}</td>
+        <td><span class="cell">${p.images.slice(0, 4).map((src) => imgHtml(src, "portrait small")).join("")}<span class="muted">${esc(p.heroes.slice(0, 3).join(", "))}</span></span></td>`,
+      "<th>Player</th><th>Most played</th>", "From the community Deadlock API. The game publishes names and ranks; a row is marked as yours only when its name could belong to no other account.");
   },
 });
