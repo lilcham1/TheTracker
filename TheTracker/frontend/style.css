@@ -367,3 +367,9 @@ button.line:hover { background: var(--panel); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001s !important; }
 }
+
+/* The connection light, the recording switch and the overlay are all about
+   Dota's live feed. Deadlock has none, so they have no place on its pages. */
+.shell[data-game="deadlock"] #dotaPill,
+.shell[data-game="deadlock"] #trackPill,
+.shell[data-game="deadlock"] #overlayPill { display: none; }
