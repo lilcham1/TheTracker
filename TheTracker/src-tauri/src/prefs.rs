@@ -160,6 +160,28 @@ pub struct Favorites {
     pub deadlock: Option<String>,
 }
 
+/// How the app behaves around the game rather than in it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeneralPrefs {
+    /// Closing the window keeps TheTracker running in the tray.
+    ///
+    /// On by default because live tracking only works while the app runs,
+    /// and closing a window is not the same decision as "stop recording my
+    /// matches". The tray menu's Quit is always there for the second one.
+    #[serde(rename = "closeToTray", default = "yes")]
+    pub close_to_tray: bool,
+    /// Whether the player has already been asked about starting with
+    /// Windows, so it is asked once rather than nagged about.
+    #[serde(rename = "autostartAsked", default)]
+    pub autostart_asked: bool,
+}
+
+impl Default for GeneralPrefs {
+    fn default() -> Self {
+        GeneralPrefs { close_to_tray: true, autostart_asked: false }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Prefs {
     #[serde(default)]
@@ -168,6 +190,8 @@ pub struct Prefs {
     pub builds: Vec<Build>,
     #[serde(default)]
     pub overlay: OverlaySettings,
+    #[serde(default)]
+    pub general: GeneralPrefs,
 }
 
 fn prefs_file() -> std::path::PathBuf {
@@ -194,6 +218,13 @@ pub fn set_favorite(game: &str, hero: Option<String>) -> Prefs {
         "deadlock" => p.favorites.deadlock = hero,
         _ => p.favorites.dota = hero,
     }
+    save(&p);
+    p
+}
+
+pub fn save_general(general: GeneralPrefs) -> Prefs {
+    let mut p = load();
+    p.general = general;
     save(&p);
     p
 }
@@ -270,6 +301,18 @@ mod tests {
         assert_eq!(p.overlay.corner, "bottom-right");
         assert!(p.overlay.dota.stacks, "missing panel block falls back to defaults");
         assert!(p.overlay.dota.runes, "new panels default on for existing users");
+    }
+
+    #[test]
+    fn keeping_the_app_running_defaults_on_for_existing_installs() {
+        // Every prefs.json written so far predates these settings. Going
+        // through the derived Default would read a missing bool as false and
+        // quietly turn close-to-tray off for everyone who updates.
+        let old = r#"{"favorites":{},"builds":[],"overlay":{}}"#;
+        let p: Prefs = serde_json::from_str(old).unwrap();
+        assert!(p.general.close_to_tray);
+        assert!(!p.general.autostart_asked, "nobody has been asked yet");
+        assert!(Prefs::default().general.close_to_tray, "and a first launch agrees");
     }
 
     #[test]

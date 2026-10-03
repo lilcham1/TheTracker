@@ -1,6 +1,6 @@
 [package]
 name = "thetracker"
-version = "0.16.2"
+version = "0.17.0"
 edition = "2021"
 description = "TheTracker — desktop match tracker for Dota 2 and Deadlock."
 
@@ -8,7 +8,9 @@ description = "TheTracker — desktop match tracker for Dota 2 and Deadlock."
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# tray-icon: live tracking only works while the app runs, so it lives in the
+# tray rather than quitting when its window closes.
+tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
@@ -27,6 +29,12 @@ reqwest = { version = "0.12", features = ["json"] }
 # In-app updates. Desktop only — there is no mobile build.
 [target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
 tauri-plugin-updater = "2"
+# One running copy. A second would fail to bind the GSI port and both would
+# write history.json; the plugin hands the launch to the running one instead.
+tauri-plugin-single-instance = "2"
+# "Start with Windows", opt-in. Twelve matches went unrecorded because the
+# app simply was not open when they were played.
+tauri-plugin-autostart = "2"
 
 # Reads only the Steam account id / display name from the registry.
 # See steam.rs for exactly what is and is not read.

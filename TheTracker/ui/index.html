@@ -29,6 +29,11 @@
         <button class="pill pill-toggle" id="trackingToggle" type="button">
           <span class="dot"></span><span class="label">Tracking</span>
         </button>
+        <!-- Whether Dota is talking to the app at this moment. Separate from
+             Tracking, which is whether the app records what it is told. -->
+        <button class="pill dota-link" id="dotaLink" type="button" title="Checking for Dota…">
+          <span class="dot"></span><span class="label">Dota</span>
+        </button>
         <button class="pill pill-toggle" id="overlayBtn" type="button">
           <span class="nav-ico" data-icon="overlay"></span><span class="ghost-label">Overlay</span>
         </button>
@@ -42,6 +47,9 @@
             <span class="nav-ico" data-icon="settings"></span><span class="ghost-label">Settings</span>
           </button>
           <div class="appmenu" id="appMenu" hidden>
+            <button class="appmenu-item" data-view="general" type="button">
+              <span class="nav-ico" data-icon="settings"></span><span>General</span>
+            </button>
             <button class="appmenu-item" data-view="overlaysettings" type="button">
               <span class="nav-ico" data-icon="overlay"></span><span>Overlay Settings</span>
             </button>
@@ -103,6 +111,7 @@
 
       <div class="main">
         <div class="upd-banner" id="updateBanner" hidden></div>
+        <div class="upd-banner" id="autostartBanner" hidden></div>
 
         <div class="view-head">
           <h1 class="view-title" id="viewTitle">Live</h1>
@@ -127,6 +136,7 @@
           <section id="tab-dlfavorite" class="view"></section>
           <section id="tab-dlbuilds" class="view"></section>
 
+          <section id="tab-general" class="view"></section>
           <section id="tab-overlaysettings" class="view"></section>
           <section id="tab-accounts" class="view"></section>
           <section id="tab-about" class="view"></section>

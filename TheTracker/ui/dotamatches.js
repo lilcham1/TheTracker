@@ -1,9 +1,10 @@
-// Dota match history backed by OpenDota.
+// Dota match history: OpenDota's record of the account, with the matches
+// this app recorded itself merged in.
 //
-// This is separate from "Tracked Sessions", which is what the live GSI feed
-// recorded locally. GSI never reports who won, so this view exists to give
-// real results, real game modes, and the full scoreboard — the things a
-// tracker is actually expected to show.
+// OpenDota supplies the scoreboard, the mode and the queue, but its
+// per-player history is not complete — on some accounts it holds no Turbo
+// games at all. Matches the live feed recorded fill those gaps, so the list
+// is one timeline of what was actually played rather than two partial ones.
 
 const DOTA = {
   link: { accountId: null, personaname: null, avatar: null },
@@ -28,6 +29,8 @@ const DOTA = {
 };
 
 const DOTA_CACHE_MS = 120000;
+// How many recent matches OpenDota is asked for.
+const DT_LIMIT = 50;
 const DOTA_HERO_CDN = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/";
 const DOTA_ITEM_CDN = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/";
 
@@ -69,7 +72,7 @@ async function dtLoad(force = false) {
   DOTA.error = null;
   dtRender();
   try {
-    const data = await invoke("dota_api_history", { limit: 50 });
+    const data = await invoke("dota_api_history", { limit: DT_LIMIT });
     DOTA.matches = data.matches || [];
     DOTA.summary = data.summary || null;
     DOTA.loadedAt = Date.now();
@@ -80,42 +83,160 @@ async function dtLoad(force = false) {
   dtRender();
 }
 
+// ---------- The merged timeline ----------
+
+function dtKnown(v) {
+  return v !== null && v !== undefined;
+}
+
+/// "mm:ss" from a recorded match, in seconds. "??:??" — a match that never
+/// reached the clock — and the negative pre-horn clock are unknown.
+function dtClockSeconds(text) {
+  const m = /^(\d+):(\d{2})$/.exec(text || "");
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/// What a recorded match's tag says about its mode and its queue.
+///
+/// The tag is coarser than OpenDota's two fields. "Ranked" says nothing about
+/// the mode and an untagged match says nothing about either, so those stay
+/// unknown — they show under "All modes" and "All queues" only, rather than
+/// being filed under a guess.
+function dtLocalKind(gameType) {
+  switch (gameType) {
+    case "turbo":
+      return { modeKey: "turbo", modeName: "Turbo", ranked: false };
+    case "all_pick":
+    case "unranked":
+      return { modeKey: "all_pick", modeName: "All Pick", ranked: false };
+    case "ranked":
+      return { modeKey: null, modeName: null, ranked: true };
+    case "other":
+      return { modeKey: null, modeName: null, ranked: false };
+    default:
+      return { modeKey: null, modeName: null, ranked: null };
+  }
+}
+
+/// Matches this app recorded that OpenDota's list does not have, in the
+/// shape of an OpenDota row so one table holds both. What the live feed never
+/// reports — hero damage, and assists or GPM in records older than those
+/// fields — is null and shows as a dash.
+///
+/// Only matches inside the span OpenDota's list covers are added. A recorded
+/// match older than that is most likely on OpenDota too, just past the last
+/// one it returned, and listing it here would say otherwise.
+function dtLocalOnly() {
+  const listed = new Set(DOTA.matches.map((m) => String(m.matchId)));
+  const since = DOTA.matches.length >= DT_LIMIT ? Math.min(...DOTA.matches.map((m) => m.startTime)) : 0;
+  const rows = [];
+  for (const h of state.history || []) {
+    if (listed.has(String(h.matchid))) continue;
+    const ended = Date.parse(h.date) / 1000;
+    if (!Number.isFinite(ended)) continue;
+    const duration = dtClockSeconds(h.duration);
+    // History is dated when a match was saved; OpenDota dates a match by when
+    // it began. Backing off the game clock puts both on the same timeline.
+    const startTime = Math.round(ended - (duration || 0));
+    if (startTime < since) continue;
+
+    const assists = dtKnown(h.assists) ? h.assists : null;
+    rows.push({
+      matchId: String(h.matchid),
+      local: true,
+      tag: h.gameType,
+      heroName: heroDisplayName(h.heroName),
+      heroSlug: heroCleanName(h.heroName),
+      startTime,
+      durationSeconds: duration,
+      won: dtKnown(h.won) ? h.won : null,
+      abandoned: false,
+      incomplete: !!h.incomplete,
+      kills: h.kills,
+      deaths: h.totalDeaths,
+      assists,
+      kda: assists === null ? null : (h.kills + assists) / Math.max(1, h.totalDeaths),
+      lastHits: dtKnown(h.lastHits) ? h.lastHits : null,
+      goldPerMin: dtKnown(h.gpm) ? h.gpm : null,
+      xpPerMin: dtKnown(h.xpm) ? h.xpm : null,
+      heroDamage: null,
+      ...dtLocalKind(h.gameType),
+    });
+  }
+  return rows;
+}
+
+function dtTimeline() {
+  return [...DOTA.matches, ...dtLocalOnly()];
+}
+
 // ---------- Rendering ----------
 
-function dtStatsHtml() {
-  const s = DOTA.summary;
-  if (!s) return "";
+function dtAvg(rows, key) {
+  const vals = rows.map((m) => m[key]).filter(dtKnown);
+  return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+}
+
+/// The figures above the table, over every match in the timeline. Each one
+/// averages only the matches that have that figure, so a recorded match
+/// without GPM lowers nothing.
+function dtStatsHtml(rows) {
+  if (!rows.length) return "";
 
   // Oldest-first so the sparklines read left to right like a timeline.
-  const chrono = [...DOTA.matches].reverse();
-  const kdaSeries = chrono.map((m) => (m.kills + m.assists) / Math.max(1, m.deaths));
-  const gpmSeries = chrono.map((m) => m.goldPerMin);
-  const lhSeries = chrono.map((m) => m.lastHits);
-  const winSeries = chrono.map((_, i) => {
-    const w = chrono.slice(Math.max(0, i - 9), i + 1);
+  const chrono = [...rows].sort((a, b) => a.startTime - b.startTime);
+  const decided = chrono.filter((m) => m.won === true || m.won === false);
+  const wins = decided.filter((m) => m.won).length;
+  const losses = decided.length - wins;
+  const winRate = decided.length ? (wins / decided.length) * 100 : 0;
+  const winSeries = decided.map((_, i) => {
+    const w = decided.slice(Math.max(0, i - 9), i + 1);
     return (w.filter((m) => m.won).length / w.length) * 100;
   });
+
+  const withKda = chrono.filter((m) => dtKnown(m.kda));
+  const n = Math.max(1, withKda.length);
+  const sum = (key) => withKda.reduce((a, m) => a + m[key], 0);
+  const kda = (sum("kills") + sum("assists")) / Math.max(1, sum("deaths"));
+
+  const gpm = dtAvg(chrono, "goldPerMin");
+  const xpm = dtAvg(chrono, "xpPerMin");
+  const lh = dtAvg(chrono, "lastHits");
+  const local = rows.filter((m) => m.local).length;
 
   return railHtml([
     {
       label: "Win rate",
-      value: `${s.winRate.toFixed(0)}%`,
-      tone: s.winRate >= 50 ? "win" : "loss",
-      // Says whose 50 matches these are. OpenDota's per-player history is
-      // not always complete — Turbo games in particular can be absent from
-      // it entirely — so a bare "of 50" reads as "of everything you played"
-      // when it is only "of what OpenDota holds".
-      sub: `${s.wins}W – ${s.losses}L of ${s.matches} on OpenDota`,
+      value: decided.length ? `${winRate.toFixed(0)}%` : "—",
+      tone: decided.length ? (winRate >= 50 ? "win" : "loss") : "",
+      // Says where the matches came from. OpenDota's history alone is not
+      // always complete, so a bare "of 50" read as "of everything you
+      // played" when it was only "of what OpenDota holds".
+      sub: local
+        ? `${wins}W – ${losses}L · ${rows.length - local} OpenDota + ${local} tracked here`
+        : `${wins}W – ${losses}L of ${rows.length} on OpenDota`,
       spark: sparkline(winSeries),
     },
     {
       label: "Avg KDA",
-      value: s.kda.toFixed(2),
-      sub: `${(s.kills / Math.max(1, s.matches)).toFixed(1)} / ${(s.deaths / Math.max(1, s.matches)).toFixed(1)} / ${(s.assists / Math.max(1, s.matches)).toFixed(1)}`,
-      spark: sparkline(kdaSeries),
+      value: withKda.length ? kda.toFixed(2) : "—",
+      sub: withKda.length
+        ? `${(sum("kills") / n).toFixed(1)} / ${(sum("deaths") / n).toFixed(1)} / ${(sum("assists") / n).toFixed(1)}`
+        : "",
+      spark: sparkline(withKda.map((m) => m.kda)),
     },
-    { label: "Avg GPM", value: s.avgGpm, sub: `${s.avgXpm} XPM`, spark: sparkline(gpmSeries) },
-    { label: "Avg last hits", value: s.avgLastHits, sub: "per match", spark: sparkline(lhSeries) },
+    {
+      label: "Avg GPM",
+      value: dtKnown(gpm) ? gpm : "—",
+      sub: dtKnown(xpm) ? `${xpm} XPM` : "",
+      spark: sparkline(chrono.map((m) => m.goldPerMin).filter(dtKnown)),
+    },
+    {
+      label: "Avg last hits",
+      value: dtKnown(lh) ? lh : "—",
+      sub: "per match",
+      spark: sparkline(chrono.map((m) => m.lastHits).filter(dtKnown)),
+    },
   ]);
 }
 
@@ -188,7 +309,7 @@ const DT_COLUMNS = [
 ];
 
 function dtSortValue(m, key) {
-  if (key === "result") return m.abandoned ? 2 : m.won ? 0 : 1;
+  if (key === "result") return m.abandoned ? 2 : m.won === true ? 0 : m.won === false ? 1 : null;
   return m[key];
 }
 
@@ -198,39 +319,62 @@ function dtSorted(list) {
   return [...list].sort((a, b) => {
     const av = dtSortValue(a, sortKey);
     const bv = dtSortValue(b, sortKey);
+    // A figure a match does not have sorts after every one it does, in
+    // either direction — otherwise "highest GPM" opens on a row of dashes.
+    if (!dtKnown(av) || !dtKnown(bv)) return dtKnown(av) ? -1 : dtKnown(bv) ? 1 : 0;
     if (typeof av === "string") return av.localeCompare(bv) * dir;
     return (av - bv) * dir;
   });
 }
 
+/// A figure, or a dash where the source never had it.
+function dtCell(v, fmt = String) {
+  return dtKnown(v) ? fmt(v) : "—";
+}
+
+/// The line under the hero name. A recorded match carries the tag it was
+/// given in Sessions instead of OpenDota's mode and lobby.
+function dtSubHtml(m) {
+  if (!m.local) {
+    return `${escapeHtml(m.modeName)} · ${escapeHtml(m.lobbyName)}${m.partySize && m.partySize > 1 ? ` · party ${m.partySize}` : ""}`;
+  }
+  const tag = gameTypeLabel(m.tag);
+  return `${escapeHtml(tag === "Unspecified" ? "Mode unknown" : tag)} · <span class="src-local">tracked by TheTracker</span>${m.incomplete ? " · ended early" : ""}`;
+}
+
 function dtRowHtml(m) {
   const img = dtHeroImg(m.heroSlug);
-  const open = DOTA.open.has(m.matchId);
-  const result = m.abandoned ? "other" : m.won ? "win" : "loss";
-  const resultText = m.abandoned ? "Left" : m.won ? "Win" : "Loss";
-  const kdaCls = m.kda >= 4 ? "kda-good" : m.kda < 1.5 ? "kda-bad" : "";
+  const open = !m.local && DOTA.open.has(m.matchId);
+  const result = m.abandoned ? "other" : m.won === true ? "win" : m.won === false ? "loss" : "other";
+  const resultText = m.abandoned ? "Left" : m.won === true ? "Win" : m.won === false ? "Loss" : "—";
+  const kdaCls = !dtKnown(m.kda) ? "" : m.kda >= 4 ? "kda-good" : m.kda < 1.5 ? "kda-bad" : "";
+  // OpenDota rows expand into the scoreboard; a recorded match has no
+  // scoreboard, so it opens its full record in Sessions instead.
+  const hook = m.local
+    ? `class="${result} local" data-dt-local="${escapeHtml(m.matchId)}" title="Recorded by TheTracker. Click to open it in Sessions."`
+    : `class="${result}" data-dt-toggle="${m.matchId}"`;
 
   return `
-    <tr class="${result}" data-dt-toggle="${m.matchId}">
+    <tr ${hook}>
       <td>
         <div class="cell-hero">
           ${img ? `<img src="${img}" alt="" />` : ""}
           <div style="min-width:0">
             <div class="cell-hero-name">${escapeHtml(m.heroName)}</div>
-            <div class="cell-sub">${escapeHtml(m.modeName)} · ${escapeHtml(m.lobbyName)}${m.partySize && m.partySize > 1 ? ` · party ${m.partySize}` : ""}</div>
+            <div class="cell-sub">${dtSubHtml(m)}</div>
           </div>
         </div>
       </td>
       <td><span class="res ${result}">${resultText}</span></td>
-      <td class="num ${kdaCls}">${m.kda.toFixed(2)}</td>
+      <td class="num ${kdaCls}">${dtCell(m.kda, (v) => v.toFixed(2))}</td>
       <td class="num">${m.kills}</td>
       <td class="num">${m.deaths}</td>
-      <td class="num">${m.assists}</td>
-      <td class="num">${m.lastHits}</td>
-      <td class="num">${m.goldPerMin}</td>
-      <td class="num">${m.xpPerMin}</td>
-      <td class="num">${dtNum(m.heroDamage)}</td>
-      <td class="num">${dtDuration(m.durationSeconds)}</td>
+      <td class="num">${dtCell(m.assists)}</td>
+      <td class="num">${dtCell(m.lastHits)}</td>
+      <td class="num">${dtCell(m.goldPerMin)}</td>
+      <td class="num">${dtCell(m.xpPerMin)}</td>
+      <td class="num">${dtCell(m.heroDamage, dtNum)}</td>
+      <td class="num">${dtCell(m.durationSeconds, dtDuration)}</td>
       <td class="num cell-sub">${dtAgo(m.startTime)}</td>
     </tr>
     ${open ? `<tr class="detail-row"><td colspan="${DT_COLUMNS.length}">${dtDetailHtml(m.matchId)}</td></tr>` : ""}`;
@@ -390,40 +534,47 @@ function dtRender() {
     return;
   }
 
-  if (!DOTA.matches.length) {
-    // Nothing fetched yet reads as loading, not as an empty account:
-    // dtRender runs once before dtLoad is called, so `loading` is still
-    // false on the first paint of every launch.
-    const settling = DOTA.loading || (!DOTA.loadedAt && !DOTA.error);
-    root.innerHTML = `<div class="empty-state">${settling ? "Loading matches…" : "No matches found for this account."}</div>`;
+  // Nothing fetched yet reads as loading, not as an empty account: dtRender
+  // runs once before dtLoad is called, so `loading` is still false on the
+  // first paint of every launch. Recorded matches wait for OpenDota too —
+  // which of them it lacks is unknown until its list arrives.
+  if (!DOTA.matches.length && (DOTA.loading || (!DOTA.loadedAt && !DOTA.error))) {
+    root.innerHTML = `<div class="empty-state">Loading matches…</div>`;
     return;
   }
+
+  const rows = dtTimeline();
+  if (!rows.length) {
+    root.innerHTML = `<div class="empty-state">No matches found for this account.</div>`;
+    return;
+  }
+  const localCount = rows.filter((m) => m.local).length;
 
   // Mode and queue are separate facts about a match, so they get separate
   // filters. The old single row mixed them — picking "Ranked" hid every
   // ranked Turbo game, and picking "Turbo" hid whether it was ranked — which
-  // is why the counts never matched what you actually played.
-  const shown = DOTA.matches.filter(
+  // is why the counts never matched what you actually played. A recorded
+  // match whose tag does not say (ranked: null) is only under "All queues".
+  const shown = rows.filter(
     (m) =>
       (DOTA.filter === "all" || m.modeKey === DOTA.filter) &&
-      (DOTA.queue === "all" || (DOTA.queue === "ranked") === !!m.ranked)
+      (DOTA.queue === "all" || (dtKnown(m.ranked) && (DOTA.queue === "ranked") === !!m.ranked))
   );
 
   // Only offer modes that appear in the loaded matches, so the row does not
   // list Ability Draft to someone who has never played it.
   const present = new Map();
-  for (const m of DOTA.matches) if (m.modeKey) present.set(m.modeKey, m.modeName);
+  for (const m of rows) if (m.modeKey) present.set(m.modeKey, m.modeName);
   const modes = [["all", "All modes"], ...[...present].sort((a, b) => a[1].localeCompare(b[1]))];
 
-  const rankedCount = DOTA.matches.filter((m) => m.ranked).length;
   const queues = [
-    ["all", `All queues (${DOTA.matches.length})`],
-    ["ranked", `Ranked (${rankedCount})`],
-    ["unranked", `Unranked (${DOTA.matches.length - rankedCount})`],
+    ["all", `All queues (${rows.length})`],
+    ["ranked", `Ranked (${rows.filter((m) => m.ranked === true).length})`],
+    ["unranked", `Unranked (${rows.filter((m) => m.ranked === false).length})`],
   ];
 
   root.innerHTML = `
-    ${dtStatsHtml()}
+    ${dtStatsHtml(rows)}
     <div class="section-head">
       <div class="chip-row">
         ${modes
@@ -446,14 +597,17 @@ function dtRender() {
     ${
       shown.length
         ? dtTableHtml(shown)
-        : `<div class="empty-state">Nothing matches that combination in the last ${DOTA.matches.length} games.</div>`
+        : `<div class="empty-state">Nothing matches that combination in the last ${rows.length} games.</div>`
     }
     <p class="hint" style="margin-top:14px;max-width:76ch">
-      This page is OpenDota's record of your account, and it is not always
-      complete &mdash; Turbo games in particular can be missing from it
-      entirely, in which case the figures above cover only the modes it does
-      hold. <b>Sessions</b> is recorded by this app from Dota's own live feed
-      and captures every match you play, whatever the mode.
+      Scoreboards, modes and queues come from OpenDota, whose record of an
+      account is not always complete &mdash; Turbo games in particular can be
+      missing from it entirely.
+      ${
+        localCount
+          ? `Rows marked <span class="src-local">tracked by TheTracker</span> are matches it lacks, recorded by this app from Dota's own live feed. Click one to open its full record in <b>Sessions</b>.`
+          : `Matches played while TheTracker is running are recorded from Dota's own live feed, and any that OpenDota lacks are added here.`
+      }
     </p>`;
 
   root.querySelectorAll("[data-dt-filter]").forEach((el) =>
@@ -470,6 +624,14 @@ function dtRender() {
   );
   root.querySelectorAll("[data-dt-toggle]").forEach((el) =>
     el.addEventListener("click", () => dtToggleMatch(Number(el.dataset.dtToggle)))
+  );
+  root.querySelectorAll("[data-dt-local]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const id = el.dataset.dtLocal;
+      state.openHistory.add(id);
+      state.focusHistory = id;
+      setView("history");
+    })
   );
   root.querySelectorAll("[data-dt-sort]").forEach((el) =>
     el.addEventListener("click", () => {

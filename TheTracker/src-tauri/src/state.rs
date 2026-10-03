@@ -3,6 +3,7 @@
 //! Ported 1:1 from the original tracker's `handleUpdate`/`finalizeMatch`.
 
 use std::collections::BTreeMap;
+use std::time::Instant;
 
 use chrono::SecondsFormat;
 use serde_json::Value;
@@ -14,6 +15,16 @@ use crate::model::{
 };
 use crate::storage;
 
+/// Top-level key the bundled simulator (`test-overlay.ps1`) adds to every
+/// payload it posts. Real Dota never sends it.
+pub const SIMULATED_MARKER: &str = "thetracker_simulated";
+
+/// A match that ends without Dota reporting the post-game state is kept only
+/// if it got at least this far. Anything shorter is almost always a remake or
+/// an abandon in the first minutes, and saving it would put a junk row in
+/// history.
+const MIN_INCOMPLETE_CLOCK: f64 = 5.0 * 60.0;
+
 pub struct Tracker {
     pub current: Option<MatchState>,
     pub tracking_enabled: bool,
@@ -21,11 +32,38 @@ pub struct Tracker {
     /// Set once Convex sync is wired up (see main.rs). Stays `None` if sync
     /// is unavailable — the tracker is fully functional without it.
     pub syncer: Option<crate::convex_sync::Syncer>,
+    /// When Dota last posted anything at all, menus included.
+    ///
+    /// The app used to have no record of this, so a missing launch option, a
+    /// stale config or simply not having the app open during a game were all
+    /// indistinguishable from a quiet afternoon. Twelve matches went
+    /// untracked that way before anyone could tell.
+    pub last_payload_at: Option<Instant>,
+    /// When Dota last posted while the player was actually in a match. Lets
+    /// the overlay notice the player has left a game it never saw end.
+    pub last_match_payload_at: Option<Instant>,
+    /// Off only in tests, so a test match can never reach the real history
+    /// file or the cloud.
+    pub(crate) persist: bool,
 }
 
 impl Tracker {
     pub fn new() -> Self {
-        Tracker { current: None, tracking_enabled: true, log_lines: Vec::new(), syncer: None }
+        Tracker {
+            current: None,
+            tracking_enabled: true,
+            log_lines: Vec::new(),
+            syncer: None,
+            last_payload_at: None,
+            last_match_payload_at: None,
+            persist: true,
+        }
+    }
+
+    /// Whether a finished match goes to disk and the cloud. Simulator runs
+    /// never do, whatever the build.
+    fn should_save(&self, m: &MatchState) -> bool {
+        self.persist && !m.simulated
     }
 
     fn log(&mut self, line: String) {
@@ -64,6 +102,11 @@ impl Tracker {
     }
 
     pub fn handle_update(&mut self, body: &Value) {
+        // Recorded before anything else, the tracking toggle included: this
+        // answers "is Dota talking to us at all", which is a different
+        // question from "are we recording".
+        self.last_payload_at = Some(Instant::now());
+
         if !self.tracking_enabled {
             return;
         }
@@ -82,16 +125,24 @@ impl Tracker {
             Some(id) if id != "0" => id,
             _ => return,
         };
+        self.last_match_payload_at = Some(Instant::now());
 
         let hero_name_raw = hero.get("name").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let simulated = body.get(SIMULATED_MARKER).and_then(|v| v.as_bool()).unwrap_or(false);
 
         let needs_new_match = match &self.current {
             None => true,
             Some(m) => m.matchid != matchid,
         };
         if needs_new_match {
-            self.current = Some(MatchState::new(matchid.clone(), hero_name_raw.clone()));
-            self.log(format!("=== New match detected ({matchid}) ==="));
+            self.close_previous_match();
+            let mut fresh = MatchState::new(matchid.clone(), hero_name_raw.clone());
+            fresh.simulated = simulated;
+            self.current = Some(fresh);
+            self.log(format!(
+                "=== New match detected ({matchid}){} ===",
+                if simulated { " — simulated, will not be saved" } else { "" }
+            ));
         }
 
         if self.current.as_ref().map(|m| m.ended).unwrap_or(true) {
@@ -111,11 +162,46 @@ impl Tracker {
         {
             let m = self.current.as_mut().unwrap();
             m.last_clock_time = clock_time;
+            m.last_seen_at = Some(chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true));
             // Only GAME_IN_PROGRESS means the clock is the real match
             // clock. HERO_SELECTION, STRATEGY_TIME and PRE_GAME all report a
             // clock too, and timers built on those are nonsense.
             m.in_progress = map.get("game_state").and_then(|v| v.as_str())
                 == Some("DOTA_GAMERULES_STATE_GAME_IN_PROGRESS");
+            if m.in_progress {
+                m.reached_game = true;
+            }
+
+            // The result. GSI reports the player's side as player.team_name
+            // and, once the ancient falls, the winning side as map.win_team
+            // ("none" until then). The tracker used to assume GSI never says
+            // who won, so every locally recorded match — including every
+            // Turbo game, which OpenDota does not hold for this account — had
+            // no result at all. Read in this order because the winning
+            // payload can carry both.
+            if let Some(team) = player.get("team_name").and_then(|v| v.as_str()) {
+                let team = team.to_ascii_lowercase();
+                if team == "radiant" || team == "dire" {
+                    m.team = Some(team);
+                }
+            }
+            if let Some(winner) = map.get("win_team").and_then(|v| v.as_str()) {
+                let winner = winner.to_ascii_lowercase();
+                if winner == "radiant" || winner == "dire" {
+                    if let Some(team) = &m.team {
+                        m.won = Some(*team == winner);
+                    }
+                }
+            }
+            if let Some(assists) = player.get("assists").and_then(|v| v.as_i64()) {
+                m.assists = Some(assists);
+            }
+            if let Some(gpm) = player.get("gpm").and_then(|v| v.as_i64()) {
+                m.gpm = Some(gpm);
+            }
+            if let Some(xpm) = player.get("xpm").and_then(|v| v.as_i64()) {
+                m.xpm = Some(xpm);
+            }
 
             if let Some(day) = map.get("daytime").and_then(|v| v.as_bool()) {
                 m.daytime = Some(day);
@@ -222,39 +308,86 @@ impl Tracker {
         if game_state == "DOTA_GAMERULES_STATE_POST_GAME"
             && !self.current.as_ref().map(|m| m.ended).unwrap_or(true)
         {
-            self.finalize_match();
+            self.finalize_match(false);
         }
     }
 
-    fn finalize_match(&mut self) {
+    /// A new match id proves the previous match is over, whether or not Dota
+    /// ever said so. Previously it was replaced without a word, so any game
+    /// whose post-game state went unseen — the player left early, or quit to
+    /// the menu before the ancient fell — vanished from history entirely.
+    /// It is kept now if it was actually played, and marked incomplete.
+    fn close_previous_match(&mut self) {
+        let worth_keeping = self
+            .current
+            .as_ref()
+            .map(|m| !m.ended && m.reached_game && m.last_clock_time >= MIN_INCOMPLETE_CLOCK)
+            .unwrap_or(false);
+        if worth_keeping {
+            self.finalize_match(true);
+        }
+    }
+
+    fn finalize_match(&mut self, incomplete: bool) {
         let m = match self.current.as_ref() {
             Some(m) => m.clone(),
             None => return,
         };
-        let summary = build_summary(&m);
-        let mut full_history = storage::load_history();
-        full_history.push(summary);
-        // Recomputing the whole history keeps every match's comparison
-        // consistent with the others in its (possibly just-changed) peer
-        // group, not just the new one.
-        recompute_all_comparisons(&mut full_history);
-        storage::save_history(&full_history);
+        let summary = build_summary(&m, incomplete);
 
-        let finalized = full_history.last().cloned();
-        let peers_len = finalized.as_ref().and_then(|s| s.games_compared_against).unwrap_or(0);
+        let mut saved = false;
+        let finalized = if self.should_save(&m) {
+            let mut full_history = storage::load_history();
+            // The same match can reach this twice: restart the app on the
+            // post-game screen — the in-app updater does exactly that — and
+            // the new instance sees POST_GAME for a match the old one already
+            // saved. The first record is the complete one; a second would be
+            // a near-empty duplicate.
+            if let Some(existing) = full_history.iter().find(|h| h.matchid == m.matchid).cloned() {
+                Some(existing)
+            } else {
+                full_history.push(summary);
+                // Recomputing the whole history keeps every match's
+                // comparison consistent with the others in its (possibly
+                // just-changed) peer group, not just the new one.
+                recompute_all_comparisons(&mut full_history);
+                storage::save_history(&full_history);
+                saved = true;
+                full_history.last().cloned()
+            }
+        } else {
+            Some(summary)
+        };
 
         // Local disk is already written above; pushing to Convex is
         // best-effort and never blocks the GSI thread.
-        if let (Some(syncer), Some(summary)) = (&self.syncer, &finalized) {
-            syncer.send(crate::convex_sync::SyncJob::Match(Box::new(summary.clone())));
+        if saved {
+            if let (Some(syncer), Some(summary)) = (&self.syncer, &finalized) {
+                syncer.send(crate::convex_sync::SyncJob::Match(Box::new(summary.clone())));
+            }
         }
 
+        let peers_len = finalized.as_ref().and_then(|s| s.games_compared_against).unwrap_or(0);
         if let Some(cur) = self.current.as_mut() {
             cur.ended = true;
             cur.summary = finalized;
         }
+
+        let result = match m.won {
+            Some(true) => "won",
+            Some(false) => "lost",
+            None => "result unknown",
+        };
+        let how = if m.simulated {
+            " \u{2014} simulated, not saved"
+        } else if incomplete {
+            " \u{2014} saved as incomplete, Dota never reported the end"
+        } else {
+            ""
+        };
         self.log(format!(
-            "\u{1F3C1} Match ended \u{2014} {} deaths, {}g lost, {peers_len} past {} games to compare against",
+            "\u{1F3C1} Match {} ended ({result}){how} \u{2014} {} deaths, {}g lost, {peers_len} past {} games to compare against",
+            m.matchid,
             m.deaths.len(),
             m.total_gold_lost(),
             crate::model::game_type_label(&m.game_type)
@@ -341,11 +474,16 @@ fn compute_comparison(summary: &MatchSummary, peers: &[&MatchSummary]) -> (Compa
     )
 }
 
-fn build_summary(m: &MatchState) -> MatchSummary {
+fn build_summary(m: &MatchState, incomplete: bool) -> MatchSummary {
+    let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    // A late-saved match is dated by the last time Dota reported on it. Using
+    // the save time would put a game left at 9pm under whenever the next
+    // match happened to start, which could be the following day.
+    let date = if incomplete { m.last_seen_at.clone().unwrap_or(now) } else { now };
     MatchSummary {
         matchid: m.matchid.clone(),
         hero_name: m.hero_name.clone(),
-        date: chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        date,
         duration: fmt_clock(Some(m.last_clock_time)),
         kills: m.kills,
         total_deaths: m.deaths.len(),
@@ -357,6 +495,13 @@ fn build_summary(m: &MatchState) -> MatchSummary {
         game_type: m.game_type.clone(),
         comparison: None,
         games_compared_against: None,
+        won: m.won,
+        last_hits: Some(m.last_hits),
+        denies: Some(m.denies),
+        assists: m.assists,
+        gpm: m.gpm,
+        xpm: m.xpm,
+        incomplete,
     }
 }
 
@@ -399,5 +544,161 @@ fn json_to_string(v: Option<&Value>) -> Option<String> {
         Some(Value::String(s)) => Some(s.clone()),
         Some(Value::Number(n)) => Some(n.to_string()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    const DRAFT: &str = "DOTA_GAMERULES_STATE_HERO_SELECTION";
+    const IN_GAME: &str = "DOTA_GAMERULES_STATE_GAME_IN_PROGRESS";
+    const POST_GAME: &str = "DOTA_GAMERULES_STATE_POST_GAME";
+
+    /// Every test tracker has persistence off, so nothing here can reach the
+    /// real history file or the cloud.
+    fn tracker() -> Tracker {
+        let mut t = Tracker::new();
+        t.persist = false;
+        t
+    }
+
+    fn payload(matchid: &str, game_state: &str, clock: f64, team: Option<&str>, win_team: &str) -> Value {
+        let mut player = json!({
+            "activity": "playing",
+            "kills": 5, "assists": 9, "last_hits": 120, "denies": 8,
+            "gpm": 512, "xpm": 640, "gold": 900,
+        });
+        if let Some(team) = team {
+            player["team_name"] = json!(team);
+        }
+        json!({
+            "map": { "matchid": matchid, "game_state": game_state, "clock_time": clock, "win_team": win_team },
+            "player": player,
+            "hero": { "name": "npc_dota_hero_kez", "alive": true },
+        })
+    }
+
+    fn logged(t: &Tracker, needle: &str) -> bool {
+        t.log_lines.iter().any(|l| l.contains(needle))
+    }
+
+    #[test]
+    fn a_win_is_read_from_win_team() {
+        let mut t = tracker();
+        t.handle_update(&payload("9001", IN_GAME, 600.0, Some("radiant"), "none"));
+        assert_eq!(t.current.as_ref().unwrap().won, None, "no result while the game is running");
+
+        t.handle_update(&payload("9001", POST_GAME, 1900.0, Some("radiant"), "radiant"));
+        let s = t.current.as_ref().unwrap().summary.clone().expect("match should be finalized");
+        assert_eq!(s.won, Some(true));
+        assert!(!s.incomplete);
+        // The fields a local session needs to stand next to an OpenDota row.
+        assert_eq!(s.assists, Some(9));
+        assert_eq!(s.gpm, Some(512));
+        assert_eq!(s.xpm, Some(640));
+        assert_eq!(s.last_hits, Some(120));
+    }
+
+    #[test]
+    fn a_loss_is_read_from_win_team() {
+        let mut t = tracker();
+        t.handle_update(&payload("9002", IN_GAME, 600.0, Some("dire"), "none"));
+        t.handle_update(&payload("9002", POST_GAME, 1900.0, Some("dire"), "radiant"));
+        let s = t.current.as_ref().unwrap().summary.clone().unwrap();
+        assert_eq!(s.won, Some(false));
+    }
+
+    #[test]
+    fn without_a_team_there_is_no_result_rather_than_a_guess() {
+        let mut t = tracker();
+        t.handle_update(&payload("9003", IN_GAME, 600.0, None, "none"));
+        t.handle_update(&payload("9003", POST_GAME, 1900.0, None, "radiant"));
+        assert_eq!(t.current.as_ref().unwrap().summary.as_ref().unwrap().won, None);
+    }
+
+    #[test]
+    fn an_unended_match_is_kept_when_the_next_one_starts() {
+        // Twenty-five minutes in, then Dota never reports the end — the
+        // player left — and the next match begins.
+        let mut t = tracker();
+        t.handle_update(&payload("1", IN_GAME, 1500.0, Some("radiant"), "none"));
+        t.handle_update(&payload("2", DRAFT, -60.0, Some("dire"), "none"));
+
+        assert!(logged(&t, "Match 1 ended"), "the previous match must not vanish");
+        assert!(logged(&t, "incomplete"));
+        assert_eq!(t.current.as_ref().unwrap().matchid, "2");
+    }
+
+    #[test]
+    fn a_match_abandoned_in_the_draft_is_not_kept() {
+        let mut t = tracker();
+        t.handle_update(&payload("1", DRAFT, -60.0, Some("radiant"), "none"));
+        t.handle_update(&payload("2", DRAFT, -60.0, Some("radiant"), "none"));
+        assert!(!logged(&t, "Match 1 ended"), "a game that never started is not a match");
+    }
+
+    #[test]
+    fn a_remake_in_the_first_minutes_is_not_kept() {
+        let mut t = tracker();
+        t.handle_update(&payload("1", IN_GAME, 120.0, Some("radiant"), "none"));
+        t.handle_update(&payload("2", DRAFT, -60.0, Some("radiant"), "none"));
+        assert!(!logged(&t, "Match 1 ended"));
+    }
+
+    #[test]
+    fn simulated_matches_are_never_saved() {
+        // Checked on a tracker with persistence ON — the real configuration —
+        // because the marker has to win even there.
+        let t = Tracker::new();
+        let mut fake = MatchState::new("1".into(), None);
+        fake.simulated = true;
+        assert!(!t.should_save(&fake));
+        assert!(t.should_save(&MatchState::new("2".into(), None)));
+
+        // And the marker is actually read off the payload.
+        let mut t = tracker();
+        let mut body = payload("3", IN_GAME, 300.0, Some("radiant"), "none");
+        body[SIMULATED_MARKER] = json!(true);
+        t.handle_update(&body);
+        assert!(t.current.as_ref().unwrap().simulated);
+    }
+
+    #[test]
+    fn dota_talking_is_noticed_outside_a_match() {
+        // The main menu: Dota is running and posting, but there is no match.
+        let mut t = tracker();
+        t.handle_update(&json!({ "provider": { "appid": 570 }, "player": { "activity": "menu" } }));
+        assert!(t.last_payload_at.is_some(), "this is what proves the setup works");
+        assert!(t.last_match_payload_at.is_none());
+        assert!(t.current.is_none());
+    }
+
+    #[test]
+    fn dota_talking_is_noticed_with_tracking_switched_off() {
+        let mut t = tracker();
+        t.tracking_enabled = false;
+        t.handle_update(&payload("1", IN_GAME, 600.0, Some("radiant"), "none"));
+        assert!(t.last_payload_at.is_some());
+        assert!(t.current.is_none(), "but nothing is recorded");
+    }
+
+    #[test]
+    fn a_late_saved_match_is_dated_by_its_last_payload() {
+        let mut m = MatchState::new("1".into(), None);
+        m.last_seen_at = Some("2026-09-19T21:00:00.000Z".into());
+        assert_eq!(build_summary(&m, true).date, "2026-09-19T21:00:00.000Z");
+        assert_ne!(build_summary(&m, false).date, "2026-09-19T21:00:00.000Z");
+    }
+
+    #[test]
+    fn history_written_before_these_fields_still_loads() {
+        let old = r#"[{"matchid":"1","heroName":null,"date":"2026-09-05T00:00:00Z","duration":"25:00",
+            "kills":6,"totalDeaths":0,"totalGoldLost":0,"deaths":[],"keyItems":[],"checkpoints":{},
+            "roshanDeaths":0,"gameType":"unspecified","comparison":null,"gamesComparedAgainst":null}]"#;
+        let h: Vec<MatchSummary> = serde_json::from_str(old).expect("old history must still parse");
+        assert_eq!(h[0].won, None);
+        assert!(!h[0].incomplete);
     }
 }

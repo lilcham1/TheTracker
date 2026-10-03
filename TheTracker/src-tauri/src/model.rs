@@ -85,6 +85,37 @@ pub struct MatchSummary {
     pub comparison: Option<Comparison>,
     #[serde(rename = "gamesComparedAgainst")]
     pub games_compared_against: Option<usize>,
+
+    // Everything below is newer than the original history format, so each
+    // field defaults when absent and older history.json files still load.
+    //
+    // None of these are sent to Convex: convex_sync builds the cloud row
+    // from an explicit field list, and its validator would reject anything
+    // it does not know.
+    /// Whether the match was won, from GSI's `map.win_team` compared with
+    /// `player.team_name`. `None` for matches recorded before this existed,
+    /// and for any match where Dota stopped reporting before the ancient
+    /// fell — never guessed.
+    #[serde(default)]
+    pub won: Option<bool>,
+    /// Final values at the end of the match. History only kept last-hit
+    /// checkpoints and kills before, which is too little to show a locally
+    /// tracked game alongside the OpenDota ones.
+    #[serde(rename = "lastHits", default)]
+    pub last_hits: Option<i64>,
+    #[serde(default)]
+    pub denies: Option<i64>,
+    #[serde(default)]
+    pub assists: Option<i64>,
+    #[serde(default)]
+    pub gpm: Option<i64>,
+    #[serde(default)]
+    pub xpm: Option<i64>,
+    /// Saved without ever seeing the post-game state: the player left early,
+    /// or the next match began before this one reported its end. The stats
+    /// stop wherever Dota stopped sending them.
+    #[serde(default)]
+    pub incomplete: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +158,34 @@ pub struct MatchState {
     #[serde(rename = "gameType")]
     pub game_type: String,
     pub roshan: RoshanState,
+    /// "radiant" or "dire", from GSI's `player.team_name`.
+    #[serde(default)]
+    pub team: Option<String>,
+    /// Set once GSI's `map.win_team` names a side, which it does when the
+    /// ancient falls.
+    #[serde(default)]
+    pub won: Option<bool>,
+    #[serde(default)]
+    pub assists: Option<i64>,
+    #[serde(default)]
+    pub gpm: Option<i64>,
+    #[serde(default)]
+    pub xpm: Option<i64>,
+    /// True once the horn has gone at least once. `in_progress` drops back
+    /// to false at the end of the game; this does not, so it can tell a
+    /// match that was actually played from one abandoned in the draft.
+    #[serde(rename = "reachedGame", default)]
+    pub reached_game: bool,
+    /// Wall-clock time of the last payload for this match. A match that is
+    /// saved late — because the next one started before this one reported
+    /// its end — is dated by this, not by when it happened to be saved.
+    #[serde(rename = "lastSeenAt", default)]
+    pub last_seen_at: Option<String>,
+    /// Payloads from the bundled simulator carry a marker, and a match built
+    /// from them is never written to history or synced. Testing the overlay
+    /// used to leave fake games in the player's Sessions and Leaderboard.
+    #[serde(default)]
+    pub simulated: bool,
 }
 
 impl MatchState {
@@ -155,6 +214,14 @@ impl MatchState {
             summary: None,
             game_type: "unspecified".to_string(),
             roshan: RoshanState::default(),
+            team: None,
+            won: None,
+            assists: None,
+            gpm: None,
+            xpm: None,
+            reached_game: false,
+            last_seen_at: None,
+            simulated: false,
         }
     }
 

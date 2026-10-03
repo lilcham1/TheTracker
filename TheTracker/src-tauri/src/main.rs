@@ -32,16 +32,34 @@ mod steam;
 mod storage;
 mod updates;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::Manager;
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 use auth::{AuthState, SharedAuth};
 use convex_sync::{SyncJob, SyncStatus, Syncer};
 use model::{MatchState, MatchSummary, Profile};
 use state::Tracker;
+
+/// Passed by the "start with Windows" entry, so a launch at login goes
+/// straight to the tray instead of putting a window in front of whatever
+/// the player was about to do.
+const MINIMIZED_ARG: &str = "--minimized";
+
+/// Dota posts a heartbeat every 30 seconds while it runs (see the config in
+/// gsi_setup.rs), so silence well past that means it has stopped talking.
+const MATCH_FEED_TIMEOUT: Duration = Duration::from_secs(45);
+
+/// Set once the tray icon exists. Hiding the window on close is only safe
+/// with somewhere to bring it back from — without a tray, close has to mean
+/// quit, or the app would vanish with no way back short of relaunching.
+static TRAY_READY: AtomicBool = AtomicBool::new(false);
 
 struct AppState {
     tracker: Arc<Mutex<Tracker>>,
@@ -54,6 +72,11 @@ struct AppState {
     meta: meta::SharedMeta,
 }
 
+/// Holds the tray icon for the life of the app. Tauri also registers it,
+/// but the handle is reference-counted and the icon disappears when the
+/// last one drops; keeping one here makes that impossible to get wrong.
+struct TrayState(#[allow(dead_code)] TrayIcon);
+
 #[derive(Serialize)]
 struct LiveStatus {
     current: Option<MatchState>,
@@ -61,6 +84,11 @@ struct LiveStatus {
     tracking_enabled: bool,
     #[serde(rename = "serverError")]
     server_error: Option<String>,
+    /// Seconds since Dota last posted anything, menus included. `None` if it
+    /// has not since TheTracker started — which, with Dota open, means the
+    /// feed is not reaching us.
+    #[serde(rename = "gsiAgeSecs")]
+    gsi_age_secs: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -102,8 +130,19 @@ async fn probe_service(name: &'static str, url: &str) -> ServiceCheck {
     }
 }
 
+/// "just now", "4 min ago", "3 h ago" — for status lines, not timestamps.
+fn ago(secs: u64) -> String {
+    match secs {
+        0..=59 => "just now".to_string(),
+        60..=3599 => format!("{} min ago", secs / 60),
+        _ => format!("{} h ago", secs / 3600),
+    }
+}
+
+/// Takes the app handle rather than borrowed state: an async command that
+/// borrows managed state has to return a Result, and this one never fails.
 #[tauri::command]
-async fn run_diagnostics() -> Diagnostics {
+async fn run_diagnostics(app: tauri::AppHandle) -> Diagnostics {
     let accounts = steam::detect();
     let steam = ServiceCheck {
         name: "Steam",
@@ -111,13 +150,34 @@ async fn run_diagnostics() -> Diagnostics {
         detail: if accounts.is_empty() { "No local Steam identity found".into() } else { format!("{} local account(s) found", accounts.len()) },
         latency_ms: None,
     };
+
+    // Whether the config file exists is not the question. It existed the
+    // whole time twelve matches went unrecorded, and this check said all
+    // was well. What matters is whether Dota is actually posting to us.
     let status = gsi_setup::status();
-    let gsi = ServiceCheck {
-        name: "Dota GSI",
-        ok: status.installed,
-        detail: if status.installed { format!("Configured on port {}", status.port) } else { "Configuration not installed".into() },
-        latency_ms: None,
+    let heard = app
+        .state::<AppState>()
+        .tracker
+        .lock()
+        .ok()
+        .and_then(|t| t.last_payload_at)
+        .map(|at| at.elapsed().as_secs());
+    let (ok, detail) = match (status.installed, heard) {
+        (false, _) => (false, "Configuration not installed".to_string()),
+        (true, Some(s)) if s < MATCH_FEED_TIMEOUT.as_secs() => {
+            (true, format!("Receiving data from Dota on port {}", status.port))
+        }
+        (true, Some(s)) => (true, format!("Last heard from Dota {}", ago(s))),
+        (true, None) => (
+            status.launch_option != Some(false),
+            if status.launch_option == Some(false) {
+                "Configured, but Dota's launch option is missing, so it is not sending anything".to_string()
+            } else {
+                "Configured, nothing received yet — expected if Dota is closed; if it is open, Dota is not reaching TheTracker".to_string()
+            },
+        ),
     };
+    let gsi = ServiceCheck { name: "Dota GSI", ok, detail, latency_ms: None };
     let convex_url = convex_sync::convex_url();
     let (convex, opendota, deadlock) = tokio::join!(
         probe_service("Cloud sync", &convex_url),
@@ -131,7 +191,111 @@ async fn run_diagnostics() -> Diagnostics {
 fn get_live_state(app_state: tauri::State<AppState>) -> LiveStatus {
     let tracker = app_state.tracker.lock().unwrap();
     let server_error = app_state.server_error.lock().unwrap().clone();
-    LiveStatus { current: tracker.current.clone(), tracking_enabled: tracker.tracking_enabled, server_error }
+    LiveStatus {
+        current: tracker.current.clone(),
+        tracking_enabled: tracker.tracking_enabled,
+        server_error,
+        gsi_age_secs: tracker.last_payload_at.map(|at| at.elapsed().as_secs()),
+    }
+}
+
+// ---------- Running in the background ----------
+
+#[derive(Serialize)]
+struct BackgroundSettings {
+    #[serde(rename = "startWithWindows")]
+    start_with_windows: bool,
+    #[serde(rename = "closeToTray")]
+    close_to_tray: bool,
+    #[serde(rename = "autostartAsked")]
+    autostart_asked: bool,
+    /// False if the tray icon could not be created, in which case closing
+    /// the window quits regardless of the setting.
+    #[serde(rename = "trayAvailable")]
+    tray_available: bool,
+}
+
+fn background_settings_of(app: &tauri::AppHandle) -> BackgroundSettings {
+    let general = prefs::load().general;
+    BackgroundSettings {
+        // The registry is the source of truth, not a copy in prefs: the
+        // player can remove the entry from Task Manager's Startup tab, and
+        // the app should not go on claiming it is set.
+        start_with_windows: app.autolaunch().is_enabled().unwrap_or(false),
+        close_to_tray: general.close_to_tray,
+        autostart_asked: general.autostart_asked,
+        tray_available: TRAY_READY.load(Ordering::SeqCst),
+    }
+}
+
+#[tauri::command]
+fn background_settings(app: tauri::AppHandle) -> BackgroundSettings {
+    background_settings_of(&app)
+}
+
+#[tauri::command]
+fn set_start_with_windows(enabled: bool, app: tauri::AppHandle) -> Result<BackgroundSettings, String> {
+    let launcher = app.autolaunch();
+    let result = if enabled { launcher.enable() } else { launcher.disable() };
+    result.map_err(|e| format!("Couldn't change the startup setting: {e}"))?;
+    // Answering either way counts as having been asked.
+    let mut general = prefs::load().general;
+    general.autostart_asked = true;
+    prefs::save_general(general);
+    Ok(background_settings_of(&app))
+}
+
+#[tauri::command]
+fn set_close_to_tray(enabled: bool, app: tauri::AppHandle) -> BackgroundSettings {
+    let mut general = prefs::load().general;
+    general.close_to_tray = enabled;
+    prefs::save_general(general);
+    background_settings_of(&app)
+}
+
+/// "Not now" on the startup prompt — record it so the question is not asked
+/// again, without changing anything.
+#[tauri::command]
+fn dismiss_autostart_prompt(app: tauri::AppHandle) -> BackgroundSettings {
+    let mut general = prefs::load().general;
+    general.autostart_asked = true;
+    prefs::save_general(general);
+    background_settings_of(&app)
+}
+
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn build_tray(app: &tauri::AppHandle) -> tauri::Result<TrayIcon> {
+    let open = MenuItem::with_id(app, "open", "Open TheTracker", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit TheTracker", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &quit])?;
+
+    let mut builder = TrayIconBuilder::with_id("main")
+        .tooltip("TheTracker — tracking in the background")
+        .menu(&menu)
+        // Left click opens the app; the menu is on right click, the way
+        // every other tray app on Windows behaves.
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open" => show_main_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                show_main_window(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+    builder.build(app)
 }
 
 #[tauri::command]
@@ -537,10 +701,20 @@ fn spawn_overlay_watcher(app: tauri::AppHandle, tracker: Arc<Mutex<Tracker>>) {
         loop {
             std::thread::sleep(std::time::Duration::from_secs(2));
 
+            // A match is live only while Dota is still reporting on it.
+            // Leaving a game early sends the player to the menu, whose
+            // payloads the tracker ignores — so `in_progress` stayed true
+            // from the last in-game update and the overlay stayed over the
+            // desktop until the next match started.
             let live = tracker
                 .lock()
                 .ok()
-                .and_then(|t| t.current.as_ref().map(|m| !m.ended && m.in_progress))
+                .map(|t| {
+                    let in_match = t.current.as_ref().map(|m| !m.ended && m.in_progress).unwrap_or(false);
+                    let still_reporting =
+                        t.last_match_payload_at.map(|at| at.elapsed() < MATCH_FEED_TIMEOUT).unwrap_or(false);
+                    in_match && still_reporting
+                })
                 .unwrap_or(false);
 
             if live == was_live {
@@ -632,23 +806,40 @@ fn main() {
             eprintln!("GSI config installed: {path}");
         }
     }
+    for path in gsi_setup::remove_legacy_configs() {
+        eprintln!("Removed the old tracker's GSI config: {path}");
+    }
 
     let tracker = Arc::new(Mutex::new(Tracker::new()));
     let server_error: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
-    {
-        let tracker_for_server = tracker.clone();
-        let server_error_for_server = server_error.clone();
-        gsi::spawn_server(tracker_for_server, move |status| {
-            if let gsi::ServerStatus::Failed(msg) = status {
-                *server_error_for_server.lock().unwrap() = Some(msg);
-            }
-        });
-    }
-
     let tracker_for_setup = tracker.clone();
     tauri::Builder::default()
+        // First, so a second launch is handed to the running copy before
+        // anything else in it starts. Without it a second copy failed to
+        // bind the GSI port, showed an error, and both wrote history.json.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            show_main_window(app);
+        }))
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![MINIMIZED_ARG])))
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Closing the main window either hides it to the tray or quits —
+        // explicitly. Left to the default, the hidden overlay window would
+        // keep the process alive with no window, no tray icon and the GSI
+        // port still held.
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if TRAY_READY.load(Ordering::SeqCst) && prefs::load().general.close_to_tray {
+                    api.prevent_close();
+                    let _ = window.hide();
+                } else {
+                    window.app_handle().exit(0);
+                }
+            }
+        })
         .setup(move |app| {
             // The sync worker runs on Tauri's async runtime, so it can only
             // start once the app is being set up — not before the builder.
@@ -678,9 +869,41 @@ fn main() {
                 meta: Arc::new(Mutex::new(meta::MetaCache::default())),
             });
 
+            // Started here rather than at the top of main() so the
+            // single-instance check runs first: a second launch now exits
+            // before it ever tries for the port.
+            {
+                let tracker_for_server = tracker_for_setup.clone();
+                let server_error_for_server = server_error.clone();
+                gsi::spawn_server(tracker_for_server, move |status| {
+                    if let gsi::ServerStatus::Failed(msg) = status {
+                        *server_error_for_server.lock().unwrap() = Some(msg);
+                    }
+                });
+            }
+
             // Build the overlay once, hidden. Creating it on demand raced
             // and could produce two stacked windows.
             let _ = overlay::ensure(&app.handle().clone());
+
+            // Never fatal: a missing tray costs the app its background mode,
+            // not its ability to start. Without one, closing quits.
+            match build_tray(app.handle()) {
+                Ok(tray) => {
+                    app.manage(TrayState(tray));
+                    TRAY_READY.store(true, Ordering::SeqCst);
+                }
+                Err(e) => eprintln!("Tray icon unavailable, closing the window will quit: {e}"),
+            }
+
+            // The window is created hidden (tauri.conf.json) and shown here,
+            // so a login launch goes straight to the tray without flashing a
+            // window up first. A launch without a working tray is always
+            // shown: hidden with no tray would be unreachable.
+            let minimized = std::env::args().any(|a| a == MINIMIZED_ARG);
+            if !minimized || !TRAY_READY.load(Ordering::SeqCst) {
+                show_main_window(app.handle());
+            }
 
             // Diagnostic: report window labels and which monitor each is on.
             if std::env::var("THETRACKER_WINDOW_DEBUG").is_ok() {
@@ -703,6 +926,10 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_live_state,
+            background_settings,
+            set_start_with_windows,
+            set_close_to_tray,
+            dismiss_autostart_prompt,
             run_diagnostics,
             gsi_status,
             gsi_install,

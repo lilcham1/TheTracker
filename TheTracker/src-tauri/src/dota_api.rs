@@ -692,19 +692,47 @@ async fn recent_game_types(account_id: u64, limit: usize) -> Result<HashMap<Stri
         .collect())
 }
 
+/// How long a locally tracked match keeps being looked up on OpenDota.
+///
+/// OpenDota ingests a finished game within minutes to hours. One it still
+/// does not have after two days is not coming — and for this account Turbo
+/// games never come at all. With no cut-off, a single such match kept the
+/// app calling OpenDota every five minutes for as long as it ran: it did
+/// exactly that for a month over four simulator matches that could never
+/// resolve.
+const BACKFILL_WINDOW_HOURS: i64 = 48;
+
+/// Untagged matches still young enough that OpenDota might yet have them.
+fn backfill_candidates(history: &[crate::model::MatchSummary], now: chrono::DateTime<chrono::Utc>) -> Vec<String> {
+    history
+        .iter()
+        .filter(|m| m.game_type == "unspecified")
+        .filter(|m| match chrono::DateTime::parse_from_rfc3339(&m.date) {
+            Ok(d) => now.signed_duration_since(d) < chrono::Duration::hours(BACKFILL_WINDOW_HOURS),
+            // A date that will not parse would otherwise be asked about
+            // forever; not worth a request every five minutes.
+            Err(_) => false,
+        })
+        .map(|m| m.matchid.clone())
+        .collect()
+}
+
 /// Fills in the game type of any locally tracked match still marked
 /// "unspecified", and returns how many were resolved.
 ///
 /// Only untagged matches are touched: a type the player set by hand is
 /// their call and is left alone. OpenDota takes a few minutes to ingest a
-/// finished game, so this is retried periodically rather than once.
+/// finished game, so this is retried periodically rather than once — but
+/// only within a window, so it stops once there is nothing left worth
+/// asking about.
 pub async fn backfill_game_types() -> Result<usize, String> {
     let Some(account_id) = load_link().account_id else {
         return Ok(0);
     };
 
     let mut history = crate::storage::load_history();
-    if !history.iter().any(|m| m.game_type == "unspecified") {
+    let candidates = backfill_candidates(&history, chrono::Utc::now());
+    if candidates.is_empty() {
         return Ok(0);
     }
 
@@ -712,7 +740,7 @@ pub async fn backfill_game_types() -> Result<usize, String> {
 
     let mut filled = 0;
     for entry in history.iter_mut() {
-        if entry.game_type != "unspecified" {
+        if !candidates.contains(&entry.matchid) {
             continue;
         }
         if let Some(t) = types.get(&entry.matchid) {
@@ -800,5 +828,37 @@ mod tests {
             assert_ne!(game_mode_name(id), "Unknown Mode", "mode {id} should have a name");
         }
         assert_eq!(game_mode_name(999), "Unknown Mode");
+    }
+
+    fn local_match(id: &str, date: &str, game_type: &str) -> crate::model::MatchSummary {
+        serde_json::from_value(serde_json::json!({
+            "matchid": id, "heroName": null, "date": date, "duration": "30:00", "kills": 0,
+            "totalDeaths": 0, "totalGoldLost": 0, "deaths": [], "keyItems": [], "checkpoints": {},
+            "roshanDeaths": 0, "gameType": game_type, "comparison": null, "gamesComparedAgainst": null,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn backfill_stops_asking_about_matches_opendota_will_never_have() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-10-03T12:00:00Z").unwrap().with_timezone(&chrono::Utc);
+        let history = vec![
+            local_match("fresh", "2026-10-03T10:00:00.000Z", "unspecified"),
+            // A Turbo game from a week ago that OpenDota never ingested.
+            local_match("stale", "2026-09-26T10:00:00.000Z", "unspecified"),
+            // Tagged by the player: not ours to overwrite, at any age.
+            local_match("tagged", "2026-10-03T10:00:00.000Z", "turbo"),
+            local_match("garbled", "not a date", "unspecified"),
+        ];
+        assert_eq!(backfill_candidates(&history, now), vec!["fresh".to_string()]);
+    }
+
+    #[test]
+    fn with_nothing_left_to_resolve_there_is_nothing_to_ask() {
+        // The case that matters most: an empty candidate list is what makes
+        // the five-minute loop return without touching the network.
+        let now = chrono::DateTime::parse_from_rfc3339("2026-10-03T12:00:00Z").unwrap().with_timezone(&chrono::Utc);
+        let history = vec![local_match("old", "2026-09-05T19:17:00.000Z", "unspecified")];
+        assert!(backfill_candidates(&history, now).is_empty());
     }
 }

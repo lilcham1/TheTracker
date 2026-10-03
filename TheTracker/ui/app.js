@@ -175,7 +175,7 @@ function escapeHtml(s) {
 // steam.rs for exactly what is and isn't touched — no credentials, no
 // tokens). Shared by both link screens.
 
-const APP_VERSION = "0.16.2";
+const APP_VERSION = "0.17.0";
 
 const STEAM_DETECT = { accounts: [], tried: false, busy: false, error: null };
 
@@ -191,6 +191,50 @@ async function refreshGsi() {
   } catch (e) {
     GSI.error = String(e);
   }
+}
+
+// Start-with-Windows and close-to-tray. Live tracking only records while the
+// app is running, so these decide whether a match gets recorded at all.
+let BG = null;
+
+async function refreshBackground() {
+  try {
+    BG = await invoke("background_settings");
+  } catch (_) {
+    BG = null;
+  }
+}
+
+/// "just now", "4 min ago", "3 h ago". Deliberately coarse: these are
+/// re-checked every 700 ms, and text that changed every tick would force the
+/// panel holding it to be rebuilt every tick too.
+function agoText(secs) {
+  if (secs === null || secs === undefined) return null;
+  if (secs < 60) return "just now";
+  if (secs < 3600) return `${Math.floor(secs / 60)} min ago`;
+  return `${Math.floor(secs / 3600)} h ago`;
+}
+
+/// Dota is posting right now. Its heartbeat is every 30 seconds, so 45
+/// without a word means it has stopped.
+function dotaConnected() {
+  const age = state.live && state.live.gsiAgeSecs;
+  return age !== null && age !== undefined && age < 45;
+}
+
+/// OpenDota matches since GSI was set up that never reached local history.
+///
+/// This is the number that would have shown the problem: twelve games played
+/// after setup and none recorded, with nothing in the app saying so. It
+/// undercounts rather than over — OpenDota itself lacks every Turbo game on
+/// some accounts — and is null when either list is not loaded, so nothing is
+/// claimed on partial data.
+function missedMatches() {
+  const since = GSI.status && GSI.status.installedAt;
+  if (!since || typeof DOTA === "undefined" || !DOTA.loadedAt || !DOTA.matches.length) return null;
+  const recorded = new Set((state.history || []).map((h) => String(h.matchid)));
+  const missed = DOTA.matches.filter((m) => m.startTime > since && !recorded.has(String(m.matchId)));
+  return { count: missed.length, since };
 }
 
 async function steamDetect(onDone) {
@@ -279,20 +323,34 @@ const state = {
   authForm: { email: "", password: "", error: null, busy: false },
   diagnostics: { running: false, result: null, error: null },
   openHistory: new Set(),
+  // A session to scroll to on the next draw of Sessions — set when a
+  // recorded match is clicked in Match History.
+  focusHistory: null,
   openTypeMenu: null,
 };
 
 // ---------- Rendering: Live tab ----------
+
+// The setup panel is rebuilt only when its markup actually changes.
+// renderLive runs every 700 ms, and replacing the panel each time swallowed
+// any click that straddled a rebuild, snapped "What the app changed" shut a
+// moment after it was opened, and wiped the Copy button's confirmation.
+let lastWaitingHtml = null;
 
 function renderLive() {
   const root = document.getElementById("tab-live");
   const m = state.live && state.live.current;
 
   if (!m) {
-    root.innerHTML = gsiWaitingHtml();
-    wireGsiSetup(root);
+    const html = gsiWaitingHtml();
+    if (html !== lastWaitingHtml || !root.childElementCount) {
+      root.innerHTML = html;
+      lastWaitingHtml = html;
+      wireGsiSetup(root);
+    }
     return;
   }
+  lastWaitingHtml = null;
 
   const portrait = heroPortraitUrl(m.heroName);
   const parts = [];
@@ -497,11 +555,40 @@ function comparisonBlockHtml(summary) {
   `;
 }
 
+/// Win, Loss, or nothing. A locally recorded match has a result only when
+/// Dota named the winner before it stopped sending — never inferred.
+function resultTagHtml(m) {
+  if (m.won === true) return `<span class="res win">Win</span>`;
+  if (m.won === false) return `<span class="res loss">Loss</span>`;
+  return "";
+}
+
+/// The line under a session. Matches recorded before assists and GPM were
+/// captured fall back to what they do have rather than showing blanks.
+function sessionStatsText(m) {
+  const parts = [escapeHtml(m.duration)];
+  parts.push(
+    m.assists !== null && m.assists !== undefined
+      ? `${m.kills} / ${m.totalDeaths} / ${m.assists}`
+      : `${m.kills} kills · ${m.totalDeaths} deaths`
+  );
+  if (m.lastHits !== null && m.lastHits !== undefined) parts.push(`${m.lastHits} LH`);
+  if (m.gpm) parts.push(`${m.gpm} GPM`);
+  parts.push(`${m.totalGoldLost}g lost`);
+  parts.push(`Rosh x${m.roshanDeaths}`);
+  return parts.join(" · ");
+}
+
 function summaryCardHtml(summary) {
   return `
     <div class="card">
-      <p class="summary-title">\u{1F3C1} Match Summary — ${gameTypeLabel(summary.gameType)}</p>
-      <div class="summary-sub" style="margin-bottom:2px">${escapeHtml(heroDisplayName(summary.heroName))} — ${escapeHtml(summary.duration)}</div>
+      <p class="summary-title">\u{1F3C1} Match Summary — ${gameTypeLabel(summary.gameType)} ${resultTagHtml(summary)}</p>
+      <div class="summary-sub" style="margin-bottom:2px">${escapeHtml(heroDisplayName(summary.heroName))} — ${sessionStatsText(summary)}</div>
+      ${
+        summary.incomplete
+          ? `<p class="hint" style="margin:6px 0 0">Dota stopped reporting before the end, so these figures stop there.</p>`
+          : ""
+      }
       ${comparisonBlockHtml(summary)}
     </div>
   `;
@@ -526,14 +613,14 @@ function renderHistory() {
           <div class="history-head" data-toggle-history="${escapeHtml(m.matchid)}">
             ${portrait ? `<img class="hero-portrait" src="${portrait}" alt="" />` : `<div class="hero-portrait"></div>`}
             <div class="history-head-main">
-              <div class="history-head-title">${escapeHtml(heroDisplayName(m.heroName))}</div>
-              <div class="history-head-sub">${formatDate(m.date)}</div>
+              <div class="history-head-title">${escapeHtml(heroDisplayName(m.heroName))} ${resultTagHtml(m)}</div>
+              <div class="history-head-sub">${formatDate(m.date)}${m.incomplete ? " · ended early" : ""}</div>
             </div>
             ${typeBadgeHtml(m)}
             <span class="history-chevron">▸</span>
           </div>
           <div class="history-body">
-            <div class="history-quickstats">${escapeHtml(m.duration)} · ${m.totalDeaths} deaths · ${m.totalGoldLost}g lost · Rosh x${m.roshanDeaths}</div>
+            <div class="history-quickstats">${sessionStatsText(m)}</div>
             ${comparisonBlockHtml(m)}
             <div>
               <p class="section-title">Key Items</p>
@@ -567,6 +654,12 @@ function renderHistory() {
       renderLeaderboard();
     });
   });
+
+  if (state.focusHistory) {
+    const head = root.querySelector(`[data-toggle-history="${CSS.escape(state.focusHistory)}"]`);
+    state.focusHistory = null;
+    if (head) head.scrollIntoView({ block: "center" });
+  }
 }
 
 function typeBadgeHtml(m) {
@@ -971,6 +1064,7 @@ const VIEWS = {
   dlfavorite: { game: "deadlock", title: "Hero Focus", sub: "Your most important hero" },
   dlbuilds: { game: "deadlock", title: "Builds", sub: "Your saved item plans" },
 
+  general: { game: null, title: "General", sub: "Startup and running in the background" },
   overlaysettings: { game: null, title: "Overlay", sub: "Dota event reminders and placement" },
   accounts: { game: null, title: "Account", sub: "Profile, sync, and linked accounts" },
   about: { game: null, title: "About & Updates", sub: "Version and update status" },
@@ -1043,7 +1137,9 @@ function renderView(view) {
       loadHistory().then(renderLeaderboard);
       break;
     case "dotamatches":
-      dtRefreshLink().then(() => {
+      // Recorded matches are part of this list, so local history is read
+      // fresh as well. A failed read only costs those rows, not the page.
+      Promise.all([dtRefreshLink(), loadHistory().catch(() => {})]).then(() => {
         dtRender();
         dtLoad();
       });
@@ -1082,6 +1178,9 @@ function renderView(view) {
         dlLoad();
       });
       break;
+    case "general":
+      renderGeneral();
+      break;
     case "overlaysettings":
       renderOverlaySettings();
       break;
@@ -1115,6 +1214,19 @@ function refreshLive() {
     trackBtn.classList.toggle("off", !live.trackingEnabled);
     trackBtn.querySelector(".label").textContent = live.trackingEnabled ? "Tracking" : "Paused";
 
+    const link = document.getElementById("dotaLink");
+    if (link) {
+      const connected = dotaConnected();
+      link.classList.toggle("on", connected);
+      const heard = agoText(live.gsiAgeSecs);
+      link.title = connected
+        ? "Dota is sending data to TheTracker"
+        : heard
+          ? `Dota isn't sending data — last heard ${heard}`
+          : "Nothing from Dota since TheTracker started. Click for details.";
+    }
+    renderAutostartBanner();
+
     const errBanner = document.getElementById("serverError");
     if (live.serverError) {
       errBanner.hidden = false;
@@ -1125,11 +1237,14 @@ function refreshLive() {
       errBanner.removeAttribute("title");
     }
 
-    // A match just finished while we were on the Live tab — refresh cached
-    // history so switching to History/Leaderboard shows it immediately.
+    // A match just finished — refresh cached history so switching to
+    // History/Leaderboard shows it immediately, and redraw Match History if
+    // it is the page on screen, since recorded matches are listed there too.
     const isEndedNow = live.current && live.current.ended;
     if (isEndedNow && !wasEnded) {
-      loadHistory();
+      loadHistory().then(() => {
+        if (state.view === "dotamatches") dtRender();
+      });
     }
   });
 }
@@ -1147,7 +1262,7 @@ async function refreshCurrentView() {
     switch (state.view) {
       case "live": await refreshLive(); break;
       case "dotaoverview": await dtRefreshLink(); await dtLoad(true); renderDotaOverview(); break;
-      case "dotamatches": await dtLoad(true); dtRender(); break;
+      case "dotamatches": await Promise.all([dtLoad(true), loadHistory().catch(() => {})]); dtRender(); break;
       case "dotaheroes": await dtLoad(true); renderDotaHeroes(); break;
       case "favorite": await dtLoad(true); renderFavoriteHero(); break;
       case "dotameta": await loadDotaMeta(true); break;
@@ -1245,6 +1360,9 @@ function wireShell() {
       error.title = String(e);
     } finally { button.disabled = false; }
   });
+
+  // The connection pill leads to the place that explains it.
+  document.getElementById("dotaLink")?.addEventListener("click", () => setView("live"));
 
   document.getElementById("gameTabs").addEventListener("click", (e) => {
     const t = e.target.closest(".game-tab");
@@ -1503,6 +1621,7 @@ async function boot() {
   state.auth = (await invoke("auth_status").catch(() => null)) || { signedIn: false, email: null };
   state.overlay.visible = await invoke("overlay_visible").catch(() => false);
   await refreshGsi();
+  await refreshBackground();
 
   // Both links are local file reads; the match data behind them is only
   // fetched when the relevant view is actually opened.
@@ -1588,6 +1707,45 @@ function gsiWaitingHtml() {
     );
   }
 
+  // Whether Dota is talking to us right now. Config and launch option can
+  // both be fine while nothing arrives, and until now nothing said so.
+  const age = state.live ? state.live.gsiAgeSecs : null;
+  if (dotaConnected()) {
+    rows.push(gsiRow(true, "Dota is connected", "Receiving data right now."));
+  } else if (age !== null && age !== undefined) {
+    rows.push(gsiRow(null, "Dota is closed", `Last heard from Dota ${agoText(age)}.`));
+  } else if (s.installed) {
+    rows.push(
+      gsiRow(
+        null,
+        "Nothing from Dota yet",
+        "Expected if Dota is closed. If it is open, restart it — Dota only reads the config when it starts."
+      )
+    );
+  }
+
+  // Recording needs the app running, so whether it starts with Windows
+  // decides whether matches get recorded at all.
+  const missed = missedMatches();
+  let background = "";
+  if (BG && !BG.startWithWindows) {
+    const since = missed ? new Date(missed.since * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null;
+    const title =
+      missed && missed.count
+        ? `${missed.count} of your recent match${missed.count === 1 ? "" : "es"} ${missed.count === 1 ? "wasn't" : "weren't"} recorded`
+        : "TheTracker only records while it's running";
+    const body =
+      missed && missed.count
+        ? `OpenDota shows ${missed.count} match${missed.count === 1 ? "" : "es"} since live tracking was set up on ${since} that never reached TheTracker. The usual reason is that it wasn't open &mdash; it can only record while it runs.`
+        : "Starting it with Windows means it is already there whenever you play. It opens in the tray, not on screen.";
+    background = `
+      <div class="gsi-steps">
+        <div class="gsi-steps-title">${title}</div>
+        <p class="hint" style="margin:0 0 10px">${body}</p>
+        <button class="btn" id="bgEnable" type="button" ${GSI.busy ? "disabled" : ""}>Start with Windows</button>
+      </div>`;
+  }
+
   const steps = needsFlag
     ? `
       <div class="gsi-steps">
@@ -1650,6 +1808,7 @@ function gsiWaitingHtml() {
       </p>
 
       ${steps}
+      ${background}
       ${GSI.error ? `<div class="note err" style="margin-top:12px">${escapeHtml(GSI.error)}</div>` : ""}
       ${whatChanged}
 
@@ -1659,9 +1818,11 @@ function gsiWaitingHtml() {
     </div>`;
 }
 
+/// `ok`: true is fine, false needs fixing, null is neither — Dota simply
+/// being closed is not a fault.
 function gsiRow(ok, title, detail) {
   return `
-    <div class="gsi-row ${ok ? "ok" : "bad"}">
+    <div class="gsi-row ${ok === true ? "ok" : ok === false ? "bad" : "idle"}">
       <span class="gsi-dot"></span>
       <div>
         <div class="gsi-title">${title}</div>
@@ -1697,6 +1858,16 @@ function wireGsiSetup(root) {
   const remove = root.querySelector("#gsiRemove");
   if (remove) remove.addEventListener("click", () => run(() => invoke("gsi_remove")));
 
+  const enable = root.querySelector("#bgEnable");
+  if (enable) {
+    enable.addEventListener("click", () =>
+      run(async () => {
+        BG = await invoke("set_start_with_windows", { enabled: true });
+        renderAutostartBanner();
+      })
+    );
+  }
+
   const copy = root.querySelector("#gsiCopy");
   if (copy) {
     copy.addEventListener("click", async () => {
@@ -1711,4 +1882,115 @@ function wireGsiSetup(root) {
       }
     });
   }
+}
+
+// ---------- Running in the background ----------
+//
+// Live tracking records a match only while TheTracker is running, and a
+// closed app is the most common way a match goes unrecorded. These are the
+// two settings that decide whether it is running, and a one-time prompt to
+// use them.
+
+// Same reason as the Live panel: refreshLive calls this every 700 ms, and
+// rebuilding the banner each time would eat clicks on its buttons.
+let lastBannerHtml = null;
+
+/// Asked once, app-wide, until it is answered either way.
+function renderAutostartBanner() {
+  const host = document.getElementById("autostartBanner");
+  if (!host) return;
+
+  const show = BG && BG.trayAvailable && !BG.startWithWindows && !BG.autostartAsked;
+  if (!show) {
+    host.hidden = true;
+    lastBannerHtml = null;
+    return;
+  }
+
+  const missed = missedMatches();
+  const text =
+    missed && missed.count
+      ? `<b>${missed.count} of your recent Dota match${missed.count === 1 ? "" : "es"} ${missed.count === 1 ? "wasn't" : "weren't"} recorded</b> &mdash; TheTracker can only record while it's running.`
+      : `<b>TheTracker only records while it's running.</b> Start it with Windows so it's there whenever you play &mdash; it opens in the tray, not on screen.`;
+  const html = `
+    <span class="upd-dot"></span>
+    <span class="upd-text">${text}</span>
+    <button class="btn upd-btn" id="asEnable" type="button">Start with Windows</button>
+    <button class="link-btn" id="asLater" type="button">Not now</button>`;
+
+  host.hidden = false;
+  if (html === lastBannerHtml) return;
+  host.innerHTML = html;
+  lastBannerHtml = html;
+
+  const answer = (button, command, args) =>
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        BG = await invoke(command, args);
+        lastWaitingHtml = null; // the Live panel's prompt changes too
+        if (command === "set_start_with_windows") showToast("TheTracker will now start with Windows, in the tray.");
+      } catch (e) {
+        showToast(String(e), "err");
+        button.disabled = false;
+      }
+      renderAutostartBanner();
+    });
+  answer(host.querySelector("#asEnable"), "set_start_with_windows", { enabled: true });
+  answer(host.querySelector("#asLater"), "dismiss_autostart_prompt", {});
+}
+
+function renderGeneral() {
+  const root = document.getElementById("tab-general");
+  if (!root) return;
+
+  if (!BG) {
+    root.innerHTML = `<div class="empty-state">Loading&hellip;</div>`;
+    refreshBackground().then(() => {
+      if (BG) renderGeneral();
+      else root.innerHTML = `<div class="note err">Couldn't read the startup settings.</div>`;
+    });
+    return;
+  }
+
+  root.innerHTML = `
+    <section class="home-section" style="padding-top:0">
+      <div class="home-head"><h2 class="home-title">Running in the background</h2></div>
+      <p class="hint" style="max-width:72ch;margin:0 0 12px">
+        Live tracking records a match only while TheTracker is running. If it
+        is closed when you play, that game never reaches your Sessions.
+      </p>
+
+      <label class="switch-row">
+        <input type="checkbox" id="bgStart" ${BG.startWithWindows ? "checked" : ""} />
+        <span>Start with Windows <span class="hint">&mdash; opens in the tray, not on screen</span></span>
+      </label>
+      <label class="switch-row">
+        <input type="checkbox" id="bgTray" ${BG.closeToTray ? "checked" : ""} ${BG.trayAvailable ? "" : "disabled"} />
+        <span>Keep running in the tray when the window is closed</span>
+      </label>
+      ${
+        BG.trayAvailable
+          ? `<p class="hint" style="margin-top:10px">To quit completely, right-click the TheTracker icon in the tray and choose <b>Quit TheTracker</b>.</p>`
+          : `<p class="note warn" style="margin-top:10px">The tray icon couldn't be created on this PC, so closing the window quits the app.</p>`
+      }
+    </section>`;
+
+  const toggle = (id, command) => {
+    const input = root.querySelector(id);
+    input.addEventListener("change", async () => {
+      input.disabled = true;
+      try {
+        BG = await invoke(command, { enabled: input.checked });
+        lastWaitingHtml = null;
+        renderAutostartBanner();
+      } catch (e) {
+        // The registry write failed: put the box back the way it really is.
+        showToast(String(e), "err");
+      }
+      renderGeneral();
+    });
+  };
+  toggle("#bgStart", "set_start_with_windows");
+  toggle("#bgTray", "set_close_to_tray");
 }

@@ -496,3 +496,20 @@ img.portrait-missing { background: linear-gradient(135deg, var(--surface-3), var
 .gsi-details > p { margin: 10px 0; }
 .gsi-paths { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .gsi-paths code { padding: 7px 10px; border: 1px solid var(--line-soft); border-radius: 5px; background: var(--bg); font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--muted); word-break: break-all; user-select: all; }
+
+/* Whether Dota is talking to the app right now: grey while it is silent,
+   green while it posts. Separate from Tracking, which is whether the app
+   records what it is sent. */
+.dota-link .label { font-size: 12px; }
+.dota-link.on { color: var(--text); }
+.dota-link.on .dot { background: var(--good); box-shadow: 0 0 0 3px rgba(115,185,154,.15); }
+
+/* A setup row that is neither fine nor broken - Dota simply being closed. */
+.gsi-row.idle .gsi-dot { background: var(--faint); }
+
+/* Match History rows open something - a scoreboard, or the recorded match in
+   Sessions - so they say so under the pointer. */
+.dtable tr[data-dt-toggle], .dtable tr[data-dt-local] { cursor: pointer; }
+/* A match OpenDota lacks, filled in from this app's own recording. */
+.src-local { color: var(--accent); }
+.res.other { color: var(--muted); }

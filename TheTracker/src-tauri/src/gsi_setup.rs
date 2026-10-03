@@ -76,6 +76,13 @@ pub struct GsiStatus {
     #[serde(rename = "launchOption")]
     pub launch_option: Option<bool>,
     pub port: u16,
+    /// When the config was last written, as Unix seconds — the point from
+    /// which every Dota match should have reached the app. Comparing
+    /// OpenDota's list against local history from here shows how many games
+    /// the app missed; it is rewritten only when missing or stale, so this
+    /// is stable across launches.
+    #[serde(rename = "installedAt")]
+    pub installed_at: Option<u64>,
 }
 
 /// Steam spreads games across libraries listed in `libraryfolders.vdf`. Only
@@ -160,9 +167,23 @@ pub fn status() -> GsiStatus {
 
     let mut installed = false;
     let mut stale = false;
+    let mut installed_at: Option<u64> = None;
     for dir in &dirs {
-        match std::fs::read_to_string(dir.join("gamestate_integration").join(CFG_NAME)) {
-            Ok(found) if found.trim() == wanted.trim() => installed = true,
+        let path = dir.join("gamestate_integration").join(CFG_NAME);
+        match std::fs::read_to_string(&path) {
+            Ok(found) if found.trim() == wanted.trim() => {
+                installed = true;
+                // The earliest install wins if Dota is in two libraries.
+                let written = std::fs::metadata(&path)
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs());
+                installed_at = match (installed_at, written) {
+                    (Some(a), Some(b)) => Some(a.min(b)),
+                    (a, b) => a.or(b),
+                };
+            }
             Ok(_) => stale = true,
             Err(_) => {}
         }
@@ -174,6 +195,7 @@ pub fn status() -> GsiStatus {
         stale,
         launch_option: launch_option_set(),
         port: GSI_PORT,
+        installed_at,
     }
 }
 
@@ -231,9 +253,68 @@ pub fn ensure_installed() -> Option<Vec<String>> {
     install().ok()
 }
 
+/// The original Electron version of this tracker had players install its
+/// config under this name — its README said to. It points at the same local
+/// port, so every Dota update has been arriving twice, and if this app ever
+/// moves port it would go on posting into whatever else listens there.
+const LEGACY_CFG_NAME: &str = "gamestate_integration_lasthits.cfg";
+const LEGACY_PORT: u16 = 3000;
+
+/// Recognised by where it sends data, not by name alone: a file of the same
+/// name aimed anywhere other than the old tracker's local listener belongs
+/// to something else and is left where it is.
+fn is_our_legacy_config(text: &str) -> bool {
+    let uri = text.lines().find_map(|line| {
+        let line = line.trim();
+        if line.starts_with("\"uri\"") {
+            line.split('"').nth(3).map(str::to_string)
+        } else {
+            None
+        }
+    });
+    let Some(uri) = uri else { return false };
+    let uri = uri.trim_end_matches('/');
+    uri == format!("http://localhost:{LEGACY_PORT}") || uri == format!("http://127.0.0.1:{LEGACY_PORT}")
+}
+
+/// Removes the old tracker's config from every Dota install, if present.
+/// Returns what was removed so the caller can say so.
+pub fn remove_legacy_configs() -> Vec<String> {
+    let mut removed = Vec::new();
+    for dir in dota_cfg_dirs() {
+        let path = dir.join("gamestate_integration").join(LEGACY_CFG_NAME);
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        if is_our_legacy_config(&text) && std::fs::remove_file(&path).is_ok() {
+            removed.push(path.display().to_string());
+        }
+    }
+    removed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_old_trackers_own_config_is_recognised() {
+        // Byte-for-byte what sits in the Dota folder on the machine this was
+        // built on, installed by the Electron version's README.
+        let ours = r#""Dota 2 Integration Configuration"
+{
+    "uri"           "http://localhost:3000/"
+    "timeout"       "5.0"
+    "data"
+    {
+        "player"        "1"
+    }
+}"#;
+        assert!(is_our_legacy_config(ours));
+
+        // Same name, different destination: someone else's, left alone.
+        assert!(!is_our_legacy_config(&ours.replace("localhost:3000", "127.0.0.1:3002")));
+        assert!(!is_our_legacy_config(&ours.replace("localhost:3000", "localhost:30001")));
+        assert!(!is_our_legacy_config("not a config at all"));
+    }
 
     #[test]
     fn the_config_names_the_port_we_actually_listen_on() {

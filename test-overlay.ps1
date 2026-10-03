@@ -1,14 +1,14 @@
 # Simulates a live Dota match so the overlay can be tested without playing.
 #
 # TheTracker listens on the same local port Dota's Game State Integration
-# posts to, so feeding it the same shape of JSON is indistinguishable from a
-# real game. The overlay opens itself when a match goes live and closes when
-# it ends, so this exercises the whole path.
+# posts to, and this feeds it the same shape of JSON, so the live view and
+# the overlay behave as they would in a real game. Every payload also carries
+# `thetracker_simulated`, which real Dota never sends: the app shows the
+# match but never saves it, so test runs stay out of your match history.
 #
-# The clock starts just before 3:30 and runs forward, which is deliberate:
-# within the first minute it passes a stack pull (:53), a bounty rune (4:00)
-# and, if you leave it running, the day/night flip at 5:00. That way the
-# contextual chips actually appear rather than sitting idle.
+# The overlay shows a reminder only in the five seconds before an event.
+# The clock starts at 3:20 and runs forward, so the first minute passes a
+# stack pull (3:53) and the 4:00 bounty and water runes.
 #
 #   Run:   powershell -ExecutionPolicy Bypass -File test-overlay.ps1
 #   Stop:  Ctrl+C  (the match is then ended cleanly so the overlay hides)
@@ -25,6 +25,8 @@ function Send-State {
     param([int]$Clock, [string]$GameState, [bool]$Alive = $true, [int]$Gold = 2400)
 
     $body = @{
+        # Tells TheTracker this is a test run, so the match is never saved.
+        thetracker_simulated = $true
         map = @{
             matchid    = $matchId
             clock_time = $Clock
@@ -63,12 +65,12 @@ if (-not (Send-State -Clock $StartClock -GameState "DOTA_GAMERULES_STATE_GAME_IN
     exit 1
 }
 
-Write-Host "  Connected. The overlay should appear within about two seconds." -ForegroundColor Green
-Write-Host "  Watch for chips as the clock passes each event:" -ForegroundColor DarkGray
+Write-Host "  Connected. This test match is not saved to your history." -ForegroundColor Green
+Write-Host "  With the overlay open, a countdown shows 5 seconds before each event:" -ForegroundColor DarkGray
 Write-Host "    :53 each minute  stack pull" -ForegroundColor DarkGray
-Write-Host "    4:00, 8:00       bounty runes" -ForegroundColor DarkGray
-Write-Host "    5:00, 10:00      day/night flip" -ForegroundColor DarkGray
+Write-Host "    4:00, 8:00       bounty runes (water rune at 4:00 too)" -ForegroundColor DarkGray
 Write-Host "    6:00 onward      power runes every 2 min" -ForegroundColor DarkGray
+Write-Host "    6:00, 9:00       healing lotuses" -ForegroundColor DarkGray
 Write-Host "    7:00, 14:00      wisdom runes" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "  Ctrl+C to stop and end the match." -ForegroundColor DarkGray
