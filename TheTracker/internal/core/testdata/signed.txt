@@ -1,0 +1,1 @@
+TheTracker signature fixture. Signed with the release key so the verifier is tested against the real format.

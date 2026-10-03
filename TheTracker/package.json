@@ -1,10 +1,7 @@
 {
-  "name": "dota-tracker",
+  "name": "thetracker-tools",
   "private": true,
-  "version": "0.2.0",
-  "scripts": {
-    "tauri": "tauri"
-  },
+  "description": "Node-side tooling only: the Convex cloud functions and the release signer. The app itself is Go.",
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "convex": "^1.45.0"

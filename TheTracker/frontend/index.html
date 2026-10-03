@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TheTracker</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="shell" id="shell" data-game="dota">
+    <aside class="side">
+      <div class="brand">
+        <img src="brand.png" alt="" />
+        <span>TheTracker</span>
+      </div>
+
+      <div class="games" role="tablist" aria-label="Game">
+        <button class="game" data-act="game" data-game="dota" type="button">Dota 2</button>
+        <button class="game" data-act="game" data-game="deadlock" type="button">Deadlock</button>
+      </div>
+
+      <nav class="nav" id="nav" aria-label="Pages"></nav>
+
+      <div class="side-foot">
+        <button class="nav-item" data-act="go" data-view="settings" type="button">
+          <span class="ico" data-ico="settings"></span><span>Settings</span>
+        </button>
+        <div class="status-line" id="syncLine" title=""></div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="top">
+        <div class="top-title">
+          <h1 id="viewTitle"></h1>
+          <p id="viewSub"></p>
+        </div>
+        <div class="top-actions">
+          <button class="pill" id="dotaPill" data-act="go" data-view="live" type="button" title="">
+            <span class="dot"></span><span id="dotaPillText">Dota</span>
+          </button>
+          <button class="pill" id="trackPill" data-act="toggle-tracking" type="button" title="Pause or resume recording matches">
+            <span class="dot"></span><span id="trackPillText">Recording</span>
+          </button>
+          <button class="pill" id="overlayPill" data-act="toggle-overlay" type="button" title="Show or hide the in-game overlay">
+            <span class="ico" data-ico="overlay"></span><span>Overlay</span>
+          </button>
+          <button class="pill" data-act="refresh" id="refreshBtn" type="button" title="Reload this page's data (F5)">
+            <span class="ico" data-ico="refresh"></span><span>Refresh</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="banners" id="banners"></div>
+      <main class="page" id="page" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="js/shell.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/dota.js"></script>
+  <script src="js/dota-extra.js"></script>
+  <script src="js/deadlock.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/boot.js"></script>
+</body>
+</html>

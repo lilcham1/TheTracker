@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>TheTracker Overlay</title>
+  <style>
+    html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; }
+    body { font-family: Bahnschrift, "Segoe UI", sans-serif; color: #f2f4f7; }
+    #chips { display: flex; flex-direction: column; gap: 8px; padding: 6px; transform-origin: top left; }
+    body.right #chips { align-items: flex-end; transform-origin: top right; }
+    body.bottom { display: flex; flex-direction: column; justify-content: flex-end; height: 100vh; }
+    body.bottom #chips { transform-origin: bottom left; }
+    body.bottom.right #chips { transform-origin: bottom right; }
+    .chip { display: inline-flex; align-items: baseline; gap: 12px; width: fit-content; padding: 8px 16px 8px 14px; border-radius: 8px;
+      background: rgba(13, 16, 22, .88); border-left: 4px solid #d8a23a; box-shadow: 0 2px 12px rgba(0, 0, 0, .45); }
+    .chip .label { font-size: 17px; font-weight: 600; letter-spacing: .01em; }
+    .chip .secs { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 1.2em; text-align: right; color: #f3c766; }
+    .chip.soon { border-left-color: #e8684a; }
+    .chip.soon .secs { color: #ff9478; }
+  </style>
+</head>
+<body>
+  <div id="chips"></div>
+  <script src="js/shell.js"></script>
+  <script src="js/overlay.js"></script>
+</body>
+</html>

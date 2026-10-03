@@ -1,276 +1,108 @@
 # TheTracker
 
-A desktop match tracker for **Dota 2** and **Deadlock**.
+A desktop match tracker for Dota 2 and Deadlock. One Windows executable,
+written in Go, with its interface drawn in the system's WebView2.
 
-Two different kinds of data feed it, and the app is explicit about which is
-which rather than blurring them:
+## What it does
 
-- **Live Dota tracking** comes from Valve's official **Game State
-  Integration (GSI)** feed — the same system pro broadcast overlays use.
-  Nothing reads game memory or touches the game process.
-- **Dota match history** comes from the public **OpenDota** API. GSI only
-  ever reports your own state and never says who won, so results, game
-  modes and full scoreboards come from there.
-- **Deadlock** has no Valve feed at all, so it uses the community-run
-  **Deadlock API**. See the Deadlock section below for what that means.
+**Dota 2**
 
-Built with **Tauri**: a Rust backend does the GSI listening, match tracking
-and API work, and the interface is HTML/CSS/JS rendered in the OS's own
-WebView. One binary — no Electron, no browser tab, no bundled Node runtime.
+- **Live** – follows your match as you play, from Valve's own Game State
+  Integration feed: last hits at 5/10/15/20/25 minutes against your own
+  averages, each death and the gold it cost, timings of key items, and
+  progress against goals you set.
+- **Overlay** – a small transparent window over the game that counts down to
+  rune spawns, lotuses and the stack pull, and shows nothing otherwise.
+- **Sessions** – every match recorded live, with comparisons against your
+  other games of the same type, your own notes, and plain-language insights
+  ("most of your deaths come between 10 and 20 minutes").
+- **Matches, Heroes, Overview** – your match history, lifetime hero records,
+  medal, and the people you play with most, from OpenDota. Recorded sessions
+  OpenDota lacks are merged into the same list.
+- **Draft** – add the enemy's heroes as they pick and see which heroes have
+  done well against that lineup, with your own record on each.
+- **Meta** – which heroes are winning, rising and falling, by estimated role.
+- **Builds** – your saved item plans, beside what players buy most.
+- **Leaderboard** – your best recorded games, and (with an account) a shared
+  board.
 
-## Project layout
+**Deadlock** – overview, matches with scoreboards, heroes, meta (heroes and
+items) and builds, from the community Deadlock API. Deadlock has no live
+feed, so there is no live page or overlay for it.
 
-```
-ui/                    — the interface (plain HTML/CSS/JS, no bundler)
-  index.html
-  style.css
-  app.js               — rendering + all `invoke` calls to the backend
-src-tauri/
-  src/
-    main.rs            — Tauri entry point + the commands the UI calls
-    gsi.rs             — the GSI HTTP listener (one route: POST /)
-    state.rs           — match tracking + historical comparison logic
-    model.rs           — data types (JSON-compatible with history.json)
-    heroes.rs          — key-item whitelist, Roshan drop table
-    storage.rs         — history.json / profile.json persistence
-    convex_sync.rs     — background cloud sync + global leaderboard queries
-    device_id.rs       — stable per-install id used by the leaderboard
-  tauri.conf.json      — window, bundle and CSP config
-  icons/               — generated app icons
-```
+## Where the data comes from
 
-The frontend never touches the filesystem or the network directly — it
-calls Rust commands (`get_live_state`, `get_history`,
-`set_history_game_type`, …) and renders what comes back.
+| Source | Used for | Notes |
+| --- | --- | --- |
+| Valve Game State Integration | Live Dota tracking | Dota posts your own state to `127.0.0.1` on this PC. Nothing reads game memory. |
+| [OpenDota](https://www.opendota.com) API | Dota history, heroes, meta, matchups | Public, no key. Keyed on your Steam account id. |
+| [Deadlock API](https://deadlock-api.com) | Everything Deadlock | Community-run, rate-limited by Valve; can be late or incomplete. |
+| Convex (optional account) | Sync and the shared leaderboard | Only if you sign in. `convex/` holds the server functions. |
 
-## Build & run
+Nothing is scraped from any other tracker's site, and nothing is shown about
+another player that the game does not already show you.
 
-Requires the Rust toolchain (`rustup.rs`) and Node (only for the Tauri
-CLI — nothing from npm ships inside the app).
+## Layout
 
 ```
-npm install
-npm run tauri dev
+main.go              desktop shell: windows, overlay, tray, start-with-Windows
+internal/core/       everything the app does: tracker, storage, API clients,
+                     sync, updater, insights. No window code; fully testable.
+internal/api/        one HTTP handler; every UI action is POST /api/<command>
+frontend/            the interface: plain HTML, CSS and JS, embedded in the exe
+build/windows/       installer script and Windows resources
+convex/              cloud functions (TypeScript, run on Convex's servers)
 ```
 
-For a release binary:
+The UI talks to the backend only through `/api/*`, served inside the app's
+own window (never on a network port). That is what lets every function be
+tested without opening a window.
 
-```
-cd src-tauri
-cargo build --release
-```
+## Building
 
-That produces `src-tauri/target/release/thetracker.exe` — the frontend is
-compiled into the binary, so the `.exe` is self-contained and can be copied
-anywhere.
+Needs Go 1.24+, [NSIS](https://nsis.sourceforge.io) and
+[go-winres](https://github.com/tc-hib/go-winres). No C compiler.
 
-### Windows note: this repo builds with the GNU toolchain
-
-There are no Visual Studio Build Tools on the machine this was developed
-on, so `rust-tracker/` is pinned by a `rustup override` to
-`stable-x86_64-pc-windows-gnu`, and a MinGW-w64 `bin` directory must be on
-`PATH` at build time (it provides `as.exe`/`dlltool.exe`, which rustup's
-bundled self-contained linker does not include).
-
-**The project path must not contain spaces** — MinGW's `cc1.exe` splits
-paths at the space, which breaks Tauri's build script with a confusing
-"No such file or directory" error. (If you'd rather not deal with any of
-this, installing the MSVC "C++ build tools" and switching the override to
-`stable-x86_64-pc-windows-msvc` avoids both constraints.)
-
-## Setting up Dota 2 to send it data
-
-1. Find your Dota 2 `cfg` folder:
-   - Windows: `...\Steam\steamapps\common\dota 2 beta\game\dota\cfg`
-   - Mac: `~/Library/Application Support/Steam/steamapps/common/dota 2 beta/game/dota/cfg`
-   - Linux: `~/.steam/steam/steamapps/common/dota 2 beta/game/dota/cfg`
-2. Inside `cfg`, create a folder named `gamestate_integration` (if it
-   doesn't already exist).
-3. Copy `gamestate_integration_thetracker.cfg` (in this folder) into that
-   `gamestate_integration` folder.
-4. In Steam: right-click **Dota 2 → Properties → Launch Options**, add:
-   ```
-   -gamestateintegration
-   ```
-5. Launch the tracker, then start a Dota 2 match. The Live tab updates
-   automatically once GSI data starts arriving.
-
-## What it tracks
-
-- **Key items** (boots tier, Blink, BKB, Aghs, refresher, etc.) — tracked by
-  total owned count, so moving items between slots never re-logs them.
-- **Deaths** — time and gold lost per death.
-- **Last hits** — snapshotted at 5/10/15/20/25 minutes.
-- **Roshan** — auto-detected when GSI reports it reliably, plus a manual
-  "Mark Death" button (Valve's own Roshan state data is known to be
-  inconsistent, so the manual button is the reliable fallback). Shows the
-  respawn window and the drop table for that Roshan number.
-- **End-of-match summary** comparing this game's deaths/gold-lost/last-hit
-  checkpoints against your historical average for the same game type, with
-  Better/Worse/Average badges and 🏆 personal-best flags.
-- **History tab** — every finished match, expandable for full detail. Each
-  match's game type can be **re-tagged after the fact** (Ranked / All Pick /
-  Turbo / Other) straight from its badge — GSI doesn't reliably report lobby
-  type, so this is how you correct it. Re-tagging recomputes every match's
-  comparison so the peer-group stats stay consistent.
-- **Leaderboard tab** — your own top 10 games by a stat you pick (most last
-  hits @25m, fewest deaths, least gold lost, most kills), filterable by game
-  type. Personal only, not a real multiplayer leaderboard.
-- **Profile tab** — a local username/rank/main-role label, stored only on
-  your PC.
-
-## Dota match history
-
-The Live tab and the Match History tab are fed by different sources, on
-purpose.
-
-GSI is a live feed of *your own* state — it is excellent for tracking a
-game as it happens, but Valve deliberately exposes nothing else. It never
-reports the result, the other nine players, or the lobby type. That is why
-matches recorded purely from GSI show up under **Tracked Sessions** with no
-win/loss and an unspecified game type.
-
-**Match History** fills that in from [OpenDota](https://www.opendota.com),
-the same public dataset Dotabuff and friends use. Link your Steam account
-once (Match History → search your name) and you get:
-
-- real **win/loss**, including abandons
-- authoritative **game mode and lobby type**, so Ranked / All Pick / Turbo
-  stop being a manual guess
-- **KDA, GPM, XPM, last hits, hero damage**, party size and duration
-- the full **ten-player scoreboard** with items, expanded per match
-
-Your row is highlighted in the scoreboard. Game-type classification is
-verified against OpenDota's own constants: lobby type 7 is Ranked, game
-mode 23 is Turbo, 22 and 1 are All Pick. Turbo is checked first, since a
-ranked turbo game is still turbo and comparing its last-hit counts against
-normal ranked games would be meaningless.
-
-If nothing shows up, your Dota profile is probably private: in Dota 2 go to
-Settings → Options → Advanced Options → **Expose Public Match Data**.
-
-## Game types
-
-Matches are tagged as **Ranked**, **All Pick**, **Turbo**, or **Other**, and
-comparisons only ever run within the same tag (a Turbo game is never
-compared against a Ranked one). Set it live during a match on the Live tab,
-or correct it later from the History tab.
-
-## Cloud sync (Convex)
-
-Finished matches and your profile sync to a [Convex](https://convex.dev)
-deployment, which is also what powers the **Global** leaderboard — a
-cross-player ranking, not just your own games.
-
-**Local files stay the source of truth.** Every match is written to
-`history.json` first and only then queued for upload, on a background task.
-If the network is down, Convex is unreachable, or you're mid-game when it
-hiccups, nothing is lost — the sync pill in the header turns red, and
-**Sync Everything** on the Profile tab pushes the backlog whenever you're
-back online. Uploads upsert on `(deviceId, matchid)`, so re-syncing the
-whole history never creates duplicates.
-
-### Accounts
-
-Publishing to the leaderboard requires an account (email + password, via
-Convex Auth). **Reading is open to everyone** — you can track matches and
-browse the global board signed out; an account is only needed to publish
-your own results.
-
-This is what stops leaderboard spam: every mutation reads the caller's
-identity from their auth token server-side and ignores any user id sent by
-the client, so knowing the deployment URL buys an attacker nothing. An
-unauthenticated `matches:upsert` is rejected outright.
-
-Password was chosen over OAuth deliberately: an OAuth provider in a desktop
-app needs an external browser round trip and a deep link back into the
-Tauri window, whereas this flow stays inside the app. The Rust backend
-drives it by calling the `auth:signIn` action directly — there is no
-JavaScript auth client bundled into the frontend.
-
-Two tokens are involved: a short-lived JWT that authenticates calls, and a
-refresh token that mints new ones. Only the refresh token is persisted (in
-`auth.json` beside the history), so a session survives a restart; if a JWT
-lapses mid-sync the worker refreshes once and replays the job rather than
-dropping a match.
-
-Matches synced by an install before it had an account are claimed by the
-first account that signs in there (`matches:claimDevice`), so upgrading
-doesn't orphan anything. `matches:removeMine` deletes everything your
-account has published.
-
-### The Convex side
-
-```
-convex/
-  schema.ts       — auth tables + matches/profiles and their indexes
-  auth.ts         — Convex Auth setup (password provider)
-  http.ts         — auth HTTP routes
-  matches.ts      — upsert / listMine / claimDevice / removeMine
-  profiles.ts     — upsert / mine / whoami
-  leaderboard.ts  — globalTop, the cross-player ranking (readable signed out)
+```bash
+./build.sh 1.0.0            # tests, then build/bin/thetracker.exe and the installer
+./build.sh 1.0.0 --sign     # also signs the installer and writes latest.json
 ```
 
-Deploy changes to those with `npx convex deploy` (production) or
-`npx convex dev` (dev deployment, watches for changes). The app points at
-the production deployment baked into `convex_sync.rs`; override it at
-runtime with `DOTA_TRACKER_CONVEX_URL` to aim at the dev one instead.
+Signing uses the release key at `~/.tauri/thetracker.key` through the Tauri
+CLI's signer (`npm install` provides it). The key and signature format are
+the ones every release has used, so any installed version accepts the update.
 
-## Where your data lives
+To release: create a GitHub release tagged `v<version>` with the installer,
+its `.sig`, and `latest.json` from `build/bin`. Installed copies check
+`releases/latest/download/latest.json`.
 
-`history.json` and `profile.json` in `TheTracker/logs` inside your OS's
-standard app-data folder (`%APPDATA%` on Windows,
-`~/Library/Application Support` on Mac, `~/.local/share` on Linux).
-Override the location entirely by setting `DOTA_TRACKER_LOG_DIR` before
-launching.
+## Testing
 
-The on-disk format is unchanged from the older Electron/egui versions, so an
-existing `history.json` can be copied straight in.
+```bash
+go test ./...
+```
 
-## Deadlock
+covers the tracker, the Dota config setup, every API client (against local
+fake servers), sync, the updater's signature check, backup and restore, and
+every `/api` command.
 
-The Deadlock side works **fundamentally differently** from the Dota side, and
-it's worth understanding why before relying on it.
+Two ways to run the app without touching real data or showing a window:
 
-Dota 2 ships Valve's official Game State Integration: the game itself pushes
-live state to this app several times a second. **Deadlock has no equivalent.**
-Valve publishes no GSI for it, so nothing can read a live Deadlock match
-locally — not this app, not any other.
+```bash
+# The UI and API in a browser, backed by a throwaway data folder:
+THETRACKER_LOG_DIR=/tmp/tt ./build/bin/thetracker.exe --serve 127.0.0.1:8765
 
-What exists instead is [deadlock-api.com](https://deadlock-api.com), an
-independent, community-run service that aggregates match data from Valve's
-own client APIs. So the Deadlock tab is:
+# The real app checking itself (every page, the overlay, the tray), then quitting:
+THETRACKER_LOG_DIR=/tmp/tt THETRACKER_NO_DOTA_SETUP=1 \
+THETRACKER_SELFTEST=/tmp/selftest.txt ./build/bin/thetracker.exe --minimized
+```
 
-- **post-match, not live.** Matches appear once the API has ingested them,
-  shortly after a game ends. There are no in-match numbers.
-- **keyed to a Steam account.** You link yours once, under Deadlock →
-  Account. Nothing is read from your machine.
-- **dependent on a third party.** Valve has been tightening rate limits on
-  the underlying APIs, so matches can be delayed or missing. The app says so
-  plainly rather than showing a misleading empty state.
+`THETRACKER_LOG_DIR` moves all app data; `THETRACKER_NO_DOTA_SETUP` stops the
+app writing its config into Dota's folder.
 
-Deliberately not done: nothing reads Deadlock's memory, injects into the
-game, or surfaces information a player couldn't already see. The only live
-signal is "are you currently in a match", from the public active-match
-list, and the overlay shows the hero lineup the game already shows you —
-never opponent identities, ranks or stats.
+## Data on disk
 
-## Overlay
-
-Both games get an optional in-game overlay: a separate transparent,
-always-on-top, click-through window that floats over the game. It is an
-ordinary desktop window — nothing is injected into either game.
-
-Toggle it from the header. Click-through is on by default so it never eats
-mouse input; turn it off temporarily to drag the overlay somewhere else,
-then turn it back on.
-
-For Dota it mirrors the live GSI data (clock, last hits, deaths and gold
-lost, Roshan timer, checkpoints). For Deadlock — which has no live feed — it
-shows the current match and lineup only.
-
-## Why not CS2 or Valorant
-
-CS2 has an official Valve GSI feed (same mechanism as Dota), so it's the
-natural next game to add. Valorant has no live-data feed at all under Riot's
-official policy, and post-match stats need an approved Riot developer app.
+`%APPDATA%\TheTracker\logs` holds `history.json` (sessions), `prefs.json`,
+`profile.json`, the linked accounts, and a `cache` folder. Uninstalling
+leaves it in place. Settings → General can back it up to
+`Documents\TheTracker` and restore it.

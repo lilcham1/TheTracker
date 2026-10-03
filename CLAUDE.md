@@ -5,55 +5,64 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 ## What this is
 
 **TheTracker** — a desktop match tracker for Dota 2 and Deadlock, in
-`TheTracker/`. Built with **Tauri**: a Rust backend (`src-tauri/`) holding
-the GSI listener, match-tracking logic and all API clients, plus an
-HTML/CSS/JS frontend (`ui/`) rendered in the OS WebView. One compiled
-binary — no Electron, no bundled Node runtime. See `TheTracker/README.md`
-for build and run instructions.
+`TheTracker/`. Written in **Go**: the backend is plain Go, the window shell is
+Wails v3 (WebView2, no CGO), and the interface is plain HTML/CSS/JS embedded
+in the exe. See `TheTracker/README.md` for the feature list, layout, build
+and test commands.
 
-An earlier Electron/Node version was removed once the
-Tauri app superseded it — recover it from git history (commit `c8c1192`) if
-it is ever needed.
+Versions before 1.0 were Rust/Tauri (and before that Electron). That code is
+gone from the tree; recover it from git history (tag `v0.17.0`) if needed.
+Data files, the install location, the updater feed and the signing key are
+unchanged from those versions, so old installs update into the Go app.
+
+## Architecture rules worth keeping
+
+- `internal/core` has no window code. Anything that needs the desktop goes
+  through the `Shell` interface, implemented in `main.go` and faked by
+  `NoShell`. Keep it that way: it is why `go test ./...` covers nearly
+  everything.
+- The UI reaches the backend only via `POST /api/<command>`
+  (`internal/api/api.go`). New feature = one command there + a test in
+  `api_test.go`.
+- All files are written through `Store` (atomic temp-file + rename; history
+  and prefs updates go through `UpdateHistory` / `UpdatePrefs` under a lock).
+- JSON field names in `history.json` / `prefs.json` must not change: existing
+  installs carry files written by every earlier version.
 
 ## Where the data comes from
 
-Three distinct sources, deliberately not blurred together:
+Three sources, deliberately not blurred together:
 
-- **Live Dota** — Valve's official Game State Integration feed. A
-  `gamestate_integration_thetracker.cfg` dropped into Dota 2's `cfg` folder
-  plus the `-gamestateintegration` launch option. Local HTTP only; nothing
-  reads game memory. GSI reports *only the local player's own state* and
-  never says who won.
-- **Dota match history** — the public OpenDota API
-  (`src-tauri/src/dota_api.rs`), keyed on a linked Steam32 account. This is
-  where win/loss, game modes, GPM/XPM and scoreboards come from, precisely
-  because GSI cannot supply them.
-- **Deadlock** — the community-run Deadlock API
-  (`src-tauri/src/deadlock.rs`). Valve ships no GSI for Deadlock, so this
-  side is post-match only. Do not add anything here that surfaces
-  information a player could not already see in-game.
+- **Live Dota** — Valve's Game State Integration. The app writes
+  `gamestate_integration_thetracker.cfg` into Dota's cfg folder and listens
+  on `127.0.0.1` only. GSI reports only the local player's own state.
+- **Dota history, heroes, meta, matchups** — the public OpenDota API
+  (`internal/core/opendota.go`). Always pass `significant=0` on player
+  endpoints: without it OpenDota silently hides every Turbo game.
+- **Deadlock** — the community Deadlock API (`internal/core/deadlock.go`).
+  Post-match only. Do not add anything that surfaces information a player
+  could not already see in-game.
 
-`convex/` holds TypeScript functions for cloud sync and the shared
-leaderboard; they run on Convex's servers, not in the app. Writes require an
-authenticated account — the server takes the user id from the auth token,
-never from client arguments.
+Do not scrape other trackers' sites, work around their sign-ins, or copy
+their ratings. `convex/` holds the cloud functions for optional sync and the
+shared leaderboard; the server takes the user id from the auth token, never
+from client arguments.
 
-## Windows build environment (important)
+## Build environment (Windows)
 
-This machine builds with the **GNU** Rust toolchain, not MSVC — there are no
-Visual Studio Build Tools installed. Two consequences worth knowing before
-touching the build:
+- Go, NSIS and go-winres are installed; none of Go, git, gh or node is
+  reliably on PATH inside the Bash tool — `build.sh` prepends what it needs,
+  and other commands must do the same.
+- Build from Git Bash with `./build.sh <version> [--sign]`. Plain
+  `go build -tags production -ldflags "-H windowsgui"` also works for a quick
+  check; without `-H windowsgui` Windows attaches a console window.
+- When passing Windows paths to native tools from Git Bash, use absolute
+  paths from `cygpath -w` and set `MSYS2_ARG_CONV_EXCL="*"`; Git Bash
+  rewrites arguments that look like POSIX paths.
 
-- A `rustup override` pins `TheTracker/` to
-  `stable-x86_64-pc-windows-gnu`, and MinGW-w64
-  (`%USERPROFILE%\mingw64-winlibs\mingw64\bin`) must be on `PATH` when
-  building — it supplies the `as`/`dlltool` binaries that rustup's own
-  bundled linker lacks.
-- **The repo path must not contain spaces.** MinGW's `cc1.exe` splits paths
-  at the space, which breaks Tauri's build script. The project was moved
-  from `F:\dota tracker` to `F:\dota-tracker` for exactly this reason —
-  don't move it back under a path with a space in it.
+## Verifying without the user's screen
 
-Release builds must keep
-`#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` at the
-top of `main.rs`, or Windows attaches a stray console window to the app.
+Do not drive the user's desktop. Use `--serve` (UI in the built-in browser
+pane) and `THETRACKER_SELFTEST` (the real app checks itself hidden and
+quits), both with `THETRACKER_LOG_DIR` pointed at a throwaway folder and
+`THETRACKER_NO_DOTA_SETUP=1`. See the README's Testing section.
