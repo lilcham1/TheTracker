@@ -19,7 +19,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -219,16 +221,17 @@ func (s *shell) saveWindowState() {
 // toggles it. Creating it on demand raced and could leave two stacked
 // always-on-top windows over the game.
 func (s *shell) buildOverlay() {
-	settings := s.backend.Store.LoadPrefs().Overlay
 	s.overlay = s.app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name: "overlay", Title: "TheTracker Overlay", URL: "/overlay.html",
 		Width: overlayW, Height: overlayH,
 		InitialPosition: application.WindowXY, X: overlayMargin, Y: overlayMargin,
 		Hidden: true, Frameless: true, AlwaysOnTop: true, DisableResize: true,
 		BackgroundType: application.BackgroundTypeTransparent,
-		// Click-through from the outset, so it can never take input from
-		// the game.
-		IgnoreMouseEvents: settings.ClickThrough,
+		// Click-through is applied in ApplyOverlay, before every show, not
+		// here. Asking for it at creation makes the framework build a plain
+		// layered window, which cannot be see-through: the overlay came up as
+		// a solid white box. Created without it, the window is composited
+		// with real transparency, and click-through is then added on top.
 		Windows: application.WindowsWindow{
 			HiddenOnTaskbar:                   true,
 			DisableFramelessWindowDecorations: true,
@@ -481,13 +484,31 @@ func (s *shell) selfTest() {
 		o := s.backend.Store.LoadPrefs().Overlay
 		o.Corner = corner
 		s.ApplyOverlay(o)
+		before := screenPixels(s.overlay.PhysicalBounds())
 		err := s.ShowOverlay()
 		s.ApplyOverlay(o)
-		time.Sleep(700 * time.Millisecond)
+		time.Sleep(1200 * time.Millisecond)
 		b := s.overlay.Bounds()
-		note("overlay %s: err=%v visible=%v bounds=%+v", corner, err, s.OverlayVisible(), b)
+		// Only statistics are kept: how much of the area changed when the
+		// empty overlay appeared, and how much of it is pure white. A
+		// see-through overlay changes nothing.
+		changed, white := comparePixels(before, screenPixels(s.overlay.PhysicalBounds()))
+		note("overlay %s: err=%v visible=%v clickThrough=%v bounds=%+v changedByShowing=%.1f%% white=%.1f%%", corner, err, s.OverlayVisible(), s.overlay.IsIgnoreMouseEvents(), b, changed, white)
 		s.HideOverlay()
 		time.Sleep(300 * time.Millisecond)
+	}
+	// The same measurement with something deliberately drawn, to prove it
+	// would notice: a 100 by 100 square is about a tenth of the overlay.
+	if s.ShowOverlay() == nil {
+		time.Sleep(600 * time.Millisecond)
+		before := screenPixels(s.overlay.PhysicalBounds())
+		s.overlay.ExecJS("document.body.insertAdjacentHTML('beforeend', '<div id=\"probe\" style=\"position:fixed;left:0;top:0;width:100px;height:100px;background:#ff00ff\"></div>')")
+		time.Sleep(900 * time.Millisecond)
+		changed, _ := comparePixels(before, screenPixels(s.overlay.PhysicalBounds()))
+		note("overlay with a test square drawn: changed=%.1f%% (expected about 9.8%%)", changed)
+		s.overlay.ExecJS("document.getElementById('probe').remove()")
+		time.Sleep(300 * time.Millisecond)
+		s.HideOverlay()
 	}
 	note("overlay hidden again: visible=%v", s.OverlayVisible())
 	s.overlay.ExecJS(selfTestOverlay)
@@ -495,4 +516,55 @@ func (s *shell) selfTest() {
 	time.Sleep(time.Duration(8+2*18) * time.Second)
 	note("done")
 	s.Quit()
+}
+
+// screenPixels reads the colour of every pixel in a rectangle of the screen.
+func screenPixels(r application.Rect) []uint32 {
+	if r.Width <= 0 || r.Height <= 0 {
+		return nil
+	}
+	user32, gdi32 := syscall.NewLazyDLL("user32.dll"), syscall.NewLazyDLL("gdi32.dll")
+	screen, _, _ := user32.NewProc("GetDC").Call(0)
+	defer user32.NewProc("ReleaseDC").Call(0, screen)
+	mem, _, _ := gdi32.NewProc("CreateCompatibleDC").Call(screen)
+	defer gdi32.NewProc("DeleteDC").Call(mem)
+	bmp, _, _ := gdi32.NewProc("CreateCompatibleBitmap").Call(screen, uintptr(r.Width), uintptr(r.Height))
+	defer gdi32.NewProc("DeleteObject").Call(bmp)
+	gdi32.NewProc("SelectObject").Call(mem, bmp)
+	const srcCopy, captureBlt = 0x00CC0020, 0x40000000
+	gdi32.NewProc("BitBlt").Call(mem, 0, 0, uintptr(r.Width), uintptr(r.Height), screen, uintptr(r.X), uintptr(r.Y), srcCopy|captureBlt)
+
+	type bitmapInfoHeader struct {
+		Size          uint32
+		Width, Height int32
+		Planes, Bits  uint16
+		Compression   uint32
+		SizeImage     uint32
+		XPels, YPels  int32
+		ClrUsed       uint32
+		ClrImportant  uint32
+	}
+	hdr := bitmapInfoHeader{Width: int32(r.Width), Height: -int32(r.Height), Planes: 1, Bits: 32}
+	hdr.Size = uint32(unsafe.Sizeof(hdr))
+	px := make([]uint32, r.Width*r.Height)
+	gdi32.NewProc("GetDIBits").Call(mem, bmp, 0, uintptr(r.Height), uintptr(unsafe.Pointer(&px[0])), uintptr(unsafe.Pointer(&hdr)), 0)
+	return px
+}
+
+// comparePixels returns the share of pixels that differ, and the share of
+// the second capture that is pure white, both as percentages.
+func comparePixels(a, b []uint32) (changed, white float64) {
+	if len(a) == 0 || len(a) != len(b) {
+		return -1, -1
+	}
+	var c, w int
+	for i := range a {
+		if a[i]&0xFFFFFF != b[i]&0xFFFFFF {
+			c++
+		}
+		if b[i]&0xFFFFFF == 0xFFFFFF {
+			w++
+		}
+	}
+	return float64(c) * 100 / float64(len(a)), float64(w) * 100 / float64(len(a))
 }
