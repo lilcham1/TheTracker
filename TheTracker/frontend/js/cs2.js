@@ -1,16 +1,32 @@
-// Counter-Strike 2 pages. Everything here is what the app recorded live from
-// the game's own feed: Valve publishes no match history or leaderboard that
-// an app can read without each player's private codes.
+// Counter-Strike 2 pages.
+//
+// Two sources, kept apart on the page: matches the app recorded live from
+// the game's own feed (round by round), and — when switched on — the lifetime
+// totals Steam keeps for the account.
 
-const CS = { status: null, setup: null, history: [], busy: false, error: null, sort: "date" };
+const CS = { status: null, setup: null, history: [], busy: false, error: null, open: new Set(), lifeTab: "weapons" };
+const csLife = resource("csLife", "cs2_lifetime", { ttl: 10 * 60000 });
 
-const csMapName = (m) => (m || "").replace(/^(de|cs|ar|dm)_/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Unknown map";
+const WEAPON_NAMES = {
+  ak47: "AK-47", m4a1: "M4A4", m4a1_silencer: "M4A1-S", awp: "AWP", deagle: "Desert Eagle", glock: "Glock-18",
+  usp_silencer: "USP-S", hkp2000: "P2000", p250: "P250", fiveseven: "Five-SeveN", tec9: "Tec-9", cz75a: "CZ75-Auto",
+  elite: "Dual Berettas", revolver: "R8 Revolver", famas: "FAMAS", galilar: "Galil AR", aug: "AUG", sg556: "SG 553",
+  ssg08: "SSG 08", scar20: "SCAR-20", g3sg1: "G3SG1", mp9: "MP9", mac10: "MAC-10", mp7: "MP7", mp5sd: "MP5-SD",
+  ump45: "UMP-45", p90: "P90", bizon: "PP-Bizon", nova: "Nova", xm1014: "XM1014", mag7: "MAG-7", sawedoff: "Sawed-Off",
+  negev: "Negev", m249: "M249", hegrenade: "HE grenade", molotov: "Molotov", incgrenade: "Incendiary", inferno: "Fire",
+  knife: "Knife", knife_t: "Knife", bayonet: "Knife", taser: "Zeus x27",
+};
+const weaponLabel = (k) => WEAPON_NAMES[k] || (k.startsWith("knife") ? "Knife" : k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+const csMapName = (m) => (m || "").replace(/^(de|cs|ar|dm|gd)_/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Unknown map";
 const csResClass = (m) => (m.result === "win" ? "win" : m.result === "loss" ? "loss" : "other");
 const csResText = (m) => ({ win: "Won", loss: "Lost", draw: "Draw" }[m.result] || (m.incomplete ? "Left" : "–"));
 const csKd = (m) => m.kills / Math.max(1, m.deaths);
 const csHs = (m) => (m.kills ? (m.headshotKills * 100) / m.kills : null);
+const csAdr = (m) => (m.rounds && m.rounds.length ? m.damage / m.rounds.length : null);
+const csWon = (m) => (m.result === "win" ? true : m.result === "loss" ? false : null);
 
-async function csLoad() {
+async function csLoad(force) {
+  csLife.load(force);
   try {
     [CS.setup, CS.history] = await Promise.all([invoke("cs2_setup"), invoke("cs2_history")]);
   } catch (_) {
@@ -26,12 +42,13 @@ async function csPoll() {
     CS.status = await invoke("cs2_status");
     const now = CS.status.current && CS.status.current.ended;
     if (now && !before) CS.history = await invoke("cs2_history");
-    if (VIEWS[S.view] && VIEWS[S.view].game === "cs2") rerender();
+    if (S.view === "cs-live" || (now && !before && VIEWS[S.view].game === "cs2")) rerender();
+    renderNav();
   } catch (_) {
     /* next tick */
   }
 }
-setInterval(csPoll, 1500);
+setInterval(csPoll, 1000);
 
 act("cs-install", async () => {
   CS.busy = true;
@@ -46,7 +63,14 @@ act("cs-install", async () => {
   CS.busy = false;
   rerender();
 });
-act("cs-check", csLoad);
+act("cs-check", () => csLoad(true));
+act("cs-sim", async () => {
+  if (await attempt(() => invoke("cs2_sim_start"), "Test match started. It plays 20 quick rounds and isn't saved.")) csPoll();
+});
+act("cs-sim-stop", async () => {
+  await attempt(() => invoke("cs2_sim_stop"));
+  csPoll();
+});
 act("cs-delete", async (el) => {
   if (el.dataset.confirm !== "yes") {
     el.dataset.confirm = "yes";
@@ -61,6 +85,139 @@ act("cs-dismiss", () => {
   CS.dismissed = CS.status && CS.status.current && CS.status.current.id;
   rerender();
 });
+act("cs-toggle", (el) => {
+  CS.open.has(el.dataset.id) ? CS.open.delete(el.dataset.id) : CS.open.add(el.dataset.id);
+  rerender();
+});
+act("cs-life-tab", (el) => {
+  CS.lifeTab = el.dataset.value;
+  rerender();
+});
+
+// ---------- Shared pieces ----------
+
+/// The round-by-round strip: one cell per round, taller and green for a win,
+/// with a pip per kill and a mark if the player died. Half time is a gap.
+function roundStrip(rounds) {
+  if (!rounds || !rounds.length) return `<p class="muted">No rounds recorded for this match.</p>`;
+  return `<div class="rounds" role="img" aria-label="Round by round">${rounds
+    .map((r, i) => {
+      const swap = i > 0 && rounds[i - 1].side !== r.side ? `<span class="half" title="Sides swapped"></span>` : "";
+      const tip = `Round ${r.n}: ${r.won ? "won" : "lost"} as ${r.side}. ${r.kills} kill${r.kills === 1 ? "" : "s"}${r.hs ? ` (${r.hs} headshot${r.hs === 1 ? "" : "s"})` : ""}, ${r.damage} damage${r.died ? ", died" : ", survived"}.`;
+      return `${swap}<span class="round ${r.won ? "w" : "l"} ${r.died ? "died" : ""}" title="${tip}">
+        <span class="pips">${"<i></i>".repeat(Math.min(r.kills, 5))}</span><b class="side-${r.side === "CT" ? "ct" : "t"}"></b></span>`;
+    })
+    .join("")}</div>`;
+}
+
+function barRow(label, value, max, right, tone = "") {
+  const w = max > 0 ? Math.max(2, (value / max) * 100) : 0;
+  return `<div class="hbar"><span class="hbar-label">${label}</span><span class="hbar-track"><i class="${tone}" style="width:${w.toFixed(1)}%"></i></span><span class="num">${right}</span></div>`;
+}
+
+/// Figures summed over a set of recorded matches.
+function csAggregate(list) {
+  const sum = (f) => list.reduce((a, m) => a + f(m), 0);
+  const rounds = list.flatMap((m) => m.rounds || []);
+  const decided = list.filter((m) => m.result === "win" || m.result === "loss");
+  const wins = decided.filter((m) => m.result === "win").length;
+  const kills = sum((m) => m.kills), deaths = sum((m) => m.deaths), hs = sum((m) => m.headshotKills);
+  const side = (s) => {
+    const rs = rounds.filter((r) => r.side === s);
+    return { played: rs.length, rate: rs.length ? (rs.filter((r) => r.won).length * 100) / rs.length : null };
+  };
+  const weapons = {};
+  for (const m of list) for (const [k, n] of Object.entries(m.weaponKills || {})) weapons[k] = (weapons[k] || 0) + n;
+  const multi = [2, 3, 4, 5].map((n) => rounds.filter((r) => (n === 5 ? r.kills >= 5 : r.kills === n)).length);
+  return {
+    matches: list.length, wins, losses: decided.length - wins, rate: decided.length ? (wins * 100) / decided.length : null,
+    kills, deaths, assists: sum((m) => m.assists), kd: kills / Math.max(1, deaths), hs: kills ? (hs * 100) / kills : null,
+    adr: rounds.length ? rounds.reduce((a, r) => a + r.damage, 0) / rounds.length : null,
+    kpr: rounds.length ? rounds.reduce((a, r) => a + r.kills, 0) / rounds.length : null,
+    survival: rounds.length ? (rounds.filter((r) => !r.died).length * 100) / rounds.length : null,
+    rounds: rounds.length, ct: side("CT"), t: side("T"), multi,
+    weapons: Object.entries(weapons).sort((a, b) => b[1] - a[1]),
+  };
+}
+
+// ---------- Overview ----------
+
+function csLifetimeHtml() {
+  const l = csLife.data;
+  if (!l) return csLife.error ? "" : `<p class="muted">Checking for lifetime stats…</p>`;
+  if (!l.available) {
+    const why = {
+      signed_out: `Sign in with Steam and your all-time CS2 totals can be shown here. <button class="link" data-act="go" data-view="settings" data-params='{"tab":"account"}' type="button">Sign in</button>`,
+      private: `Steam says your game details are private, so it won't share your CS2 totals. In Steam, open your profile, Edit Profile, Privacy Settings, and set Game details to Public.`,
+      no_stats: `Steam has no CS2 statistics for this account yet.`,
+      unreachable: `The service that fetches your Steam totals couldn't be reached. Try Refresh in a moment.`,
+      not_set_up: `All-time totals from Steam (every match you've ever played, not only the ones recorded here) need a one-time setup by whoever runs TheTracker's cloud service. Until then this page shows what was recorded live.`,
+    }[l.reason] || `Lifetime stats aren't available right now.`;
+    return `<div class="note">${why}</div>`;
+  }
+  const maxKills = l.weapons.length ? l.weapons[0].kills : 1;
+  const maxRounds = l.maps.length ? l.maps[0].rounds : 1;
+  const tab = (k, label) => `<button class="chip ${CS.lifeTab === k ? "on" : ""}" data-act="cs-life-tab" data-value="${k}" type="button">${label}</button>`;
+  return `${statRow([
+      { label: "K/D", value: l.kd.toFixed(2), tone: l.kd >= 1 ? "win" : "loss", sub: `${fmtNum(l.kills)} kills, ${fmtNum(l.deaths)} deaths` },
+      { label: "Headshots", value: pct(l.headshotRate), sub: `${fmtNum(l.headshots)} headshot kills` },
+      { label: "Damage per round", value: l.adr.toFixed(0), sub: `${fmtNum(l.rounds)} rounds played` },
+      { label: "Matches won", value: l.matchesPlayed ? pct(l.matchWinRate) : "–", tone: l.matchesPlayed ? toneOfRate(l.matchWinRate) : "", sub: `${fmtNum(l.matchesWon)} of ${fmtNum(l.matchesPlayed)}` },
+      { label: "Accuracy", value: pct(l.accuracy, 1), sub: `${fmtNum(l.mvps)} MVPs, ${l.hoursPlayed.toFixed(0)} h in matches` },
+    ])}
+    <div class="chips" style="margin-top:14px">${tab("weapons", `Weapons (${l.weapons.length})`)}${tab("maps", `Maps (${l.maps.length})`)}</div>
+    ${CS.lifeTab === "maps"
+      ? `<div class="hbars">${l.maps.slice(0, 14).map((m) => barRow(esc(csMapName(m.key)), m.rounds, maxRounds, `<span class="${toneOfRate(m.rate)}">${pct(m.rate)}</span> <span class="muted">of ${fmtNum(m.rounds)} rounds</span>`, toneOfRate(m.rate))).join("")}</div>
+         <p class="hint">Round win rate on each map, from Steam's totals.</p>`
+      : `<div class="hbars">${l.weapons.slice(0, 14).map((w) => barRow(esc(weaponLabel(w.key)), w.kills, maxKills, `${fmtNum(w.kills)} <span class="muted">${known(w.accuracy) ? pct(w.accuracy) + " accuracy" : "kills"}</span>`)).join("")}</div>`}`;
+}
+
+view("cs-overview", {
+  game: "cs2", nav: true, icon: "overview", title: "Overview",
+  sub: () => "Your Counter-Strike 2 numbers",
+  load: csLoad,
+  render() {
+    const all = [...CS.history].reverse();
+    const a = csAggregate(all);
+    const chrono = [...all].reverse();
+    const maxW = a.weapons.length ? a.weapons[0][1] : 1;
+
+    const recorded = all.length
+      ? `${statRow([
+          { label: `Win rate, ${a.matches} matches`, value: pct(a.rate), tone: toneOfRate(a.rate), sub: `${a.wins} won, ${a.losses} lost`, extra: formStrip(all.map(csWon), 30) },
+          { label: "K/D", value: a.kd.toFixed(2), tone: a.kd >= 1 ? "win" : "loss", sub: `${dash(a.kpr, (v) => v.toFixed(2))} kills a round`, extra: sparkline(chrono.map(csKd)) },
+          { label: "Damage per round", value: dash(a.adr, (v) => v.toFixed(0)), sub: `${dash(a.survival, (v) => pct(v))} of rounds survived`, extra: sparkline(chrono.map(csAdr)) },
+          { label: "Headshots", value: dash(a.hs, (v) => pct(v)), sub: "of your kills", extra: sparkline(chrono.map(csHs)) },
+        ])}
+        <div class="cols">
+          <section>
+            <div class="sec-head"><h3>Recent matches</h3><button class="link" data-act="go" data-view="cs-matches" type="button">All matches</button></div>
+            <div class="lines">${all.slice(0, 6).map((m) => `<button class="line ${csResClass(m)}" data-act="go" data-view="cs-matches" type="button">
+              <span class="grow"><b>${esc(csMapName(m.map))}</b><span class="muted"> ${m.myScore} : ${m.theirScore}</span></span>
+              <span class="num">${m.kills}/${m.deaths}/${m.assists}</span><span class="num muted">${dash(csAdr(m), (v) => v.toFixed(0))} ADR</span>
+              <span class="res ${csResClass(m)}">${csResText(m)}</span><span class="muted when">${ago(Date.parse(m.date) / 1000)}</span></button>`).join("")}</div>
+            <div class="sec-head"><h3>Sides</h3></div>
+            <div class="hbars">
+              ${barRow(`<span class="side-dot ct"></span>Counter-Terrorist`, a.ct.rate || 0, 100, `<span class="${toneOfRate(a.ct.rate)}">${pct(a.ct.rate)}</span> <span class="muted">of ${a.ct.played} rounds</span>`, "ct")}
+              ${barRow(`<span class="side-dot t"></span>Terrorist`, a.t.rate || 0, 100, `<span class="${toneOfRate(a.t.rate)}">${pct(a.t.rate)}</span> <span class="muted">of ${a.t.played} rounds</span>`, "t")}
+            </div>
+          </section>
+          <section>
+            <div class="sec-head"><h3>Kills by weapon</h3></div>
+            ${a.weapons.length ? `<div class="hbars">${a.weapons.slice(0, 7).map(([k, n]) => barRow(esc(weaponLabel(k)), n, maxW, `${n} <span class="muted">${pct((n * 100) / Math.max(1, a.kills))}</span>`)).join("")}</div>` : `<p class="muted">Recorded from your next match on.</p>`}
+            <div class="sec-head"><h3>Multi-kill rounds</h3></div>
+            <div class="multi">${["2 kills", "3 kills", "4 kills", "Ace"].map((label, i) => `<div><span class="display">${a.multi[i]}</span><span class="muted">${label}</span></div>`).join("")}</div>
+          </section>
+        </div>`
+      : emptyState("No CS2 matches recorded yet", "Keep TheTracker running while you play and each match is saved when it ends, round by round: kills, damage, headshots, weapon and side.",
+          `<span class="row"><button class="btn" data-act="go" data-view="cs-live" type="button">Check the live setup</button><button class="btn ghost" data-act="cs-sim" type="button">Watch a test match</button></span>`);
+
+    return `<div class="sec-head"><h3>Recorded by TheTracker</h3></div>${recorded}
+      <div class="sec-head" style="margin-top:34px"><h3>All-time, from Steam</h3></div>${csLifetimeHtml()}`;
+  },
+});
+
+// ---------- Live ----------
 
 function csSetupHtml() {
   const s = CS.setup, st = CS.status || {};
@@ -78,14 +235,15 @@ function csSetupHtml() {
 
   return `<div class="panel narrow">
     <h2>Waiting for a match</h2>
-    <p class="muted">This page fills in by itself when a CS2 match starts: the score, your kills, deaths and headshots, round by round. When the match ends it's saved to Matches.</p>
+    <p class="muted">This page fills in by itself when a CS2 match starts: the score, every round as it ends, your kills, damage and headshots. When the match is over it's saved to Matches.</p>
     <div class="checks">${rows.join("")}</div>
     ${CS.error ? `<div class="note err">${esc(CS.error)}</div>` : ""}
     <div class="row wrap">
       ${s.cfgDirs.length && !s.installed ? `<button class="btn" data-act="cs-install" type="button" ${CS.busy ? "disabled" : ""}>Set up CS2</button>` : ""}
       <button class="btn ghost" data-act="cs-check" type="button">Check again</button>
+      <button class="btn ghost" data-act="cs-sim" type="button" title="Plays a short fake match so you can see this page working. Nothing is saved.">Watch a test match</button>
     </div>
-    <p class="hint">TheTracker only sees your own state, the same data tournament overlays use. It reads nothing from the game's memory and is not something VAC acts on. It can only record a match while it's running.</p>
+    <p class="hint">TheTracker only sees your own state, the same official feed tournament overlays use. It reads nothing from the game's memory. It can only record a match while it's running.</p>
     ${s.cfgDirs.length ? `<details class="more"><summary>What TheTracker changed on this PC</summary>
       ${s.cfgDirs.map((d) => `<code class="path">${esc(d)}\\gamestate_integration_thetracker.cfg</code>`).join("")}
       <p class="muted">Switching CS2 off under Settings, General removes the file.</p></details>` : ""}
@@ -93,21 +251,26 @@ function csSetupHtml() {
 }
 
 function csMatchHtml(m, live) {
-  const hs = csHs(m);
+  const hs = csHs(m), adr = csAdr(m);
+  const phase = { warmup: "Warmup", live: "In progress", intermission: "Half time", gameover: "Match over" }[m.phase] || "In progress";
+  const wk = Object.entries(m.weaponKills || {}).sort((a, b) => b[1] - a[1]);
   return `<div class="panel">
+    ${m.simulated ? `<div class="note">Test match: nothing here is saved. ${m.ended ? "" : `<button class="link" data-act="cs-sim-stop" type="button">Stop the test</button>`}</div>` : ""}
     <div class="live-head">
       <div class="grow"><h2 class="display">${esc(csMapName(m.map))} ${m.ended ? `<span class="res ${csResClass(m)}">${csResText(m)}</span>` : ""}</h2>
-        <p class="muted">${m.ended ? "Match over" : `<span class="live-dot ${live ? "" : "off"}"></span> ${{ warmup: "Warmup", live: "In progress", intermission: "Half time", gameover: "Match over" }[m.phase] || "In progress"}`}${m.mode ? `, ${esc(m.mode)}` : ""}${m.team && !m.ended ? `, playing ${m.team === "CT" ? "Counter-Terrorist" : "Terrorist"}` : ""}</p></div>
-      <div class="clock display"><span class="${m.myScore > m.theirScore ? "win" : m.myScore < m.theirScore ? "loss" : ""}">${m.myScore}</span> : ${m.theirScore}</div>
+        <p class="muted">${m.ended ? "Match over" : `<span class="live-dot ${live ? "" : "off"}"></span> ${phase}`}${m.mode ? `, ${esc(m.mode)}` : ""}${m.team && !m.ended ? `, playing <span class="side-dot ${m.team === "CT" ? "ct" : "t"}"></span>${m.team === "CT" ? "Counter-Terrorist" : "Terrorist"}` : ""}</p></div>
+      <div class="clock display"><span class="${m.myScore > m.theirScore ? "win" : m.myScore < m.theirScore ? "loss" : ""}">${m.myScore}</span><span class="muted"> : </span>${m.theirScore}</div>
       ${m.ended ? `<button class="btn ghost" data-act="cs-dismiss" type="button">Done</button>` : ""}
     </div>
+    ${roundStrip(m.rounds)}
     ${statRow([
-      { label: "K / D / A", value: `${m.kills} / ${m.deaths} / ${m.assists}` },
-      { label: "K/D", value: csKd(m).toFixed(2), tone: csKd(m) >= 1 ? "win" : "loss" },
+      { label: "K / D / A", value: `${m.kills} / ${m.deaths} / ${m.assists}`, sub: `${csKd(m).toFixed(2)} K/D` },
+      { label: "Damage per round", value: dash(adr, (v) => v.toFixed(0)), sub: `${fmtNum(m.damage)} damage dealt` },
       { label: "Headshots", value: known(hs) ? pct(hs) : "–", sub: `${m.headshotKills} of ${m.kills} kills` },
       { label: "MVPs", value: m.mvps, sub: `${m.score} score` },
-      ...(m.ended ? [] : [{ label: "Money", value: "$" + fmtNum(m.money), sub: `${m.health} HP, ${m.armor} armor` }]),
+      ...(m.ended ? [] : [{ label: "Right now", value: "$" + fmtNum(m.money), sub: `${m.health} HP, ${m.armor} armor${m.weapon ? `, ${esc(weaponLabel(m.weapon))}` : ""}` }]),
     ])}
+    ${wk.length ? `<div class="sec-head"><h3>Kills by weapon</h3></div><div class="hbars narrow">${wk.slice(0, 6).map(([k, n]) => barRow(esc(weaponLabel(k)), n, wk[0][1], String(n))).join("")}</div>` : ""}
     ${m.ended && m.incomplete ? `<p class="hint">You left before the end, so there's no result for this match.</p>` : ""}
   </div>`;
 }
@@ -124,52 +287,48 @@ view("cs-live", {
   },
 });
 
-act("cs-sort", (el) => {
-  CS.sort = el.dataset.key;
-  rerender();
-});
+// ---------- Matches ----------
 
 view("cs-matches", {
   game: "cs2", nav: true, icon: "matches", title: "Matches",
-  sub: () => "Matches TheTracker recorded while you played",
+  sub: () => (CS.history.length ? `${CS.history.length} matches recorded while you played` : "Matches TheTracker recorded while you played"),
   load: csLoad,
   render() {
     const all = [...CS.history].reverse();
     if (!all.length) {
-      return emptyState("No CS2 matches recorded yet", "Keep TheTracker running while you play and each match is saved here when it ends. Valve doesn't publish CS2 match history, so only matches played while the app is open can be shown.",
+      return emptyState("No CS2 matches recorded yet", "Keep TheTracker running while you play and each match is saved here when it ends. Valve doesn't publish CS2 match history, so only matches played while the app is open can be listed.",
         `<button class="btn" data-act="go" data-view="cs-live" type="button">Check the live setup</button>`);
     }
-    const decided = all.filter((m) => m.result === "win" || m.result === "loss");
-    const wins = decided.filter((m) => m.result === "win").length;
-    const kills = all.reduce((a, m) => a + m.kills, 0), deaths = all.reduce((a, m) => a + m.deaths, 0), hsk = all.reduce((a, m) => a + m.headshotKills, 0);
     const maps = new Map();
     for (const m of all) {
       if (!maps.has(m.map)) maps.set(m.map, []);
       maps.get(m.map).push(m);
     }
-    const mapRows = [...maps.entries()].map(([name, list]) => {
-      const d = list.filter((m) => m.result === "win" || m.result === "loss");
-      const w = d.filter((m) => m.result === "win").length;
-      return { name, played: list.length, rate: d.length ? (w * 100) / d.length : null, kd: list.reduce((a, m) => a + m.kills, 0) / Math.max(1, list.reduce((a, m) => a + m.deaths, 0)) };
-    }).sort((a, b) => b.played - a.played);
-    const chrono = [...all].reverse();
+    const mapRows = [...maps.entries()].map(([name, list]) => ({ name, ...csAggregate(list) })).sort((a, b) => b.matches - a.matches);
 
-    return `${statRow([
-        { label: `Win rate, ${all.length} matches`, value: decided.length ? pct((wins * 100) / decided.length) : "–", tone: decided.length ? toneOfRate((wins * 100) / decided.length) : "", sub: `${wins} won, ${decided.length - wins} lost`,
-          extra: formStrip(all.map((m) => (m.result === "win" ? true : m.result === "loss" ? false : null)), 30) },
-        { label: "K/D", value: (kills / Math.max(1, deaths)).toFixed(2), sub: `${(kills / all.length).toFixed(1)} kills a match`, extra: sparkline(chrono.map(csKd)) },
-        { label: "Headshots", value: kills ? pct((hsk * 100) / kills) : "–", sub: "of your kills", extra: sparkline(chrono.map(csHs)) },
-      ])}
-      <div class="cols">
-        <section><div class="sec-head"><h3>Matches</h3></div>
-          <div class="table-wrap"><table class="table"><thead><tr><th>Map</th><th>Result</th><th class="num">Score</th><th class="num">K</th><th class="num">D</th><th class="num">A</th><th class="num">HS</th><th class="num">MVPs</th><th class="num">Played</th><th></th></tr></thead>
-          <tbody>${all.map((m) => `<tr class="${csResClass(m)}"><td><b>${esc(csMapName(m.map))}</b><span class="sub">${esc(m.mode || "")}</span></td>
-            <td><span class="res ${csResClass(m)}">${csResText(m)}</span></td><td class="num">${m.myScore} : ${m.theirScore}</td>
-            <td class="num">${m.kills}</td><td class="num">${m.deaths}</td><td class="num">${m.assists}</td><td class="num">${dash(csHs(m), (v) => pct(v))}</td><td class="num">${m.mvps}</td>
-            <td class="num muted">${esc(fmtDate(m.date))}</td><td><button class="link danger" data-act="cs-delete" data-id="${esc(m.id)}" type="button">Delete</button></td></tr>`).join("")}</tbody></table></div></section>
-        <section><div class="sec-head"><h3>By map</h3></div>
-          <div class="lines">${mapRows.map((r) => `<div class="line static"><span class="grow"><b>${esc(csMapName(r.name))}</b><span class="muted"> ${r.played} played</span></span><span class="num muted">${r.kd.toFixed(2)} K/D</span><span class="num ${toneOfRate(r.rate)}">${pct(r.rate)}</span></div>`).join("")}</div></section>
-      </div>
-      <p class="hint">Recorded live from CS2's own feed. Valve publishes no CS2 match history or leaderboard for apps to read, so matches played while TheTracker was closed can't be added.</p>`;
+    return `<div class="table-wrap"><table class="table">
+        <thead><tr><th>Map</th><th>Result</th><th class="num">Score</th><th class="num">K</th><th class="num">D</th><th class="num">A</th><th class="num">K/D</th><th class="num">ADR</th><th class="num">HS</th><th class="num">MVPs</th><th class="num">Played</th></tr></thead>
+        <tbody>${all.map((m) => {
+          const open = CS.open.has(m.id);
+          const wk = Object.entries(m.weaponKills || {}).sort((a, b) => b[1] - a[1]);
+          return `<tr class="click ${csResClass(m)}" data-act="cs-toggle" data-id="${esc(m.id)}" title="Show the rounds">
+            <td><b>${esc(csMapName(m.map))}</b><span class="sub">${esc(m.mode || "")}${m.incomplete ? ", left early" : ""}</span></td>
+            <td><span class="res ${csResClass(m)}">${csResText(m)}</span></td><td class="num display">${m.myScore} : ${m.theirScore}</td>
+            <td class="num">${m.kills}</td><td class="num">${m.deaths}</td><td class="num">${m.assists}</td>
+            <td class="num ${csKd(m) >= 1 ? "win" : "loss"}">${csKd(m).toFixed(2)}</td><td class="num">${dash(csAdr(m), (v) => v.toFixed(0))}</td>
+            <td class="num">${dash(csHs(m), (v) => pct(v))}</td><td class="num">${m.mvps}</td><td class="num muted">${esc(fmtDate(m.date))}</td></tr>
+            ${open ? `<tr class="detail"><td colspan="11">
+              ${roundStrip(m.rounds)}
+              <div class="row wrap">${wk.slice(0, 6).map(([k, n]) => `<span class="chip static">${esc(weaponLabel(k))} <b>${n}</b></span>`).join("")}
+                <span class="grow"></span><button class="link danger" data-act="cs-delete" data-id="${esc(m.id)}" type="button">Delete this match</button></div>
+            </td></tr>` : ""}`;
+        }).join("")}</tbody></table></div>
+      <div class="sec-head"><h3>By map</h3></div>
+      <div class="table-wrap"><table class="table"><thead><tr><th>Map</th><th class="num">Played</th><th class="num">Win rate</th><th></th><th class="num">K/D</th><th class="num">ADR</th><th class="num">CT rounds won</th><th class="num">T rounds won</th></tr></thead>
+        <tbody>${mapRows.map((r) => `<tr><td><b>${esc(csMapName(r.name))}</b></td><td class="num">${r.matches}</td>
+          <td class="num display ${toneOfRate(r.rate)}">${pct(r.rate)}</td><td>${known(r.rate) ? rateBar(r.rate, 0, 100) : ""}</td>
+          <td class="num">${r.kd.toFixed(2)}</td><td class="num">${dash(r.adr, (v) => v.toFixed(0))}</td>
+          <td class="num ${toneOfRate(r.ct.rate)}">${pct(r.ct.rate)}</td><td class="num ${toneOfRate(r.t.rate)}">${pct(r.t.rate)}</td></tr>`).join("")}</tbody></table></div>
+      <p class="hint">Recorded live from CS2's own feed. Valve publishes no CS2 match history for apps to read, so matches played while TheTracker was closed can't be added.</p>`;
   },
 });

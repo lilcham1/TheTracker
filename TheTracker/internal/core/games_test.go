@@ -254,6 +254,9 @@ func cs2Payload(mapName, phase, team string, ct, tScore, kills, deaths int, extr
 	return p
 }
 
+// freeze marks a payload as the buy time before a round.
+func freeze(p jsonMap) { p["round"] = jsonMap{"phase": "freezetime"} }
+
 func TestCs2MatchIsRecordedWithItsResult(t *testing.T) {
 	store := NewStore(t.TempDir())
 	c := NewCs2(store)
@@ -268,7 +271,9 @@ func TestCs2MatchIsRecordedWithItsResult(t *testing.T) {
 	}
 	c.HandleUpdate(cs2Payload("de_mirage", "live", "CT", 3, 1, 4, 1, hs(1)))
 	c.HandleUpdate(cs2Payload("de_mirage", "live", "CT", 3, 1, 5, 1, hs(2)))
-	c.HandleUpdate(cs2Payload("de_mirage", "live", "CT", 4, 1, 5, 1, hs(0)))
+	c.HandleUpdate(cs2Payload("de_mirage", "live", "CT", 4, 1, 5, 1, hs(2)))
+	c.HandleUpdate(cs2Payload("de_mirage", "live", "CT", 4, 1, 5, 1, hs(0), freeze))
+	c.HandleUpdate(cs2Payload("de_mirage", "live", "CT", 4, 1, 6, 1, hs(1)))
 	c.HandleUpdate(cs2Payload("de_mirage", "live", "CT", 5, 1, 6, 1, hs(1)))
 	c.HandleUpdate(cs2Payload("de_mirage", "live", "CT", 8, 4, 12, 5))
 	// Sides swap: the player is now T, and the scores swap with the sides.

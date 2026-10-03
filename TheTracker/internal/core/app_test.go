@@ -197,7 +197,9 @@ type fakeConvex struct {
 	// How the Steam provider answers: "" accepts, "unconfigured" behaves like
 	// a server that predates Steam sign-in, "reject" refuses the statement.
 	steamMode string
-	srv       *httptest.Server
+	// What the lifetime CS2 stats function answers.
+	lifetime map[string]any
+	srv      *httptest.Server
 }
 
 func newFakeConvex(t *testing.T) *fakeConvex {
@@ -209,7 +211,7 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 		f.mu.Lock()
 		f.calls = append(f.calls, body)
 		f.tokens = append(f.tokens, r.Header.Get("Authorization"))
-		expire, steamMode := f.expireJWT, f.steamMode
+		expire, steamMode, lifetime := f.expireJWT, f.steamMode, f.lifetime
 		f.mu.Unlock()
 
 		reply := func(v any) { json.NewEncoder(w).Encode(map[string]any{"status": "success", "value": v}) }
@@ -242,6 +244,12 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 				return
 			}
 			reply(map[string]any{"tokens": map[string]any{"token": "jwt-1", "refreshToken": "refresh-1"}})
+		case "steam:cs2Stats":
+			if lifetime == nil {
+				fail("Could not find public function for 'steam:cs2Stats'")
+				return
+			}
+			reply(lifetime)
 		case "profiles:whoami":
 			reply(map[string]any{"userId": "user-1"})
 		case "matches:upsert":

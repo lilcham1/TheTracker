@@ -383,10 +383,10 @@ function renderNav() {
 const GAMES = {
   dota: { label: "Dota 2", home: "overview" },
   deadlock: { label: "Deadlock", home: "dl-overview" },
-  cs2: { label: "CS2", home: "cs-live" },
+  cs2: { label: "CS2", home: "cs-overview" },
   overwatch: { label: "Overwatch", home: "ow-overview" },
 };
-const LAST_VIEW = { dota: "overview", deadlock: "dl-overview", cs2: "cs-live", overwatch: "ow-overview" };
+const LAST_VIEW = { dota: "overview", deadlock: "dl-overview", cs2: "cs-overview", overwatch: "ow-overview" };
 
 function enabledGames() {
   const g = (S.boot && S.boot.prefs.games) || {};

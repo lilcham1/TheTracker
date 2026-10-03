@@ -104,12 +104,15 @@ type OwOverview struct {
 	Name        string         `json:"name"`
 	Avatar      *string        `json:"avatar"`
 	Title       string         `json:"title"`
+	Namecard    *string        `json:"namecard"`
 	Endorsement int            `json:"endorsement"`
 	Ranks       []OwRank       `json:"ranks"`
 	Mode        string         `json:"mode"` // all | competitive | quickplay
 	General     OwStats        `json:"general"`
 	Roles       []OwNamedStats `json:"roles"`
 	Heroes      []OwNamedStats `json:"heroes"`
+	// Career bests and per-ten-minute averages across every hero.
+	Records []OwStatGroup `json:"records"`
 	Freshness
 }
 
@@ -165,13 +168,14 @@ func (o *Overwatch) Overview(mode string, force bool) (OwOverview, error) {
 	}
 	id := url.PathEscape(link.PlayerID)
 	ov, fresh, err := cachedFetch(o.store, "ow_overview_"+safeKey(link.PlayerID)+"_"+mode, 10*time.Minute, force, func() (OwOverview, error) {
-		out := OwOverview{Mode: mode, Ranks: []OwRank{}, Roles: []OwNamedStats{}, Heroes: []OwNamedStats{}}
+		out := OwOverview{Mode: mode, Ranks: []OwRank{}, Roles: []OwNamedStats{}, Heroes: []OwNamedStats{}, Records: []OwStatGroup{}}
 		var summary jsonMap
 		if err := o.api.get("/players/"+id+"/summary", &summary); err != nil {
 			return out, err
 		}
 		out.Name, out.Avatar, out.Title = jStr(summary, "username", link.Name), jStrPtr(summary, "avatar"), jStr(summary, "title", "")
 		out.Endorsement = int(jI64(sub(summary, "endorsement"), "level"))
+		out.Namecard = jStrPtr(summary, "namecard")
 		if pc := sub(sub(summary, "competitive"), "pc"); pc != nil {
 			for _, role := range []string{"tank", "damage", "support", "open"} {
 				if r := sub(pc, role); r != nil {
@@ -209,6 +213,8 @@ func (o *Overwatch) Overview(mode string, force bool) (OwOverview, error) {
 			}
 			out.Heroes = append(out.Heroes, OwNamedStats{Key: key, Name: name, Role: info.Role, Portrait: info.Portrait, OwStats: owStats(h)})
 		}
+		// Best effort: the overview is worth showing without its records.
+		out.Records, _ = o.career(id, mode, "all-heroes")
 		sort.Slice(out.Heroes, func(i, j int) bool {
 			if out.Heroes[i].TimePlayed != out.Heroes[j].TimePlayed {
 				return out.Heroes[i].TimePlayed > out.Heroes[j].TimePlayed
