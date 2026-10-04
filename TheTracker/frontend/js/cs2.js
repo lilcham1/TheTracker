@@ -176,7 +176,7 @@ view("cs-overview", {
         { label: `Win rate, ${a.matches} match${a.matches === 1 ? "" : "es"}`, value: pct(a.rate), tone: toneOfRate(a.rate), sub: `${a.wins} won, ${a.losses} lost`, extra: formStrip(all.map(csWon), 30) },
         { label: "K/D", value: a.kd.toFixed(2), tone: a.kd >= 1 ? "win" : "loss", sub: `${dash(a.kpr, (v) => v.toFixed(2))} kills a round`, extra: sparkline(chrono.map(csKd)) },
         { label: "Damage per round", value: dash(a.adr, (v) => v.toFixed(0)), sub: `${dash(a.survival, (v) => pct(v))} of rounds survived`, extra: sparkline(chrono.map(csAdr)) },
-        { label: "Headshots", value: dash(a.hs, (v) => pct(v)), sub: "of your kills", extra: sparkline(chrono.map(csHs)) },
+        { label: "Headshots", value: dash(a.hs, (v) => pct(v)), sub: "of your kills", extra: sparkline(chrono.map(csHs), { points: true }) },
       ])}
       <div class="cols">
         <section>

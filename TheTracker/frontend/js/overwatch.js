@@ -239,7 +239,7 @@ view("ow-progress", {
     return `${owModeChips()}
       ${statRow([
         { label: `Since ${owDay(p.since)}`, value: `${fmtNum(t.games)} game${t.games === 1 ? "" : "s"}`, sub: `${t.won} won, ${t.lost} lost` },
-        { label: "Win rate", value: pct(owSessionRate(t)), tone: toneOfRate(owSessionRate(t)), sub: "since tracking began", extra: sparkline([...p.sessions].reverse().map(owSessionRate)) },
+        { label: "Win rate", value: pct(owSessionRate(t)), tone: toneOfRate(owSessionRate(t)), sub: "since tracking began", extra: sparkline([...p.sessions].reverse().map(owSessionRate), { points: true }) },
         { label: "Time played", value: owHours(t.time), sub: `${p.sessions.length} session${p.sessions.length === 1 ? "" : "s"}` },
         { label: "Most played", value: top ? `<span class="cell">${imgHtml(top.portrait, "avatar small")}${esc(top.name)}</span>` : "–", sub: top ? `${top.games} games, ${top.won} won` : "" },
       ])}

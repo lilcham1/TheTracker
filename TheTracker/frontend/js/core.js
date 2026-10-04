@@ -153,19 +153,50 @@ function gameTypeLabel(t) {
   return g ? g.label : "Mode not known yet";
 }
 
-/// A line chart for a small series. Returns "" under three points, where a
-/// line would say nothing.
-function sparkline(values, { width = 160, height = 36, tone = "accent" } = {}) {
+/// A trend chart for a small series, oldest first. Match-by-match numbers
+/// are noisy, so longer series are drawn as a rolling average: the shape
+/// shows where the figure is heading, not every spike. A dashed line marks
+/// the overall average, and a caption says which way things have gone
+/// lately. Returns "" under three points, where a line would say nothing.
+function sparkline(values, { width = 240, height = 44, tone = "accent", trend = true, points = false } = {}) {
   values = values.filter(known);
   if (values.length < 3) return "";
-  const min = Math.min(...values), max = Math.max(...values), span = max - min || 1;
-  const step = (width - 4) / (values.length - 1);
-  const pts = values.map((v, i) => [2 + i * step, height - 3 - ((v - min) / span) * (height - 6)]);
-  const line = pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join("");
+  const n = values.length;
+  const win = n >= 12 ? Math.max(3, Math.round(n / 8)) : 1;
+  const series = values.map((_, i) => {
+    const part = values.slice(Math.max(0, i - win + 1), i + 1);
+    return part.reduce((a, v) => a + v, 0) / part.length;
+  });
+  const mean = values.reduce((a, v) => a + v, 0) / n;
+  const min = Math.min(...series, mean), max = Math.max(...series, mean), span = max - min || 1;
+  const step = (width - 2) / (n - 1);
+  const y = (v) => height - 4 - ((v - min) / span) * (height - 9);
+  const pts = series.map((v, i) => [1 + i * step, y(v)]);
+  // A smooth curve: each point is a control point, the curve passes through
+  // the midpoints between neighbours.
+  let line = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2;
+    line += ` Q${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)} ${mx.toFixed(1)},${my.toFixed(1)}`;
+  }
   const last = pts[pts.length - 1];
-  return `<svg class="spark ${tone}" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" aria-hidden="true" preserveAspectRatio="none">
-    <path d="${line}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.4" fill="currentColor" /></svg>`;
+  line += ` L${last[0].toFixed(1)},${last[1].toFixed(1)}`;
+  const area = `${line} L${last[0].toFixed(1)},${height} L${pts[0][0].toFixed(1)},${height} Z`;
+
+  let caption = "";
+  if (trend && n >= 8) {
+    const q = Math.max(2, Math.round(n / 4));
+    const avg = (xs) => xs.reduce((a, v) => a + v, 0) / xs.length;
+    const recent = avg(values.slice(-q)), before = avg(values.slice(0, n - q));
+    // A series that is already a percentage changes in points, not percent.
+    const change = points ? recent - before : before ? ((recent - before) / Math.abs(before)) * 100 : 0;
+    const dir = change >= 4 ? "up" : change <= -4 ? "down" : "flat";
+    caption = `<span class="spark-trend ${dir}" title="Your last ${q} compared with the ${n - q} before them">${dir === "up" ? "▲" : dir === "down" ? "▼" : "•"} ${dir === "flat" ? "steady" : `${Math.abs(change).toFixed(0)}${points ? " points" : "%"} ${dir}`} <span class="muted">last ${q}</span></span>`;
+  }
+  return `<div class="spark-wrap"><svg class="spark ${tone}" viewBox="0 0 ${width} ${height}" aria-hidden="true" preserveAspectRatio="none">
+    <path d="${area}" fill="currentColor" fill-opacity=".1" stroke="none" />
+    <line x1="0" x2="${width}" y1="${y(mean).toFixed(1)}" y2="${y(mean).toFixed(1)}" stroke="currentColor" stroke-opacity=".35" stroke-width="1" stroke-dasharray="3 4" vector-effect="non-scaling-stroke" />
+    <path d="${line}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" /></svg>${caption}</div>`;
 }
 
 /// The run of results as a strip of marks, oldest on the left. `results` is

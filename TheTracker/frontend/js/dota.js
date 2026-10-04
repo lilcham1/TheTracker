@@ -291,7 +291,7 @@ view("overview", {
 
       ${statRow([
         { label: `Win rate, last ${rows.length}`, value: pct(rec.rate), tone: toneOfRate(rec.rate), sub: `${rec.wins} won, ${rec.losses} lost${local ? `, ${local} recorded here` : ""}`,
-          extra: sparkline(chrono.filter((m) => known(m.won)).map((_, i, arr) => { const w = arr.slice(Math.max(0, i - 9), i + 1); return (w.filter((x) => x.won).length / w.length) * 100; })) },
+          extra: sparkline(chrono.filter((m) => known(m.won)).map((m) => (m.won ? 100 : 0)), { points: true }) },
         { label: "KDA", value: dash(kdaOf(rows), (v) => v.toFixed(2)), sub: `${dash(avgOf(rows, "kills"), (v) => v.toFixed(1))} / ${dash(avgOf(rows, "deaths"), (v) => v.toFixed(1))} / ${dash(avgOf(rows, "assists"), (v) => v.toFixed(1))}`, extra: sparkline(chrono.map((m) => m.kda)) },
         { label: "Gold per minute", value: dash(avgOf(rows, "goldPerMin"), Math.round), sub: `${dash(avgOf(rows, "xpPerMin"), Math.round)} XP per minute`, extra: sparkline(chrono.map((m) => m.goldPerMin)) },
         { label: "Last hits", value: dash(avgOf(rows, "lastHits"), Math.round), sub: "per match", extra: sparkline(chrono.map((m) => m.lastHits)) },
