@@ -452,3 +452,30 @@ button.line:hover { background: var(--panel); }
 .row.wrap { flex-wrap: wrap; gap: 10px; }
 .link.danger { color: var(--loss); }
 @media (max-width: 900px) { .cols.even { grid-template-columns: 1fr; } .hbar { grid-template-columns: 110px minmax(40px, 1fr) auto; } }
+
+/* ---------- Today, progress, round detail (1.1) ---------- */
+.since { display: flex; align-items: center; gap: 16px; width: 100%; padding: 12px 16px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--panel); color: var(--text); text-align: left; flex-wrap: wrap; }
+button.since:hover { border-color: var(--faint); }
+.since-label { font-size: 13px; color: var(--text-2); }
+.since-main { font-size: 18px; }
+.since-heroes { display: flex; gap: 4px; }
+.avatar.tiny { width: 18px; height: 18px; border-radius: 4px; }
+.today-btn { margin-bottom: 8px; }
+.shell[data-game="today"] .nav { opacity: .75; }
+.today-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.today-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px 18px 16px; border: 1px solid var(--line-soft); border-top: 2px solid var(--card, var(--accent)); border-radius: 8px; background: var(--panel); }
+.today-card[data-theme="dota"] { --card: #d9a441; }
+.today-card[data-theme="deadlock"] { --card: #58c2ae; }
+.today-card[data-theme="cs2"] { --card: #6aa5ee; }
+.today-card[data-theme="overwatch"] { --card: #f68a3c; }
+.today-card .sec-head { margin: 0; }
+.today-card .link { color: var(--card, var(--accent)); }
+.today-nums { display: flex; flex-wrap: wrap; gap: 8px 30px; }
+.today-nums > div { display: flex; flex-direction: column; gap: 1px; }
+.today-nums b { font-size: 20px; }
+.today-nums .muted { font-size: 12px; }
+.today-last { font-size: 13px; color: var(--text-2); }
+.rounds { padding-top: 12px; }
+.round .bomb { position: absolute; top: -8px; left: 50%; width: 5px; height: 5px; border-radius: 50%; transform: translateX(-50%); background: var(--t); }
+.round .bomb.defused { background: var(--ct); }
+.round.buy-eco, .round.buy-pistol { border-style: dashed; }

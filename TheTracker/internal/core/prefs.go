@@ -50,6 +50,8 @@ type GeneralPrefs struct {
 	// tracking only works while the app runs.
 	CloseToTray    bool `json:"closeToTray"`
 	AutostartAsked bool `json:"autostartAsked"`
+	// A desktop notification when a match has been saved.
+	Notify bool `json:"notify"`
 }
 
 // Goals are per-match targets the player sets for themselves. Zero means

@@ -33,6 +33,9 @@ type Shell interface {
 	// InstallUpdate runs the downloaded installer and quits the app.
 	InstallUpdate(installerPath string) error
 	ShowMainWindow()
+	// Notify shows a desktop notification. Best effort: a PC that cannot
+	// show one simply does not.
+	Notify(Notification)
 	Quit()
 }
 
@@ -48,6 +51,7 @@ type NoShell struct {
 	mu        sync.Mutex
 	overlay   bool
 	autostart bool
+	notes     []Notification
 }
 
 func (n *NoShell) ShowOverlay() error           { n.mu.Lock(); n.overlay = true; n.mu.Unlock(); return nil }
@@ -69,7 +73,19 @@ func (n *NoShell) InstallUpdate(string) error {
 	return errors.New("Updates can only be installed from the desktop app.")
 }
 func (n *NoShell) ShowMainWindow() {}
-func (n *NoShell) Quit()           {}
+func (n *NoShell) Notify(note Notification) {
+	n.mu.Lock()
+	n.notes = append(n.notes, note)
+	n.mu.Unlock()
+}
+
+// Notifications is every notification shown so far, for tests.
+func (n *NoShell) Notifications() []Notification {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]Notification{}, n.notes...)
+}
+func (n *NoShell) Quit() {}
 
 // App ties the backend together. One per process.
 type App struct {
@@ -108,7 +124,11 @@ func NewApp(dataDir string, shell Shell) *App {
 	a.Gsi.OnCs2 = a.Cs2.HandleUpdate
 	a.Cloud = NewCloud(store)
 	a.Updater = NewUpdater()
-	a.Tracker.OnSaved = a.Cloud.PushMatch
+	a.Tracker.OnSaved = func(m MatchSummary) {
+		a.Cloud.PushMatch(m)
+		a.notify(dotaNotification(m))
+	}
+	a.Cs2.OnSaved = func(m Cs2Match) { a.notify(cs2Notification(m)) }
 	return a
 }
 
@@ -124,6 +144,7 @@ func (a *App) Start(manageDota bool) {
 	a.Cloud.Restore()
 	go a.overlayWatcher()
 	go a.backfillLoop()
+	go a.owWatch()
 }
 
 // applyGames starts or stops what each game needs. With Dota off the app
@@ -339,6 +360,7 @@ type BackgroundSettings struct {
 	// False if the tray icon could not be created, in which case closing the
 	// window quits regardless of the setting.
 	TrayAvailable bool `json:"trayAvailable"`
+	Notify        bool `json:"notify"`
 }
 
 func (a *App) Background() BackgroundSettings {
@@ -350,6 +372,7 @@ func (a *App) Background() BackgroundSettings {
 		CloseToTray:      g.CloseToTray,
 		AutostartAsked:   g.AutostartAsked,
 		TrayAvailable:    a.Shell.TrayAvailable(),
+		Notify:           g.Notify,
 	}
 }
 

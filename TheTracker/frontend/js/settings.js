@@ -24,6 +24,13 @@ onChange("bg-tray", async (el) => {
   lastHtml = null;
   rerender();
 });
+onChange("bg-notify", async (el) => {
+  const bg = await attempt(() => invoke("set_notify", { enabled: el.checked }));
+  if (bg) S.boot.background = bg;
+  lastHtml = null;
+  rerender();
+});
+act("notify-test", () => attempt(() => invoke("test_notify"), "Sent. If nothing appeared, Windows notifications or Do not disturb may be blocking it."));
 onChange("game-toggle", async (el) => {
   const next = { ...S.boot.prefs.games, [el.dataset.game]: el.checked };
   try {
@@ -75,13 +82,15 @@ function generalHtml() {
       ${gameRow("dota", "Dota 2", "live tracking, overlay, match history")}
       ${gameRow("deadlock", "Deadlock", "match history and meta")}
       ${gameRow("cs2", "Counter-Strike 2", "live tracking of your own matches")}
-      ${gameRow("overwatch", "Overwatch", "career stats from your public profile")}
+      ${gameRow("overwatch", "Overwatch", "career stats and progress from your public profile")}
     </section>
     <section class="set">
       <h3>Running in the background</h3>
       <p class="muted">TheTracker records a match only while it's running. If it's closed when you play, that game never reaches your Sessions.</p>
       <label class="switch"><input type="checkbox" data-change="bg-start" ${bg.startWithWindows ? "checked" : ""} /><span>Start with Windows <span class="muted">(opens in the tray, not on screen)</span></span></label>
       <label class="switch"><input type="checkbox" data-change="bg-tray" ${bg.closeToTray ? "checked" : ""} ${bg.trayAvailable ? "" : "disabled"} /><span>Keep running in the tray when I close the window</span></label>
+      <label class="switch"><input type="checkbox" data-change="bg-notify" ${bg.notify ? "checked" : ""} /><span>Tell me when a match has been saved <span class="muted">(a Windows notification, for Dota 2 and CS2)</span></span></label>
+      <p class="hint"><button class="link" data-act="notify-test" type="button">Show a test notification</button></p>
       ${bg.trayAvailable
         ? `<p class="hint">To quit completely, right-click the TheTracker icon in the tray and choose Quit, or <button class="link" data-act="quit" type="button">quit now</button>.</p>`
         : `<div class="note warn">The tray icon couldn't be created on this PC, so closing the window quits the app.</div>`}

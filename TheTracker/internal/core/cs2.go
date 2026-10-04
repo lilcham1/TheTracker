@@ -18,8 +18,7 @@ import (
 //
 // Valve publishes no match-history API for CS2 that works without each
 // player's private match-sharing code, so matches are what the app recorded
-// live; one played while the app was closed is not recoverable. Lifetime
-// totals are a separate thing — see cs2_lifetime.go.
+// live; one played while the app was closed is not recoverable.
 
 const (
 	cs2AppID   = 730
@@ -42,6 +41,7 @@ func cs2ConfigText(port int, token string) string {
     {
         "provider"              "1"
         "map"                   "1"
+        "map_round_wins"        "1"
         "round"                 "1"
         "player_id"             "1"
         "player_state"          "1"
@@ -61,6 +61,49 @@ type Cs2Round struct {
 	HS     int    `json:"hs"`
 	Damage int    `json:"damage"`
 	Died   bool   `json:"died"`
+	// What the player carried into the round, in dollars, and what kind of
+	// buy that makes it: pistol | eco | force | full. Empty when the round
+	// was joined too late to see.
+	Equip int    `json:"equip,omitempty"`
+	Buy   string `json:"buy,omitempty"`
+	// planted | exploded | defused, when the bomb went down.
+	Bomb string `json:"bomb,omitempty"`
+	// How the round was decided: elimination | bomb | defuse | time.
+	End string `json:"end,omitempty"`
+}
+
+// cs2Buy names a buy from the value of what the player is carrying. The
+// first round of a half is a pistol round only while money is short: an
+// overtime half starts rich.
+func cs2Buy(equip int, firstOfHalf bool) string {
+	switch {
+	case equip <= 0:
+		return ""
+	case firstOfHalf && equip < 1500:
+		return "pistol"
+	case equip < 1500:
+		return "eco"
+	case equip < 3500:
+		return "force"
+	}
+	return "full"
+}
+
+// cs2End reads the game's own reason for a round, like "ct_win_defuse".
+func cs2End(reason, bomb string) string {
+	if _, why, ok := strings.Cut(reason, "_win_"); ok {
+		switch why {
+		case "elimination", "bomb", "defuse", "time":
+			return why
+		}
+	}
+	switch bomb {
+	case "exploded":
+		return "bomb"
+	case "defused":
+		return "defuse"
+	}
+	return ""
 }
 
 // Cs2Match is one match, live or finished.
@@ -107,6 +150,8 @@ type Cs2Match struct {
 	roundDamage int
 	roundDied   bool
 	roundSide   string
+	roundEquip  int
+	roundBomb   string
 	seenKills   int // round_kills as last reported, to spot each new kill
 	awaitReset  bool
 	lastTotal   int
@@ -133,6 +178,9 @@ type Cs2 struct {
 	steamRoot func() string
 
 	simStop chan struct{}
+
+	// Called, off the tracker's lock, with each match that is saved.
+	OnSaved func(Cs2Match)
 }
 
 func NewCs2(store *Store) *Cs2 {
@@ -230,6 +278,10 @@ func (c *Cs2) finalizeLocked(incomplete bool) {
 		return
 	}
 	c.save(*m)
+	if hook := c.OnSaved; hook != nil {
+		saved := *m
+		go hook(saved)
+	}
 }
 
 func weaponName(raw string) string {
@@ -300,6 +352,15 @@ func (c *Cs2) HandleUpdate(body jsonMap) {
 		cur.awaitReset = false
 		cur.seenKills, cur.lastRoundHS = 0, 0
 	}
+	// The bomb's fate is reported with the round it happened in, and stays
+	// on the feed until the next buy time.
+	if b, ok := getStr(sub(body, "round"), "bomb"); ok && b != "" {
+		if cur.awaitReset && len(cur.Rounds) > 0 {
+			cur.Rounds[len(cur.Rounds)-1].Bomb = b
+		} else {
+			cur.roundBomb = b
+		}
+	}
 
 	// While dead the feed describes whoever is being spectated. Only the
 	// local player's own numbers count.
@@ -338,6 +399,10 @@ func (c *Cs2) HandleUpdate(body jsonMap) {
 			}
 			if !cur.awaitReset && phase == "live" {
 				cur.roundSide = cur.Team
+				// The first sight of the round in play is what was bought.
+				if cur.roundEquip == 0 && roundPhase == "live" {
+					cur.roundEquip = int(jI64(st, "equip_value"))
+				}
 				// round_kills and round_killhs count up within a round;
 				// each increase is a kill with the weapon now in hand.
 				if k := int(jI64(st, "round_kills")); k > cur.seenKills {
@@ -379,17 +444,30 @@ func (c *Cs2) HandleUpdate(body jsonMap) {
 		if side == "" {
 			side = cur.Team
 		}
+		firstOfHalf := len(cur.Rounds) == 0 && total == 1
+		if n := len(cur.Rounds); n > 0 {
+			firstOfHalf = cur.Rounds[n-1].Side != side
+		}
 		cur.Rounds = append(cur.Rounds, Cs2Round{
 			N: total, Won: cur.MyScore > prevMine, Side: side,
 			Kills: cur.roundKills, HS: cur.roundHS, Damage: cur.roundDamage, Died: cur.roundDied,
+			Equip: cur.roundEquip, Buy: cs2Buy(cur.roundEquip, firstOfHalf), Bomb: cur.roundBomb,
 		})
 		cur.Damage += cur.roundDamage
 		cur.roundKills, cur.roundHS, cur.roundDamage, cur.roundDied, cur.roundSide = 0, 0, 0, false, ""
+		cur.roundEquip, cur.roundBomb = 0, ""
 		// Until the next buy time the feed still shows the finished round's
 		// counters; reading them again would count its kills twice.
 		cur.awaitReset = true
 	}
 	cur.lastTotal, cur.haveTotal = total, true
+
+	// Why the last round ended can arrive a post after the score does.
+	if n := len(cur.Rounds); n > 0 && cur.Rounds[n-1].End == "" {
+		last := &cur.Rounds[n-1]
+		reason, _ := getStr(sub(gmap, "round_wins"), strconv.Itoa(last.N))
+		last.End = cs2End(reason, last.Bomb)
+	}
 
 	if phase == "gameover" {
 		c.finalizeLocked(false)
@@ -419,18 +497,27 @@ func (c *Cs2) StartSimulation() error {
 	go func() {
 		ct, t, kills, deaths := 0, 0, 0, 0
 		weapons := []string{"weapon_ak47", "weapon_m4a1", "weapon_awp", "weapon_deagle"}
-		send := func(phase, roundPhase, team string, rk, hs, dmg, health int, weapon string) {
+		wins := jsonMap{}
+		send := func(phase, roundPhase, team string, rk, hs, dmg, health, equip int, weapon, bomb string) {
 			myCT, myT := ct, t
 			if team == "T" {
 				myCT, myT = t, ct
 			}
+			roundWins := jsonMap{}
+			for k, v := range wins {
+				roundWins[k] = v
+			}
+			round := jsonMap{"phase": roundPhase}
+			if bomb != "" {
+				round["bomb"] = bomb
+			}
 			c.HandleUpdate(jsonMap{
 				SimulatedMarker: true,
 				"provider":      jsonMap{"appid": float64(cs2AppID), "steamid": "sim"},
-				"map":           jsonMap{"name": "de_mirage", "mode": "competitive", "phase": phase, "round": float64(ct + t), "team_ct": jsonMap{"score": float64(myCT)}, "team_t": jsonMap{"score": float64(myT)}},
-				"round":         jsonMap{"phase": roundPhase},
+				"map":           jsonMap{"name": "de_mirage", "mode": "competitive", "phase": phase, "round": float64(ct + t), "team_ct": jsonMap{"score": float64(myCT)}, "team_t": jsonMap{"score": float64(myT)}, "round_wins": roundWins},
+				"round":         round,
 				"player": jsonMap{"steamid": "sim", "team": team, "activity": "playing",
-					"state":       jsonMap{"health": float64(health), "armor": 100.0, "money": float64(2400 + 350*(ct+t)%5000), "round_kills": float64(rk), "round_killhs": float64(hs), "round_totaldmg": float64(dmg)},
+					"state":       jsonMap{"health": float64(health), "armor": 100.0, "money": float64(2400 + 350*(ct+t)%5000), "equip_value": float64(equip), "round_kills": float64(rk), "round_killhs": float64(hs), "round_totaldmg": float64(dmg)},
 					"match_stats": jsonMap{"kills": float64(kills), "deaths": float64(deaths), "assists": float64((ct + t) / 4), "mvps": float64(ct / 3), "score": float64(kills*2 + ct)},
 					"weapons":     jsonMap{"weapon_0": jsonMap{"name": "weapon_knife", "state": "holstered"}, "weapon_1": jsonMap{"name": weapon, "state": "active"}}},
 			})
@@ -446,36 +533,54 @@ func (c *Cs2) StartSimulation() error {
 		// "ct" is the player's own score throughout; the side they play
 		// swaps at half time.
 		for r := 0; r < 20; r++ {
-			team := "CT"
+			team, other := "CT", "T"
 			if r >= 12 {
-				team = "T"
+				team, other = "T", "CT"
 			}
 			w := weapons[r%len(weapons)]
-			send("live", "freezetime", team, 0, 0, 0, 100, w)
+			// A pistol round opens each half; after it, a mix of buys.
+			equip := []int{4700, 1200, 2600, 5200}[r%4]
+			if r == 0 || r == 12 {
+				equip = 850
+			}
+			send("live", "freezetime", team, 0, 0, 0, 100, equip, w, "")
 			if !pause(500 * time.Millisecond) {
 				break
 			}
 			rk := (r*7 + 1) % 4
 			died := r%3 == 2
 			kills += rk
-			send("live", "live", team, rk, rk/2, 40+rk*85, map[bool]int{true: 0, false: 100}[died], w)
+			health := map[bool]int{true: 0, false: 100}[died]
+			send("live", "live", team, rk, rk/2, 40+rk*85, health, equip, w, "")
 			if died {
 				deaths++
 			}
 			if !pause(700 * time.Millisecond) {
 				break
 			}
+			winner := team
 			if r%5 == 3 {
 				t++
+				winner = other
 			} else {
 				ct++
 			}
-			send("live", "over", team, rk, rk/2, 40+rk*85, map[bool]int{true: 0, false: 100}[died], w)
+			reason, bomb := "elimination", ""
+			switch {
+			case r%3 == 0 && winner == "T":
+				reason, bomb = "bomb", "exploded"
+			case r%3 == 0:
+				reason, bomb = "defuse", "defused"
+			case r%7 == 5 && winner == "CT":
+				reason = "time"
+			}
+			wins[strconv.Itoa(ct+t)] = strings.ToLower(winner) + "_win_" + reason
+			send("live", "over", team, rk, rk/2, 40+rk*85, health, equip, w, bomb)
 			if !pause(300 * time.Millisecond) {
 				break
 			}
 		}
-		send("gameover", "over", "T", 0, 0, 0, 100, "weapon_ak47")
+		send("gameover", "over", "T", 0, 0, 0, 100, 0, "weapon_ak47", "")
 		c.mu.Lock()
 		c.simStop = nil
 		c.mu.Unlock()

@@ -11,9 +11,9 @@
 import type * as auth from "../auth.js";
 import type * as http from "../http.js";
 import type * as leaderboard from "../leaderboard.js";
+import type * as maintenance from "../maintenance.js";
 import type * as matches from "../matches.js";
 import type * as profiles from "../profiles.js";
-import type * as steam from "../steam.js";
 
 import type {
   ApiFromModules,
@@ -25,9 +25,9 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   http: typeof http;
   leaderboard: typeof leaderboard;
+  maintenance: typeof maintenance;
   matches: typeof matches;
   profiles: typeof profiles;
-  steam: typeof steam;
 }>;
 
 /**

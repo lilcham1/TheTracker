@@ -19,10 +19,11 @@ import (
 type Overwatch struct {
 	store *Store
 	api   *service
+	now   func() time.Time
 }
 
 func NewOverwatch(store *Store) *Overwatch {
-	return &Overwatch{store: store, api: &service{Name: "The Overwatch API", Base: "https://overfast-api.tekrop.fr", Attempts: 2}}
+	return &Overwatch{store: store, now: time.Now, api: &service{Name: "The Overwatch API", Base: "https://overfast-api.tekrop.fr", Attempts: 2}}
 }
 
 // OwLink is the Battle.net profile the Overwatch pages read.
@@ -221,6 +222,7 @@ func (o *Overwatch) Overview(mode string, force bool) (OwOverview, error) {
 			}
 			return out.Heroes[i].Name < out.Heroes[j].Name
 		})
+		o.remember(link.PlayerID, out)
 		return out, nil
 	})
 	ov.Freshness = fresh

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -154,72 +155,73 @@ func TestCs2TestMatchIsNeverSaved(t *testing.T) {
 	}
 }
 
-// ---------- CS2 lifetime ----------
+// ---------- CS2: buys, the bomb, how rounds end ----------
 
-func TestCs2LifetimeParsing(t *testing.T) {
-	stat := func(name string, v float64) jsonMap { return jsonMap{"name": name, "value": v} }
-	l := ParseCs2Lifetime([]jsonMap{
-		stat("total_kills", 10000), stat("total_deaths", 8000), stat("total_kills_headshot", 4500),
-		stat("total_shots_fired", 200000), stat("total_shots_hit", 40000), stat("total_damage_done", 1500000),
-		stat("total_rounds_played", 20000), stat("total_wins", 10400), stat("total_matches_played", 800), stat("total_matches_won", 420),
-		stat("total_time_played", 3600000), stat("total_mvps", 900),
-		stat("total_kills_ak47", 4000), stat("total_shots_ak47", 60000), stat("total_hits_ak47", 13200),
-		stat("total_kills_awp", 1500), stat("total_shots_awp", 5000), stat("total_hits_awp", 2500),
-		stat("total_kills_knife", 40), stat("total_kills_enemy_blinded", 300), stat("total_kills_glock", 0),
-		stat("total_rounds_map_de_dust2", 5000), stat("total_wins_map_de_dust2", 2600),
-		stat("total_rounds_map_de_inferno", 9000), stat("total_wins_map_de_inferno", 4410),
-	})
-	if !l.Available || l.KD != 1.25 || l.HeadshotRate != 45 || l.Accuracy != 20 || l.ADR != 75 || l.MatchWinRate != 52.5 || l.HoursPlayed != 1000 {
-		t.Fatalf("headline figures wrong: %+v", l)
+func TestCs2BuyBombAndRoundEnd(t *testing.T) {
+	c := NewCs2(NewStore(t.TempDir()))
+	ct, tt := 0, 0
+	wins := jsonMap{}
+	post := func(team, roundPhase, bomb string, equip int) {
+		round := jsonMap{"phase": roundPhase}
+		if bomb != "" {
+			round["bomb"] = bomb
+		}
+		rw := jsonMap{}
+		for k, v := range wins {
+			rw[k] = v
+		}
+		c.HandleUpdate(jsonMap{
+			"provider": jsonMap{"appid": 730.0, "steamid": "me"},
+			"map":      jsonMap{"name": "de_nuke", "phase": "live", "team_ct": jsonMap{"score": float64(ct)}, "team_t": jsonMap{"score": float64(tt)}, "round_wins": rw},
+			"round":    round,
+			"player":   jsonMap{"steamid": "me", "team": team, "state": jsonMap{"health": 100.0, "equip_value": float64(equip)}, "match_stats": jsonMap{}},
+		})
 	}
-	if len(l.Weapons) != 3 || l.Weapons[0].Key != "ak47" || *l.Weapons[0].Accuracy != 22 || l.Weapons[1].Key != "awp" || *l.Weapons[1].Accuracy != 50 {
-		t.Fatalf("weapons wrong (most kills first; \"enemy blinded\" is not a weapon; unused weapons dropped): %+v", l.Weapons)
-	}
-	if l.Weapons[2].Key != "knife" || l.Weapons[2].Accuracy != nil {
-		t.Fatalf("a knife has kills but no accuracy: %+v", l.Weapons[2])
-	}
-	if len(l.Maps) != 2 || l.Maps[0].Key != "de_inferno" || l.Maps[0].Rate != 49 || l.Maps[1].Rate != 52 {
-		t.Fatalf("maps wrong: %+v", l.Maps)
-	}
-	// Nothing at all is still a valid, empty answer, not a division by zero.
-	if e := ParseCs2Lifetime(nil); e.KD != 0 || e.Accuracy != 0 || e.ADR != 0 {
-		t.Fatalf("empty stats: %+v", e)
-	}
-}
-
-func TestCs2LifetimeSaysWhyItIsMissing(t *testing.T) {
-	a := newTestApp(t)
-	if got := a.Cs2Lifetime(false); got.Available || got.Reason != "signed_out" {
-		t.Fatalf("with no Steam account there is nobody to look up: %+v", got)
-	}
-	linked(a.Store, "dota", 850402858)
-	if id := a.steamID64(); id != "76561198810668586" {
-		t.Fatalf("the 64-bit id is derived from the linked account: %s", id)
-	}
-	// newTestApp points the cloud at a dead port.
-	if got := a.Cs2Lifetime(false); got.Available || got.Reason != "unreachable" {
-		t.Fatalf("an unreachable service should read as such: %+v", got)
+	// play runs one round; reasonLate holds the game's reason back by a post.
+	play := func(team string, equip int, ctWins bool, bomb, reason string, reasonLate bool) {
+		post(team, "freezetime", "", 200) // still buying: not what the round is played with
+		post(team, "live", "", equip)
+		post(team, "live", map[bool]string{true: "planted"}[bomb != ""], equip/2) // dropped a gun mid-round
+		if ctWins {
+			ct++
+		} else {
+			tt++
+		}
+		if !reasonLate {
+			wins[strconv.Itoa(ct+tt)] = reason
+		}
+		post(team, "over", bomb, equip/2)
+		wins[strconv.Itoa(ct+tt)] = reason
+		post(team, "over", bomb, equip/2)
 	}
 
-	// A deployment that answers but has no key, and one that has not been
-	// updated at all, both mean "not switched on yet".
-	f := newFakeConvex(t)
-	a.Cloud.base = f.srv.URL
-	f.lifetime = map[string]any{"ok": false, "reason": "not_set_up"}
-	if got := a.Cs2Lifetime(false); got.Reason != "not_set_up" {
-		t.Fatalf("no key on the server: %+v", got)
+	play("CT", 850, true, "", "ct_win_elimination", false) // pistol round
+	play("CT", 1100, false, "exploded", "t_win_bomb", false)
+	play("CT", 2900, true, "defused", "ct_win_defuse", true)
+	play("CT", 5100, true, "", "ct_win_time", false)
+	ct, tt = tt, ct // half time
+	play("T", 800, true, "", "ct_win_elimination", false)
+	play("T", 9000, false, "", "", false) // no reason given at all
+
+	rs := c.Status().Current.Rounds
+	if len(rs) != 6 {
+		t.Fatalf("expected 6 rounds, got %+v", rs)
 	}
-	f.lifetime = map[string]any{"ok": false, "reason": "private"}
-	if got := a.Cs2Lifetime(false); got.Reason != "private" {
-		t.Fatalf("a private profile should say so: %+v", got)
+	type want struct {
+		buy, bomb, end string
+		equip          int
 	}
-	f.lifetime = map[string]any{"ok": true, "stats": []any{map[string]any{"name": "total_kills", "value": 50}, map[string]any{"name": "total_deaths", "value": 25}}}
-	got := a.Cs2Lifetime(false)
-	if !got.Available || got.KD != 2 {
-		t.Fatalf("stats should come through: %+v", got)
+	for i, w := range []want{
+		{"pistol", "", "elimination", 850}, {"eco", "exploded", "bomb", 1100}, {"force", "defused", "defuse", 2900},
+		{"full", "", "time", 5100}, {"pistol", "", "elimination", 800}, {"full", "", "", 9000},
+	} {
+		if r := rs[i]; r.Buy != w.buy || r.Bomb != w.bomb || r.End != w.end || r.Equip != w.equip {
+			t.Errorf("round %d: got buy=%q bomb=%q end=%q equip=%d, want %+v", i+1, r.Buy, r.Bomb, r.End, r.Equip, w)
+		}
 	}
-	if f.argsFor("steam:cs2Stats")["steamId"] != "76561198810668586" {
-		t.Fatal("the lookup must be for the player's own account")
+	// With no equipment value on the feed a round simply has no buy.
+	if cs2Buy(0, true) != "" || cs2Buy(6000, true) != "full" || cs2End("garbage", "exploded") != "bomb" {
+		t.Fatal("buy and round-end naming is off")
 	}
 }
 

@@ -47,11 +47,12 @@ Three sources, deliberately not blurred together:
 - **CS2** — Game State Integration again (`internal/core/cs2.go`), on the
   same listener, routed by `provider.appid`. There is no public CS2 match
   history or leaderboard; do not invent one.
-  Rounds, damage and weapon kills are derived from state changes between
-  posts. Lifetime totals are optional (`cs2_lifetime.go` → Convex action
-  `steam:cs2Stats`, key in the deployment's `STEAM_WEB_API_KEY`).
-  `cs2_sim_start` plays a scripted match that is never saved.
-- **Overwatch** — meta and per-hero career in `overwatch_extra.go`; the community OverFast API (`internal/core/overwatch.go`):
+  Rounds, damage, weapon kills, the buy and how a round ended are derived
+  from state changes between posts. `cs2_sim_start` plays a scripted match
+  that is never saved. There is deliberately no Steam Web API use: the user
+  does not want an API key to set up.
+- **Overwatch** — meta and per-hero career in `overwatch_extra.go`; progress
+  (snapshots of the totals, diffed into sessions) in `overwatch_progress.go`; the community OverFast API (`internal/core/overwatch.go`):
   career totals only, public profiles only.
 - **Valorant** — deliberately absent. It needs a Riot production API key
   granted to this project; without one there is no legitimate source.

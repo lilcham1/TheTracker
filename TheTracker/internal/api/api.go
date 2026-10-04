@@ -263,6 +263,8 @@ func commands(a *core.App) map[string]command {
 		"set_close_to_tray": in(func(p enabledArg) (any, error) {
 			return a.SetCloseToTray(p.Enabled), nil
 		}),
+		"set_notify":               in(func(p enabledArg) (any, error) { return a.SetNotify(p.Enabled), nil }),
+		"test_notify":              none(func() (any, error) { a.TestNotification(); return ok, nil }),
 		"dismiss_autostart_prompt": none(func() (any, error) { return a.DismissAutostartPrompt(), nil }),
 
 		// ----- Dota live feed setup -----
@@ -309,8 +311,8 @@ func commands(a *core.App) map[string]command {
 		}),
 		"cs2_sim_start": none(func() (any, error) { return ok, a.Cs2.StartSimulation() }),
 		"cs2_sim_stop":  none(func() (any, error) { a.Cs2.StopSimulation(); return ok, nil }),
-		"cs2_lifetime":  in(func(p forceArg) (any, error) { return a.Cs2Lifetime(p.Force), nil }),
-		"cs2_setup":     none(func() (any, error) { return a.Cs2.Setup(a.Gsi.Port(), a.Gsi.Token()), nil }),
+
+		"cs2_setup": none(func() (any, error) { return a.Cs2.Setup(a.Gsi.Port(), a.Gsi.Token()), nil }),
 		"cs2_install": none(func() (any, error) {
 			err := a.Cs2.Install(a.Gsi.Port(), a.Gsi.Token())
 			return a.Cs2.Setup(a.Gsi.Port(), a.Gsi.Token()), err
@@ -355,6 +357,12 @@ func commands(a *core.App) map[string]command {
 			Force bool   `json:"force"`
 		}) (any, error) {
 			return a.Ow.Overview(p.Mode, p.Force)
+		}),
+
+		"ow_progress": in(func(p struct {
+			Mode string `json:"mode"`
+		}) (any, error) {
+			return a.Ow.Progress(p.Mode), nil
 		}),
 
 		// ----- Account and cloud -----

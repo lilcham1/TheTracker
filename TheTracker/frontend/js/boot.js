@@ -12,10 +12,11 @@ async function boot() {
   }
   S.overlayVisible = S.boot.overlayVisible;
 
-  let start = GAMES[enabledGames()[0]].home;
+  // With several games on, the day across all of them is the front page.
+  let start = enabledGames().length > 1 ? "today" : GAMES[enabledGames()[0]].home;
   try {
     const saved = localStorage.getItem("tt.view");
-    if (saved && VIEWS[saved] && VIEWS[saved].game) start = saved;
+    if (saved && VIEWS[saved] && (VIEWS[saved].game || saved === "today")) start = saved;
   } catch (_) {
     /* storage is a convenience */
   }

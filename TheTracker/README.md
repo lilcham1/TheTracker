@@ -30,23 +30,29 @@ written in Go, with its interface drawn in the system's WebView2.
 items) and builds, from the community Deadlock API. Deadlock has no live
 feed, so there is no live page or overlay for it.
 
+**Today** – one page across every game you have switched on: today's and
+this week's record, streaks and the last match in each.
+
 **Counter-Strike 2** – live tracking of your own matches from Valve's Game
 State Integration, round by round: kills, damage (ADR), headshots, the weapon
-behind each kill and the side played, saved as you play. The overview adds
-win rate, CT/T round win rates, multi-kill rounds and per-map records, and a
-test match shows the live page without opening the game. Valve publishes no
-CS2 match history or leaderboard for apps, so only matches played while the
-app runs are listed. Optionally, all-time totals Steam keeps for the account
-(K/D, accuracy, every weapon and map) are shown too: that needs a Steam Web
-API key set as `STEAM_WEB_API_KEY` on the Convex deployment
-(`convex/steam.ts`), never in the app, and public game details on the
-Steam profile.
+behind each kill, the side played, what you bought (pistol, eco, force or
+full buy) and how the round ended (elimination, bomb, defuse, time), saved as
+you play. The overview adds win rate, CT/T and first/second-half round win
+rates, win rate by buy, multi-kill rounds and per-map records, and a test
+match shows the live page without opening the game. Valve publishes no CS2
+match history or leaderboard for apps, so only matches played while the app
+runs are listed.
 
 **Overwatch** – career stats by mode, role and hero from your public profile,
 each hero's full record (bests, averages, ability stats), and the hero meta
 (pick, win and ban rates by mode, region, rank and map) with your own win
 rate beside it, via the community OverFast API. Blizzard publishes no match
-list.
+list, only running totals, so TheTracker remembers the totals each time it
+reads your profile and shows the difference as sessions: games, wins, time
+and heroes played, plus a history of your ranks, from the day tracking began.
+
+**Notifications** – optionally, a Windows notification when a Dota 2 or CS2
+match has been saved. Off by default; Settings, General.
 
 **Valorant is not supported.** Riot only allows match data through a
 production API key it grants per application after review, with each player
@@ -77,7 +83,7 @@ After changing anything in `convex/`, deploy it with `npx convex deploy`.
 | [OpenDota](https://www.opendota.com) API | Dota history, heroes, meta, matchups | Public, no key. Keyed on your Steam account id. |
 | [Deadlock API](https://deadlock-api.com) | Everything Deadlock | Community-run, rate-limited by Valve; can be late or incomplete. |
 | Valve Game State Integration (CS2) | Live CS2 tracking | Same local feed as Dota; needs no launch option. |
-| Steam Web API (optional) | All-time CS2 totals | Called by the cloud function with the operator's key; the profile's game details must be public. |
+
 | Valve's Dota leaderboard web API | Dota top players by region | Names and ranks only. |
 | [OverFast API](https://overfast-api.tekrop.fr) | Overwatch career stats and hero meta | Community-run; reads Blizzard's public career pages. Profile must be public. |
 | Convex (optional account) | Sync and the shared leaderboard | Only if you sign in. `convex/` holds the server functions. |

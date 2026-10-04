@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -25,6 +27,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 
 	"thetracker/internal/api"
 	"thetracker/internal/core"
@@ -70,7 +73,7 @@ func main() {
 		minimized = minimized || a == minimizedArg
 	}
 
-	sh := &shell{}
+	sh := &shell{notifier: notifications.New()}
 	backend := core.NewApp(core.DefaultDataDir(), sh)
 
 	app := application.New(application.Options{
@@ -78,6 +81,7 @@ func main() {
 		Description: "Match tracker for Dota 2 and Deadlock",
 		Icon:        appIcon,
 		Assets:      application.AssetOptions{Handler: selfTestHook(api.New(backend, assets)), DisableLogging: true},
+		Services:    []application.Service{application.NewService(&notifyService{sh: sh})},
 		Windows: application.WindowsOptions{
 			// Closing the window is not quitting: the tray keeps the app
 			// alive so matches go on being recorded.
@@ -142,6 +146,58 @@ type shell struct {
 	tray    atomic.Bool
 	// Set once the app is quitting, so the close handler stops hiding.
 	quitting atomic.Bool
+	// Desktop notifications, and whether Windows let them be set up.
+	notifier *notifications.NotificationService
+	notifyOK atomic.Bool
+}
+
+// notifyService starts the notification service without letting it stop the
+// app: on a PC where toasts cannot be registered, TheTracker simply runs
+// without them.
+type notifyService struct{ sh *shell }
+
+func (n *notifyService) ServiceName() string { return "thetracker/notifications" }
+
+func (n *notifyService) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
+	if err := n.sh.notifier.ServiceStartup(ctx, options); err != nil {
+		log.Printf("notifications unavailable: %v", err)
+		return nil
+	}
+	// Clicking a notification opens the app on the page it is about.
+	n.sh.notifier.OnNotificationResponse(func(r notifications.NotificationResult) {
+		if r.Error != nil {
+			return
+		}
+		view, _ := r.Response.UserInfo["view"].(string)
+		n.sh.ShowMainWindow()
+		if viewName.MatchString(view) && n.sh.main != nil {
+			n.sh.main.ExecJS("go(\"" + view + "\")")
+		}
+	})
+	n.sh.notifyOK.Store(true)
+	return nil
+}
+
+func (n *notifyService) ServiceShutdown() error {
+	if n.sh.notifyOK.Load() {
+		return n.sh.notifier.ServiceShutdown()
+	}
+	return nil
+}
+
+var viewName = regexp.MustCompile("^[a-z][a-z-]{0,30}$")
+
+func (s *shell) Notify(n core.Notification) {
+	if !s.notifyOK.Load() {
+		return
+	}
+	err := s.notifier.SendNotification(notifications.NotificationOptions{
+		ID: fmt.Sprintf("tt-%d", time.Now().UnixNano()), Title: n.Title, Body: n.Body,
+		Data: map[string]interface{}{"view": n.View},
+	})
+	if err != nil {
+		log.Printf("notification not shown: %v", err)
+	}
 }
 
 func (s *shell) buildMainWindow(hidden bool) {
@@ -474,7 +530,7 @@ func (s *shell) selfTest() {
 		}
 	}
 	time.Sleep(6 * time.Second)
-	note("shell: tray=%v mainVisible=%v overlayVisible=%v autostart=%v monitors=%d", s.TrayAvailable(), s.main.IsVisible(), s.OverlayVisible(), s.AutostartEnabled(), len(s.Monitors()))
+	note("shell: tray=%v mainVisible=%v overlayVisible=%v autostart=%v monitors=%d notifications=%v", s.TrayAvailable(), s.main.IsVisible(), s.OverlayVisible(), s.AutostartEnabled(), len(s.Monitors()), s.notifyOK.Load())
 	for _, m := range s.Monitors() {
 		note("monitor: %q %dx%d primary=%v", m.Name, m.Width, m.Height, m.Primary)
 	}

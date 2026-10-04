@@ -1,11 +1,8 @@
-// Counter-Strike 2 pages.
-//
-// Two sources, kept apart on the page: matches the app recorded live from
-// the game's own feed (round by round), and — when switched on — the lifetime
-// totals Steam keeps for the account.
+// Counter-Strike 2 pages. Everything here is what the app recorded live from
+// the game's own feed, round by round: Valve publishes no CS2 match history
+// for apps to read.
 
-const CS = { status: null, setup: null, history: [], busy: false, error: null, open: new Set(), lifeTab: "weapons" };
-const csLife = resource("csLife", "cs2_lifetime", { ttl: 10 * 60000 });
+const CS = { status: null, setup: null, history: [], busy: false, error: null, open: new Set() };
 
 const WEAPON_NAMES = {
   ak47: "AK-47", m4a1: "M4A4", m4a1_silencer: "M4A1-S", awp: "AWP", deagle: "Desert Eagle", glock: "Glock-18",
@@ -16,6 +13,8 @@ const WEAPON_NAMES = {
   negev: "Negev", m249: "M249", hegrenade: "HE grenade", molotov: "Molotov", incgrenade: "Incendiary", inferno: "Fire",
   knife: "Knife", knife_t: "Knife", bayonet: "Knife", taser: "Zeus x27",
 };
+const BUY_NAMES = { pistol: "Pistol round", eco: "Eco", force: "Force buy", full: "Full buy" };
+const END_NAMES = { elimination: "Elimination", bomb: "Bomb exploded", defuse: "Bomb defused", time: "Time ran out" };
 const weaponLabel = (k) => WEAPON_NAMES[k] || (k.startsWith("knife") ? "Knife" : k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
 const csMapName = (m) => (m || "").replace(/^(de|cs|ar|dm|gd)_/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Unknown map";
 const csResClass = (m) => (m.result === "win" ? "win" : m.result === "loss" ? "loss" : "other");
@@ -25,8 +24,7 @@ const csHs = (m) => (m.kills ? (m.headshotKills * 100) / m.kills : null);
 const csAdr = (m) => (m.rounds && m.rounds.length ? m.damage / m.rounds.length : null);
 const csWon = (m) => (m.result === "win" ? true : m.result === "loss" ? false : null);
 
-async function csLoad(force) {
-  csLife.load(force);
+async function csLoad() {
   try {
     [CS.setup, CS.history] = await Promise.all([invoke("cs2_setup"), invoke("cs2_history")]);
   } catch (_) {
@@ -42,7 +40,7 @@ async function csPoll() {
     CS.status = await invoke("cs2_status");
     const now = CS.status.current && CS.status.current.ended;
     if (now && !before) CS.history = await invoke("cs2_history");
-    if (S.view === "cs-live" || (now && !before && VIEWS[S.view].game === "cs2")) rerender();
+    if (S.view === "cs-live" || (now && !before && (S.view === "today" || VIEWS[S.view].game === "cs2"))) rerender();
     renderNav();
   } catch (_) {
     /* next tick */
@@ -63,9 +61,13 @@ act("cs-install", async () => {
   CS.busy = false;
   rerender();
 });
-act("cs-check", () => csLoad(true));
+act("cs-check", () => csLoad());
 act("cs-sim", async () => {
-  if (await attempt(() => invoke("cs2_sim_start"), "Test match started. It plays 20 quick rounds and isn't saved.")) csPoll();
+  if (await attempt(() => invoke("cs2_sim_start"), "Test match started. It plays 20 quick rounds and isn't saved.")) {
+    CS.dismissed = null;
+    if (S.view !== "cs-live") go("cs-live");
+    csPoll();
+  }
 });
 act("cs-sim-stop", async () => {
   await attempt(() => invoke("cs2_sim_stop"));
@@ -89,10 +91,6 @@ act("cs-toggle", (el) => {
   CS.open.has(el.dataset.id) ? CS.open.delete(el.dataset.id) : CS.open.add(el.dataset.id);
   rerender();
 });
-act("cs-life-tab", (el) => {
-  CS.lifeTab = el.dataset.value;
-  rerender();
-});
 
 // ---------- Shared pieces ----------
 
@@ -103,9 +101,12 @@ function roundStrip(rounds) {
   return `<div class="rounds" role="img" aria-label="Round by round">${rounds
     .map((r, i) => {
       const swap = i > 0 && rounds[i - 1].side !== r.side ? `<span class="half" title="Sides swapped"></span>` : "";
-      const tip = `Round ${r.n}: ${r.won ? "won" : "lost"} as ${r.side}. ${r.kills} kill${r.kills === 1 ? "" : "s"}${r.hs ? ` (${r.hs} headshot${r.hs === 1 ? "" : "s"})` : ""}, ${r.damage} damage${r.died ? ", died" : ", survived"}.`;
-      return `${swap}<span class="round ${r.won ? "w" : "l"} ${r.died ? "died" : ""}" title="${tip}">
-        <span class="pips">${"<i></i>".repeat(Math.min(r.kills, 5))}</span><b class="side-${r.side === "CT" ? "ct" : "t"}"></b></span>`;
+      const buy = r.buy ? ` ${BUY_NAMES[r.buy]}, $${fmtNum(r.equip)} carried.` : "";
+      const end = r.end ? ` ${END_NAMES[r.end]}.` : "";
+      const tip = `Round ${r.n}: ${r.won ? "won" : "lost"} as ${r.side}.${end}${buy} ${r.kills} kill${r.kills === 1 ? "" : "s"}${r.hs ? ` (${r.hs} headshot${r.hs === 1 ? "" : "s"})` : ""}, ${r.damage} damage${r.died ? ", died" : ", survived"}.`;
+      const bomb = r.bomb === "exploded" || r.bomb === "defused" ? `<em class="bomb ${r.bomb}"></em>` : "";
+      return `${swap}<span class="round ${r.won ? "w" : "l"} ${r.died ? "died" : ""} ${r.buy ? "buy-" + r.buy : ""}" title="${esc(tip)}">
+        ${bomb}<span class="pips">${"<i></i>".repeat(Math.min(r.kills, 5))}</span><b class="side-${r.side === "CT" ? "ct" : "t"}"></b></span>`;
     })
     .join("")}</div>`;
 }
@@ -115,6 +116,8 @@ function barRow(label, value, max, right, tone = "") {
   return `<div class="hbar"><span class="hbar-label">${label}</span><span class="hbar-track"><i class="${tone}" style="width:${w.toFixed(1)}%"></i></span><span class="num">${right}</span></div>`;
 }
 
+const csRate = (rs) => (rs.length ? (rs.filter((r) => r.won).length * 100) / rs.length : null);
+
 /// Figures summed over a set of recorded matches.
 function csAggregate(list) {
   const sum = (f) => list.reduce((a, m) => a + f(m), 0);
@@ -122,102 +125,87 @@ function csAggregate(list) {
   const decided = list.filter((m) => m.result === "win" || m.result === "loss");
   const wins = decided.filter((m) => m.result === "win").length;
   const kills = sum((m) => m.kills), deaths = sum((m) => m.deaths), hs = sum((m) => m.headshotKills);
-  const side = (s) => {
-    const rs = rounds.filter((r) => r.side === s);
-    return { played: rs.length, rate: rs.length ? (rs.filter((r) => r.won).length * 100) / rs.length : null };
-  };
+  const group = (rs) => ({ played: rs.length, rate: csRate(rs) });
   const weapons = {};
   for (const m of list) for (const [k, n] of Object.entries(m.weaponKills || {})) weapons[k] = (weapons[k] || 0) + n;
   const multi = [2, 3, 4, 5].map((n) => rounds.filter((r) => (n === 5 ? r.kills >= 5 : r.kills === n)).length);
+  // The first half of a match is every round before the sides first swap.
+  const first = [], second = [];
+  for (const m of list) {
+    const rs = m.rounds || [];
+    const swap = rs.findIndex((r, i) => i > 0 && rs[i - 1].side !== r.side);
+    rs.forEach((r, i) => (swap < 0 || i < swap ? first : second).push(r));
+  }
   return {
     matches: list.length, wins, losses: decided.length - wins, rate: decided.length ? (wins * 100) / decided.length : null,
     kills, deaths, assists: sum((m) => m.assists), kd: kills / Math.max(1, deaths), hs: kills ? (hs * 100) / kills : null,
     adr: rounds.length ? rounds.reduce((a, r) => a + r.damage, 0) / rounds.length : null,
     kpr: rounds.length ? rounds.reduce((a, r) => a + r.kills, 0) / rounds.length : null,
     survival: rounds.length ? (rounds.filter((r) => !r.died).length * 100) / rounds.length : null,
-    rounds: rounds.length, ct: side("CT"), t: side("T"), multi,
+    rounds: rounds.length, ct: group(rounds.filter((r) => r.side === "CT")), t: group(rounds.filter((r) => r.side === "T")),
+    firstHalf: group(first), secondHalf: group(second), multi,
+    buys: Object.keys(BUY_NAMES).map((k) => ({ key: k, ...group(rounds.filter((r) => r.buy === k)) })),
+    ends: Object.keys(END_NAMES).map((k) => {
+      const rs = rounds.filter((r) => r.end === k);
+      return { key: k, won: rs.filter((r) => r.won).length, lost: rs.filter((r) => !r.won).length };
+    }),
     weapons: Object.entries(weapons).sort((a, b) => b[1] - a[1]),
   };
 }
 
-// ---------- Overview ----------
+const csRateBar = (label, g, tone) => barRow(label, g.rate || 0, 100, `<span class="${toneOfRate(g.rate)}">${pct(g.rate)}</span> <span class="muted">of ${g.played} rounds</span>`, tone || toneOfRate(g.rate));
 
-function csLifetimeHtml() {
-  const l = csLife.data;
-  if (!l) return csLife.error ? "" : `<p class="muted">Checking for lifetime stats…</p>`;
-  if (!l.available) {
-    const why = {
-      signed_out: `Sign in with Steam and your all-time CS2 totals can be shown here. <button class="link" data-act="go" data-view="settings" data-params='{"tab":"account"}' type="button">Sign in</button>`,
-      private: `Steam says your game details are private, so it won't share your CS2 totals. In Steam, open your profile, Edit Profile, Privacy Settings, and set Game details to Public.`,
-      no_stats: `Steam has no CS2 statistics for this account yet.`,
-      unreachable: `The service that fetches your Steam totals couldn't be reached. Try Refresh in a moment.`,
-      not_set_up: `All-time totals from Steam (every match you've ever played, not only the ones recorded here) need a one-time setup by whoever runs TheTracker's cloud service. Until then this page shows what was recorded live.`,
-    }[l.reason] || `Lifetime stats aren't available right now.`;
-    return `<div class="note">${why}</div>`;
-  }
-  const maxKills = l.weapons.length ? l.weapons[0].kills : 1;
-  const maxRounds = l.maps.length ? l.maps[0].rounds : 1;
-  const tab = (k, label) => `<button class="chip ${CS.lifeTab === k ? "on" : ""}" data-act="cs-life-tab" data-value="${k}" type="button">${label}</button>`;
-  return `${statRow([
-      { label: "K/D", value: l.kd.toFixed(2), tone: l.kd >= 1 ? "win" : "loss", sub: `${fmtNum(l.kills)} kills, ${fmtNum(l.deaths)} deaths` },
-      { label: "Headshots", value: pct(l.headshotRate), sub: `${fmtNum(l.headshots)} headshot kills` },
-      { label: "Damage per round", value: l.adr.toFixed(0), sub: `${fmtNum(l.rounds)} rounds played` },
-      { label: "Matches won", value: l.matchesPlayed ? pct(l.matchWinRate) : "–", tone: l.matchesPlayed ? toneOfRate(l.matchWinRate) : "", sub: `${fmtNum(l.matchesWon)} of ${fmtNum(l.matchesPlayed)}` },
-      { label: "Accuracy", value: pct(l.accuracy, 1), sub: `${fmtNum(l.mvps)} MVPs, ${l.hoursPlayed.toFixed(0)} h in matches` },
-    ])}
-    <div class="chips" style="margin-top:14px">${tab("weapons", `Weapons (${l.weapons.length})`)}${tab("maps", `Maps (${l.maps.length})`)}</div>
-    ${CS.lifeTab === "maps"
-      ? `<div class="hbars">${l.maps.slice(0, 14).map((m) => barRow(esc(csMapName(m.key)), m.rounds, maxRounds, `<span class="${toneOfRate(m.rate)}">${pct(m.rate)}</span> <span class="muted">of ${fmtNum(m.rounds)} rounds</span>`, toneOfRate(m.rate))).join("")}</div>
-         <p class="hint">Round win rate on each map, from Steam's totals.</p>`
-      : `<div class="hbars">${l.weapons.slice(0, 14).map((w) => barRow(esc(weaponLabel(w.key)), w.kills, maxKills, `${fmtNum(w.kills)} <span class="muted">${known(w.accuracy) ? pct(w.accuracy) + " accuracy" : "kills"}</span>`)).join("")}</div>`}`;
-}
+// ---------- Overview ----------
 
 view("cs-overview", {
   game: "cs2", nav: true, icon: "overview", title: "Overview",
-  sub: () => "Your Counter-Strike 2 numbers",
+  sub: () => "Your Counter-Strike 2 numbers, from the matches recorded here",
   load: csLoad,
   render() {
     const all = [...CS.history].reverse();
+    if (!all.length) {
+      return emptyState("No CS2 matches recorded yet", "Keep TheTracker running while you play and each match is saved when it ends, round by round: kills, damage, headshots, weapon, side, what you bought and how the round ended.",
+        `<span class="row"><button class="btn" data-act="go" data-view="cs-live" type="button">Check the live setup</button><button class="btn ghost" data-act="cs-sim" type="button">Watch a test match</button></span>`);
+    }
     const a = csAggregate(all);
     const chrono = [...all].reverse();
     const maxW = a.weapons.length ? a.weapons[0][1] : 1;
+    const hasBuys = a.buys.some((b) => b.played), hasEnds = a.ends.some((e) => e.won + e.lost);
 
-    const recorded = all.length
-      ? `${statRow([
-          { label: `Win rate, ${a.matches} matches`, value: pct(a.rate), tone: toneOfRate(a.rate), sub: `${a.wins} won, ${a.losses} lost`, extra: formStrip(all.map(csWon), 30) },
-          { label: "K/D", value: a.kd.toFixed(2), tone: a.kd >= 1 ? "win" : "loss", sub: `${dash(a.kpr, (v) => v.toFixed(2))} kills a round`, extra: sparkline(chrono.map(csKd)) },
-          { label: "Damage per round", value: dash(a.adr, (v) => v.toFixed(0)), sub: `${dash(a.survival, (v) => pct(v))} of rounds survived`, extra: sparkline(chrono.map(csAdr)) },
-          { label: "Headshots", value: dash(a.hs, (v) => pct(v)), sub: "of your kills", extra: sparkline(chrono.map(csHs)) },
-        ])}
-        <div class="cols">
-          <section>
-            <div class="sec-head"><h3>Recent matches</h3><button class="link" data-act="go" data-view="cs-matches" type="button">All matches</button></div>
-            <div class="lines">${all.slice(0, 6).map((m) => `<button class="line ${csResClass(m)}" data-act="go" data-view="cs-matches" type="button">
-              <span class="grow"><b>${esc(csMapName(m.map))}</b><span class="muted"> ${m.myScore} : ${m.theirScore}</span></span>
-              <span class="num">${m.kills}/${m.deaths}/${m.assists}</span><span class="num muted">${dash(csAdr(m), (v) => v.toFixed(0))} ADR</span>
-              <span class="res ${csResClass(m)}">${csResText(m)}</span><span class="muted when">${ago(Date.parse(m.date) / 1000)}</span></button>`).join("")}</div>
-            <div class="sec-head"><h3>Sides</h3></div>
-            <div class="hbars">
-              ${barRow(`<span class="side-dot ct"></span>Counter-Terrorist`, a.ct.rate || 0, 100, `<span class="${toneOfRate(a.ct.rate)}">${pct(a.ct.rate)}</span> <span class="muted">of ${a.ct.played} rounds</span>`, "ct")}
-              ${barRow(`<span class="side-dot t"></span>Terrorist`, a.t.rate || 0, 100, `<span class="${toneOfRate(a.t.rate)}">${pct(a.t.rate)}</span> <span class="muted">of ${a.t.played} rounds</span>`, "t")}
-            </div>
-          </section>
-          <section>
-            <div class="sec-head"><h3>Kills by weapon</h3></div>
-            ${a.weapons.length ? `<div class="hbars">${a.weapons.slice(0, 7).map(([k, n]) => barRow(esc(weaponLabel(k)), n, maxW, `${n} <span class="muted">${pct((n * 100) / Math.max(1, a.kills))}</span>`)).join("")}</div>` : `<p class="muted">Recorded from your next match on.</p>`}
-            <div class="sec-head"><h3>Multi-kill rounds</h3></div>
-            <div class="multi">${["2 kills", "3 kills", "4 kills", "Ace"].map((label, i) => `<div><span class="display">${a.multi[i]}</span><span class="muted">${label}</span></div>`).join("")}</div>
-          </section>
-        </div>`
-      : emptyState("No CS2 matches recorded yet", "Keep TheTracker running while you play and each match is saved when it ends, round by round: kills, damage, headshots, weapon and side.",
-          `<span class="row"><button class="btn" data-act="go" data-view="cs-live" type="button">Check the live setup</button><button class="btn ghost" data-act="cs-sim" type="button">Watch a test match</button></span>`);
-
-    // Steam's all-time totals are an optional extra of the cloud service:
-    // where it isn't switched on, the page simply doesn't mention them.
-    const l = csLife.data;
-    if (!l || (!l.available && l.reason === "not_set_up")) return recorded;
-    return `<div class="sec-head"><h3>Recorded by TheTracker</h3></div>${recorded}
-      <div class="sec-head" style="margin-top:34px"><h3>All-time, from Steam</h3></div>${csLifetimeHtml()}`;
+    return `${statRow([
+        { label: `Win rate, ${a.matches} match${a.matches === 1 ? "" : "es"}`, value: pct(a.rate), tone: toneOfRate(a.rate), sub: `${a.wins} won, ${a.losses} lost`, extra: formStrip(all.map(csWon), 30) },
+        { label: "K/D", value: a.kd.toFixed(2), tone: a.kd >= 1 ? "win" : "loss", sub: `${dash(a.kpr, (v) => v.toFixed(2))} kills a round`, extra: sparkline(chrono.map(csKd)) },
+        { label: "Damage per round", value: dash(a.adr, (v) => v.toFixed(0)), sub: `${dash(a.survival, (v) => pct(v))} of rounds survived`, extra: sparkline(chrono.map(csAdr)) },
+        { label: "Headshots", value: dash(a.hs, (v) => pct(v)), sub: "of your kills", extra: sparkline(chrono.map(csHs)) },
+      ])}
+      <div class="cols">
+        <section>
+          <div class="sec-head"><h3>Recent matches</h3><button class="link" data-act="go" data-view="cs-matches" type="button">All matches</button></div>
+          <div class="lines">${all.slice(0, 6).map((m) => `<button class="line ${csResClass(m)}" data-act="go" data-view="cs-matches" type="button">
+            <span class="grow"><b>${esc(csMapName(m.map))}</b><span class="muted"> ${m.myScore} : ${m.theirScore}</span></span>
+            <span class="num">${m.kills}/${m.deaths}/${m.assists}</span><span class="num muted">${dash(csAdr(m), (v) => v.toFixed(0))} ADR</span>
+            <span class="res ${csResClass(m)}">${csResText(m)}</span><span class="muted when">${ago(Date.parse(m.date) / 1000)}</span></button>`).join("")}</div>
+          <div class="sec-head"><h3>Rounds won</h3></div>
+          <div class="hbars">
+            ${csRateBar(`<span class="side-dot ct"></span>Counter-Terrorist`, a.ct, "ct")}
+            ${csRateBar(`<span class="side-dot t"></span>Terrorist`, a.t, "t")}
+            ${a.secondHalf.played ? csRateBar("First half", a.firstHalf) + csRateBar("Second half", a.secondHalf) : ""}
+          </div>
+        </section>
+        <section>
+          <div class="sec-head"><h3>Kills by weapon</h3></div>
+          ${a.weapons.length ? `<div class="hbars">${a.weapons.slice(0, 7).map(([k, n]) => barRow(esc(weaponLabel(k)), n, maxW, `${n} <span class="muted">${pct((n * 100) / Math.max(1, a.kills))}</span>`)).join("")}</div>` : `<p class="muted">Recorded from your next match on.</p>`}
+          <div class="sec-head"><h3>Multi-kill rounds</h3></div>
+          <div class="multi">${["2 kills", "3 kills", "4 kills", "Ace"].map((label, i) => `<div><span class="display">${a.multi[i]}</span><span class="muted">${label}</span></div>`).join("")}</div>
+        </section>
+      </div>
+      ${hasBuys || hasEnds ? `<div class="cols even">
+        <section><div class="sec-head"><h3>Rounds won by what you bought</h3></div>
+          ${hasBuys ? `<div class="hbars">${a.buys.filter((b) => b.played).map((b) => csRateBar(BUY_NAMES[b.key], b)).join("")}</div>
+            <p class="hint">From the value of what you carried into the round: under $1,500 is an eco, under $3,500 a force buy.</p>` : `<p class="muted">Recorded from your next match on.</p>`}</section>
+        <section><div class="sec-head"><h3>How rounds ended</h3></div>
+          ${hasEnds ? `<div class="stat-list">${a.ends.filter((e) => e.won + e.lost).map((e) => `<div><span>${END_NAMES[e.key]}</span><span class="num"><b class="win">${e.won} won</b> <span class="muted">·</span> <b class="loss">${e.lost} lost</b></span></div>`).join("")}</div>` : `<p class="muted">Recorded from your next match on.</p>`}</section>
+      </div>` : ""}`;
   },
 });
 
@@ -276,6 +264,7 @@ function csMatchHtml(m, live) {
     ])}
     ${wk.length ? `<div class="sec-head"><h3>Kills by weapon</h3></div><div class="hbars narrow">${wk.slice(0, 6).map(([k, n]) => barRow(esc(weaponLabel(k)), n, wk[0][1], String(n))).join("")}</div>` : ""}
     ${m.ended && m.incomplete ? `<p class="hint">You left before the end, so there's no result for this match.</p>` : ""}
+    ${m.ended ? `<p class="hint">${m.simulated ? "" : "Saved to Matches. "}<button class="link" data-act="cs-sim" type="button">${m.simulated ? "Run the test match again" : "Watch a test match"}</button></p>` : ""}
   </div>`;
 }
 
@@ -295,7 +284,7 @@ view("cs-live", {
 
 view("cs-matches", {
   game: "cs2", nav: true, icon: "matches", title: "Matches",
-  sub: () => (CS.history.length ? `${CS.history.length} matches recorded while you played` : "Matches TheTracker recorded while you played"),
+  sub: () => (CS.history.length ? `${CS.history.length} match${CS.history.length === 1 ? "" : "es"} recorded while you played` : "Matches TheTracker recorded while you played"),
   load: csLoad,
   render() {
     const all = [...CS.history].reverse();
@@ -325,6 +314,7 @@ view("cs-matches", {
               ${roundStrip(m.rounds)}
               <div class="row wrap">${wk.slice(0, 6).map(([k, n]) => `<span class="chip static">${esc(weaponLabel(k))} <b>${n}</b></span>`).join("")}
                 <span class="grow"></span><button class="link danger" data-act="cs-delete" data-id="${esc(m.id)}" type="button">Delete this match</button></div>
+              <p class="hint">Hover a round for what you bought and how it ended. A dot above a round marks the bomb going off or being defused.</p>
             </td></tr>` : ""}`;
         }).join("")}</tbody></table></div>
       <div class="sec-head"><h3>By map</h3></div>

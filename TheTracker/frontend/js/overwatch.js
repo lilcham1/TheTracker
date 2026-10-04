@@ -10,6 +10,7 @@ const OW = {
 const owOverview = resource("owOverview", "ow_overview", { args: () => ({ mode: OW.mode }), ttl: 10 * 60000 });
 const owHero = resource("owHero", "ow_hero", { args: () => ({ hero: OW.hero, mode: OW.mode }), ttl: 10 * 60000 });
 const owMeta = resource("owMeta", "ow_meta", { args: () => ({ mode: OW.meta.mode, region: OW.meta.region, division: OW.meta.division, map: OW.meta.map }), ttl: 30 * 60000 });
+const owProgress = resource("owProgress", "ow_progress", { args: () => ({ mode: OW.mode }), ttl: 60000 });
 const owLinked = () => !!(S.boot && S.boot.overwatchLink && S.boot.overwatchLink.playerId);
 const owHours = (secs) => (secs >= 3600 ? `${(secs / 3600).toFixed(secs >= 36000 ? 0 : 1)} h` : secs >= 60 ? `${Math.round(secs / 60)} min` : `${Math.round(secs)} s`);
 const owCap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
@@ -37,13 +38,14 @@ act("ow-pick", async (el) => {
   S.boot.overwatchLink = link;
   owOverview.clear();
   owHero.clear();
+  owProgress.clear();
   OW.hero = null;
   toast(`Overwatch connected to ${link.name}.`);
   ACTIONS.refresh();
 });
 act("ow-mode", (el) => {
   OW.mode = el.dataset.value;
-  owOverview.load();
+  owOverview.load().then(() => owProgress.load(true));
   if (OW.hero) owHero.load();
   rerender();
 });
@@ -91,7 +93,9 @@ function owModeChips() {
 function owLoad(force) {
   if (!owLinked()) return Promise.resolve();
   if (OW.hero && S.view === "ow-heroes") owHero.load(force);
-  return owOverview.load(force);
+  // Progress is read after the overview: fetching the overview is what
+  // records a new snapshot.
+  return owOverview.load(force).then(() => owProgress.load(true));
 }
 
 function owStatList(group, limit) {
@@ -132,6 +136,7 @@ view("ow-overview", {
         { label: "Damage per 10 min", value: fmtNum(Math.round(g.avgDamage)), sub: `${fmtNum(Math.round(g.avgHealing))} healing` },
         { label: "Time played", value: owHours(g.timePlayed), sub: `${fmtNum(g.gamesPlayed)} games` },
       ]) : emptyState("No games in this mode", "Pick another mode above.")}
+      ${owSinceHtml()}
       <div class="cols">
         <section><div class="sec-head"><h3>Most played heroes</h3><button class="link" data-act="go" data-view="ow-heroes" type="button">All heroes</button></div>
           <div class="lines">${top.map((h) => `<button class="line" data-act="ow-hero" data-hero="${esc(h.key)}" type="button" title="Everything recorded for ${esc(h.name)}">${imgHtml(h.portrait, "avatar small")}<span class="grow"><b>${esc(h.name)}</b><span class="muted"> ${owHours(h.timePlayed)}</span></span><span class="num muted">${h.kda.toFixed(2)} KDA</span><span class="num ${toneOfRate(h.winRate)}">${pct(h.winRate)}</span></button>`).join("") || `<p class="muted">Nothing played in this mode.</p>`}</div></section>
@@ -190,6 +195,61 @@ view("ow-heroes", {
           <td class="num">${owHours(h.timePlayed)}</td><td class="num">${fmtNum(h.gamesPlayed)}</td><td class="num display ${toneOfRate(h.winRate)}">${pct(h.winRate)}</td><td>${rateBar(h.winRate, 35, 65)}</td>
           <td class="num">${h.kda.toFixed(2)}</td><td class="num">${h.avgEliminations.toFixed(1)}</td><td class="num">${fmtNum(Math.round(h.avgDamage))}</td><td class="num">${fmtNum(Math.round(h.avgHealing))}</td></tr>`).join("")}</tbody></table></div>
         <p class="hint">Select a hero for its full record: bests, averages and ability stats.</p>` : emptyState("No heroes played in this mode and role")}`;
+  },
+});
+
+// ---------- Progress ----------
+//
+// Blizzard publishes running totals, not matches. The backend remembers the
+// totals each time it reads the profile; these pages show the differences.
+
+const owDay = (unix) => new Date(unix * 1000).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+const owSessionRate = (s) => (s.won + s.lost ? (s.won * 100) / (s.won + s.lost) : null);
+
+/// The latest sitting, as a strip on the Overview.
+function owSinceHtml() {
+  const p = owProgress.data;
+  if (!p || !p.since) return "";
+  const s = p.sessions[0];
+  if (!s) return `<div class="note">Progress tracking started ${ago(p.since)}. After your next games, what changed will show here. <button class="link" data-act="go" data-view="ow-progress" type="button">How it works</button></div>`;
+  return `<button class="since" data-act="go" data-view="ow-progress" type="button" title="Every session since tracking began">
+    <span class="since-label">Last session <span class="muted">${ago(s.to)}</span></span>
+    <span class="since-main display">${s.games} game${s.games === 1 ? "" : "s"} <span class="win">${s.won}W</span> <span class="loss">${s.lost}L</span></span>
+    <span class="since-heroes">${s.heroes.slice(0, 5).map((h) => imgHtml(h.portrait, "avatar small")).join("")}</span>
+    <span class="muted">${owHours(s.time)} played</span><span class="grow"></span><span class="link">All sessions</span></button>`;
+}
+
+view("ow-progress", {
+  game: "overwatch", nav: true, icon: "sessions", title: "Progress",
+  sub: () => "What changed on your profile, session by session",
+  load: owLoad,
+  render() {
+    if (!owLinked()) return owLinkHtml();
+    const wait = gate(owProgress, "Reading your progress…");
+    if (wait) return owModeChips() + wait;
+    const p = owProgress.data, t = p.total;
+    const how = `<p class="hint">Blizzard publishes running totals, not matches. TheTracker remembers the totals each time it reads your profile (about every half hour while it's running) and shows the difference. So games appear here grouped into sessions, a little after you play them, and only from the day tracking began.</p>`;
+    const ranks = p.ranks.length ? `<div class="sec-head"><h3>Rank history</h3></div>
+      <div class="lines">${p.ranks.map((c) => `<div class="line static"><span class="when muted" style="text-align:left;min-width:110px">${owDay(c.at)}</span>
+        <span class="ranks grow">${c.ranks.map((r) => `<span class="rank">${imgHtml(r.icon, "rank-icon")}<span>${esc(r.role)} <b>${esc(owCap(r.division))} ${r.tier}</b></span></span>`).join("")}</span></div>`).join("")}</div>` : "";
+    if (!p.since) return owModeChips() + emptyState("Nothing recorded for this mode yet", "Your profile is read shortly after the app starts. Come back after your next games.") + how;
+    if (!p.sessions.length) return owModeChips() + emptyState("No games since tracking began", `TheTracker started watching this profile ${ago(p.since)}. Your next games will show here.`) + ranks + how;
+
+    const top = t.heroes[0];
+    return `${owModeChips()}
+      ${statRow([
+        { label: `Since ${owDay(p.since)}`, value: `${fmtNum(t.games)} game${t.games === 1 ? "" : "s"}`, sub: `${t.won} won, ${t.lost} lost` },
+        { label: "Win rate", value: pct(owSessionRate(t)), tone: toneOfRate(owSessionRate(t)), sub: "since tracking began", extra: sparkline([...p.sessions].reverse().map(owSessionRate)) },
+        { label: "Time played", value: owHours(t.time), sub: `${p.sessions.length} session${p.sessions.length === 1 ? "" : "s"}` },
+        { label: "Most played", value: top ? `<span class="cell">${imgHtml(top.portrait, "avatar small")}${esc(top.name)}</span>` : "–", sub: top ? `${top.games} games, ${top.won} won` : "" },
+      ])}
+      <div class="sec-head"><h3>Sessions</h3></div>
+      <div class="table-wrap"><table class="table"><thead><tr><th>Seen</th><th class="num">Games</th><th class="num">Won</th><th class="num">Lost</th><th class="num">Win rate</th><th class="num">Time</th><th>Heroes</th></tr></thead>
+        <tbody>${p.sessions.map((s) => `<tr><td><b>${owDay(s.to)}</b><span class="sub">${ago(s.to)}</span></td>
+          <td class="num display">${s.games}</td><td class="num win">${s.won}</td><td class="num loss">${s.lost}</td>
+          <td class="num ${toneOfRate(owSessionRate(s))}">${pct(owSessionRate(s))}</td><td class="num">${owHours(s.time)}</td>
+          <td><span class="chips">${s.heroes.slice(0, 6).map((h) => `<span class="chip static" title="${h.won} won of ${h.games}, ${owHours(h.time)}">${imgHtml(h.portrait, "avatar tiny")}${esc(h.name)} <b>${h.games}</b></span>`).join("")}</span></td></tr>`).join("")}</tbody></table></div>
+      ${ranks}${how}`;
   },
 });
 
@@ -283,8 +343,8 @@ view("welcome", {
       <div class="game-cards">
         ${card("dota", "Dota 2", "Live match tracking, an in-game overlay for runes and stacks, match history, draft help and the meta.")}
         ${card("deadlock", "Deadlock", "Match history with scoreboards, your heroes, the meta and the ranked leaderboard.")}
-        ${card("cs2", "Counter-Strike 2", "Live tracking of your own matches, round by round: kills, damage, headshots, weapons and sides, saved as you play.")}
-        ${card("overwatch", "Overwatch", "Your career by mode, role and hero from your public profile, plus the hero meta by rank and map.")}
+        ${card("cs2", "Counter-Strike 2", "Live tracking of your own matches, round by round: kills, damage, headshots, weapons, buys and sides, saved as you play.")}
+        ${card("overwatch", "Overwatch", "Your career by mode, role and hero from your public profile, what changed session by session, and the hero meta by rank and map.")}
       </div>
       <button class="btn" data-act="welcome-done" type="button" ${any ? "" : "disabled"}>Continue</button>
       ${any ? "" : `<p class="hint">Pick at least one game.</p>`}
