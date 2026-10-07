@@ -88,7 +88,8 @@ view("dl-overview", {
           <p class="muted">${d.rank ? esc(d.rank.label) : "Not ranked yet"}</p>${formStrip(dlResults(rows), 30)}</div>
         <div class="today"><div class="stat-label">Today</div>
           <div class="display ${today.games ? toneOfRate(today.rate) : ""}">${today.games ? `${today.wins} – ${today.losses}` : "No games yet"}</div>
-          ${streak && streak.n >= 2 ? `<div class="muted">${streak.n} ${streak.won ? "wins" : "losses"} in a row</div>` : ""}</div>
+          ${streak && streak.n >= 2 ? `<div class="muted">${streak.n} ${streak.won ? "wins" : "losses"} in a row</div>` : ""}
+          <button class="btn ghost small share-btn" data-act="share" data-kind="deadlock" type="button">Share</button></div>
       </section>
       ${statRow([
         { label: `Win rate, last ${rows.length}`, value: s.wins + s.losses ? pct(s.winRate) : "–", tone: toneOfRate(s.wins + s.losses ? s.winRate : null), sub: `${s.wins} won, ${s.losses} lost` },
@@ -105,7 +106,7 @@ view("dl-overview", {
           <div class="sec-head"><h3>Most played</h3></div><div class="lines">${heroes.slice(0, 5).map(line).join("")}</div>
         </section>
       </div>
-      <p class="hint">Deadlock has no live feed, so matches appear after they end, from the community-run Deadlock API.</p>`;
+      <details class="about"><summary>About this data</summary><p>Deadlock has no live feed, so matches appear after they end, from the community-run Deadlock API.</p></details>`;
   },
 });
 
@@ -319,7 +320,7 @@ view("dl-meta", {
       <div class="filters"><div class="row"><div class="chips">${tab("heroes", `Heroes (${d.heroes.length})`)}${tab("items", `Items (${d.items.length})`)}</div>
         <input class="input" id="dlMetaQuery" type="search" placeholder="${items ? "Find an item" : "Find a hero"}" value="${esc(DL.metaQuery)}" data-input="dlmeta-query" /></div></div>
       ${rows.length ? `<div class="table-wrap"><table class="table">${table}</table></div>` : emptyState(items ? "No item data right now" : "Nothing matches that", items ? "The Deadlock API didn't return item statistics. Try Refresh in a minute." : "")}
-      <p class="hint">Computed from the community Deadlock API's public statistics. ${items ? "Popularity is how often an item is bought compared with the most-bought item." : "Picked in is the share of matches the hero appears in."}</p>`;
+      <details class="about"><summary>About this data</summary><p>Computed from the community Deadlock API's public statistics. ${items ? "Popularity is how often an item is bought compared with the most-bought item." : "Picked in is the share of matches the hero appears in."}</p></details>`;
   },
 });
 

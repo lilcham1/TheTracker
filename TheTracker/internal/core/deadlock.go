@@ -275,6 +275,11 @@ func (d *Deadlock) Overview(limit int, force bool) (DeadlockOverview, error) {
 	if err != nil {
 		return DeadlockOverview{}, err
 	}
+	return d.overviewFor(account, limit, force)
+}
+
+// overviewFor is any public account's recent matches and rank.
+func (d *Deadlock) overviewFor(account uint64, limit int, force bool) (DeadlockOverview, error) {
 	limit = clampLimit(limit, 100, 500)
 	c, fresh, err := cachedFetch(d.store, fmt.Sprintf("dl_matches_%d_%d", account, limit), 2*time.Minute, force, func() (deadlockCached, error) {
 		var rows []jsonMap

@@ -164,6 +164,12 @@ func (o *Overwatch) Overview(mode string, force bool) (OwOverview, error) {
 	if link.PlayerID == "" {
 		return OwOverview{}, errors.New("No Overwatch profile connected yet.")
 	}
+	return o.overviewFor(link, mode, force, true)
+}
+
+// overviewFor reads any public profile. Only the player's own profile is
+// remembered for Progress.
+func (o *Overwatch) overviewFor(link OwLink, mode string, force, remember bool) (OwOverview, error) {
 	if mode != "competitive" && mode != "quickplay" {
 		mode = "all"
 	}
@@ -222,7 +228,9 @@ func (o *Overwatch) Overview(mode string, force bool) (OwOverview, error) {
 			}
 			return out.Heroes[i].Name < out.Heroes[j].Name
 		})
-		o.remember(link.PlayerID, out)
+		if remember {
+			o.remember(link.PlayerID, out)
+		}
 		return out, nil
 	})
 	ov.Freshness = fresh

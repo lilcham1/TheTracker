@@ -114,6 +114,13 @@ async function saveOverlay(patch) {
   const prefs = await attempt(() => invoke("save_overlay_settings", next));
   if (prefs) S.boot.prefs = prefs;
   rerender();
+  // The preview reads the saved settings itself; ask it to look again now.
+  const preview = document.getElementById("ovPreview");
+  try {
+    if (preview && preview.contentWindow && preview.contentWindow.loadSettings) preview.contentWindow.loadSettings();
+  } catch (_) {
+    /* the preview catches up on its own */
+  }
 }
 
 onChange("ov-range", (el) => {
@@ -145,7 +152,7 @@ function overlayHtml() {
   const sim = S.live && S.live.simulating;
   return `<section class="set">
       <h3>In-game overlay</h3>
-      <p class="muted">A small transparent window over Dota that counts down to rune spawns, lotuses and the stack pull, and shows nothing the rest of the time. It works from the game clock only: nothing an opponent is doing, nothing you couldn't work out yourself. Dota must be in borderless or windowed mode for any overlay to show on top of it.</p>
+      <p class="muted">Counts down to runes, lotuses and the camp pull from the game clock, and shows nothing the rest of the time. Dota must run in borderless or windowed mode for it to show on top.</p>
       <label class="switch"><input type="checkbox" data-change="ov-save" data-key="auto" ${o.auto ? "checked" : ""} /><span>Show it when a match starts and hide it when the match ends</span></label>
       <label class="switch"><input type="checkbox" data-change="ov-save" data-key="clickThrough" ${o.clickThrough ? "checked" : ""} /><span>Let clicks pass through it to the game <span class="muted">(recommended)</span></span></label>
       <div class="row wrap"><button class="btn" data-act="${sim ? "sim-stop" : "ov-test"}" type="button">${sim ? "Stop the test match" : "Test it now"}</button>
@@ -153,11 +160,22 @@ function overlayHtml() {
     </section>
     <section class="set">
       <h3>Reminders</h3>
-      <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="runes" ${o.dota.runes ? "checked" : ""} /><span>Runes <span class="muted">(bounty, water, power and wisdom)</span></span></label>
-      <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="lotus" ${o.dota.lotus ? "checked" : ""} /><span>Healing lotus</span></label>
-      <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="stacks" ${o.dota.stacks ? "checked" : ""} /><span>Camp pull <span class="muted">(at :52 each minute from 1:52; its countdown always starts 7 seconds before)</span></span></label>
+      <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="runes" ${o.dota.runes ? "checked" : ""} /><span>Runes and shrines <span class="muted">(bounty every 4 min, water at 2 and 4, power every 2 from 6:00, wisdom shrines every 7)</span></span></label>
+      <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="lotus" ${o.dota.lotus ? "checked" : ""} /><span>Healing lotus <span class="muted">(every 3 min from 3:00)</span></span></label>
+      <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="stacks" ${o.dota.stacks ? "checked" : ""} /><span>Camp pull <span class="muted">(counts down from :45 to the :52 pull, from 1:45)</span></span></label>
       <label class="field"><span>Warn me <b id="ovLeadVal">${o.leadSeconds} s</b> before runes and lotuses</span>
         <input type="range" id="ovLead" min="3" max="30" step="1" value="${o.leadSeconds}" data-input="ov-range" data-unit="s" data-change="ov-save" data-key="leadSeconds" /></label>
+      <p class="hint">Since patch 7.41 a shrine or lotus pool fills more slowly while an enemy stands in it, so those can come a little later than shown. In Turbo the lotus is taken as twice as fast.</p>
+    </section>
+    <section class="set">
+      <h3>Look</h3>
+      <div class="ov-look">
+        <div class="ov-look-opts">
+          <label class="switch"><input type="checkbox" data-change="ov-save" data-key="compact" ${o.compact ? "checked" : ""} /><span>Compact <span class="muted">(icon and seconds only)</span></span></label>
+          <label class="switch"><input type="checkbox" data-change="ov-save" data-key="nextUp" ${o.nextUp ? "checked" : ""} /><span>Show what's next <span class="muted">(one quiet line with the next two events)</span></span></label>
+        </div>
+        <div class="ov-preview"><span class="muted">Preview</span><iframe id="ovPreview" src="overlay.html?preview" title="Overlay preview" tabindex="-1"></iframe></div>
+      </div>
     </section>
     <section class="set">
       <h3>Position and size</h3>

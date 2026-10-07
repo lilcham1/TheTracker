@@ -17,6 +17,7 @@
       <button class="nav-item today-btn" id="todayBtn" data-act="go" data-view="today" type="button">
         <span class="ico" data-ico="today"></span><span>Today</span>
       </button>
+      <button class="search-btn" data-act="pal-open" type="button" title="Search pages and heroes"><span class="ico" data-ico="search"></span><span class="grow">Search</span><kbd>Ctrl K</kbd></button>
 
       <div class="games" id="games" role="tablist" aria-label="Game"></div>
 
@@ -59,6 +60,15 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
+  <div class="palette" id="palette" hidden>
+    <div class="pal-back" data-act="pal-close"></div>
+    <div class="pal-box" role="dialog" aria-label="Search">
+      <input class="pal-input" id="palInput" type="text" placeholder="Go to a page or hero…" autocomplete="off" spellcheck="false" />
+      <div class="pal-list" id="palList"></div>
+      <div class="pal-foot muted"><span><kbd>↑</kbd><kbd>↓</kbd> choose</span><span><kbd>Enter</kbd> open</span><span><kbd>Ctrl 1–4</kbd> games</span><span><kbd>Ctrl T</kbd> today</span><span><kbd>Esc</kbd> close</span></div>
+    </div>
+  </div>
+
   <script src="js/shell.js"></script>
   <script src="js/core.js"></script>
   <script src="js/dota.js"></script>
@@ -67,7 +77,10 @@
   <script src="js/cs2.js"></script>
   <script src="js/overwatch.js"></script>
   <script src="js/today.js"></script>
+  <script src="js/compare.js"></script>
+  <script src="js/share.js"></script>
   <script src="js/settings.js"></script>
+  <script src="js/palette.js"></script>
   <script src="js/boot.js"></script>
 </body>
 </html>

@@ -112,6 +112,7 @@ view("today", {
     const liveNow = S.live && S.live.live && games.includes("dota") ? ["Dota 2", "live"] : CS.status && CS.status.live && games.includes("cs2") ? ["Counter-Strike 2", "cs-live"] : null;
 
     return `${liveNow ? `<button class="since" data-act="go" data-view="${liveNow[1]}" type="button"><span class="live-dot"></span><span class="since-main display">A ${liveNow[0]} match is running</span><span class="grow"></span><span class="link">Watch it live</span></button>` : ""}
+      <div class="row"><span class="grow"></span><button class="btn ghost small share-btn" data-act="share" data-kind="today" type="button">Share my week</button></div>
       ${statRow([
         { label: "Today", value: day.games ? `${day.games} game${day.games === 1 ? "" : "s"}` : "No games yet", sub: day.games ? `${day.won} won, ${day.lost} lost` : "Across every game you track" },
         { label: "Won today", value: pct(rate(day)), tone: toneOfRate(rate(day)) },
@@ -121,6 +122,6 @@ view("today", {
       <div class="today-grid">${games.map((g) => `<section class="today-card" data-theme="${g}">
         <div class="sec-head"><h3>${GAME_NAMES[g]}</h3><button class="link" data-act="game" data-game="${g}" type="button">Open</button></div>
         ${todayCardBody(g)}</section>`).join("")}</div>
-      <p class="hint">Dota 2 and Deadlock come from your match history, CS2 from the matches recorded here, and Overwatch from the changes seen on your profile, so its games can show up a little late.</p>`;
+      <details class="about"><summary>About this data</summary><p>Dota 2 and Deadlock come from your match history, CS2 from the matches recorded here, and Overwatch from the changes seen on your profile, so its games can show up a little late.</p></details>`;
   },
 });

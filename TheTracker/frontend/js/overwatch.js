@@ -128,6 +128,7 @@ view("ow-overview", {
         <div class="grow"><h2 class="display">${esc(d.name)}</h2>
           <p class="muted">${[d.title ? esc(d.title) : null, d.endorsement ? `Endorsement level ${d.endorsement}` : null].filter(Boolean).join(", ")}</p>
           <div class="ranks">${d.ranks.length ? d.ranks.map((r) => `<span class="rank">${imgHtml(r.icon, "rank-icon")}<span>${esc(r.role)} <b>${esc(owCap(r.division))} ${r.tier}</b></span></span>`).join("") : `<span class="muted">No competitive rank this season</span>`}</div></div>
+        <button class="btn ghost small share-btn" data-act="share" data-kind="overwatch" type="button">Share</button>
       </section>
       ${owModeChips()}
       ${g.gamesPlayed ? statRow([
@@ -148,7 +149,7 @@ view("ow-overview", {
         ${best ? `<section><div class="sec-head"><h3>Your best in one game</h3></div>${owStatList(best, 10)}</section>` : ""}
         ${avg ? `<section><div class="sec-head"><h3>Your average per 10 minutes</h3></div>${owStatList(avg, 10)}</section>` : ""}
       </div>${OW.mode === "all" ? `<p class="hint">Bests and averages are from Quick Play. Pick Competitive above for those.</p>` : ""}` : ""}
-      <p class="hint">From the community OverFast API, which reads the career profile Blizzard publishes. Blizzard doesn't publish individual matches, so there is no match list, and totals update when Blizzard refreshes your profile.</p>`;
+      <details class="about"><summary>About this data</summary><p>From the community OverFast API, which reads the career profile Blizzard publishes. Blizzard doesn't publish individual matches, so there is no match list, and totals update when Blizzard refreshes your profile.</p></details>`;
   },
 });
 
@@ -228,7 +229,7 @@ view("ow-progress", {
     const wait = gate(owProgress, "Reading your progress…");
     if (wait) return owModeChips() + wait;
     const p = owProgress.data, t = p.total;
-    const how = `<p class="hint">Blizzard publishes running totals, not matches. TheTracker remembers the totals each time it reads your profile (about every half hour while it's running) and shows the difference. So games appear here grouped into sessions, a little after you play them, and only from the day tracking began.</p>`;
+    const how = `<details class="about"><summary>About this data</summary><p>Blizzard publishes running totals, not matches. TheTracker remembers the totals each time it reads your profile (about every half hour while it's running) and shows the difference. So games appear here grouped into sessions, a little after you play them, and only from the day tracking began.</p></details>`;
     const ranks = p.ranks.length ? `<div class="sec-head"><h3>Rank history</h3></div>
       <div class="lines">${p.ranks.map((c) => `<div class="line static"><span class="when muted" style="text-align:left;min-width:110px">${owDay(c.at)}</span>
         <span class="ranks grow">${c.ranks.map((r) => `<span class="rank">${imgHtml(r.icon, "rank-icon")}<span>${esc(r.role)} <b>${esc(owCap(r.division))} ${r.tier}</b></span></span>`).join("")}</span></div>`).join("")}</div>` : "";
@@ -300,7 +301,7 @@ view("ow-meta", {
             ${hasBans ? `<td class="num">${pct(h.banRate, 1)}</td><td><span class="bar"><i class="loss" style="width:${((h.banRate * 100) / maxBan).toFixed(0)}%"></i></span></td>` : ""}
             ${mine.size ? `<td class="num">${me ? `${pct(me.winRate)} <span class="${diff >= 0 ? "win" : "loss"}">${diff >= 0 ? "+" : "−"}${Math.abs(diff).toFixed(0)}</span><span class="sub">${fmtNum(me.gamesPlayed)} games</span>` : `<span class="muted">–</span>`}</td>` : ""}</tr>`;
         }).join("")}</tbody></table></div>` : emptyState("No heroes in this role")}
-      <p class="hint">Rates as Blizzard publishes them for PC, through the community OverFast API.${mine.size ? ` "You" is your own win rate on heroes with at least 3 games in ${modeName}, and how far it sits from everyone's.` : ""}</p>`;
+      <details class="about"><summary>About this data</summary><p>Rates as Blizzard publishes them for PC, through the community OverFast API.${mine.size ? ` "You" is your own win rate on heroes with at least 3 games in ${modeName}, and how far it sits from everyone's.` : ""}</p></details>`;
   },
 });
 

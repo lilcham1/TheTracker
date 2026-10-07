@@ -365,6 +365,30 @@ func commands(a *core.App) map[string]command {
 			return a.Ow.Progress(p.Mode), nil
 		}),
 
+		// ----- Compare and share -----
+		"friends":       none(func() (any, error) { return s.Friends(), nil }),
+		"friend_forget": in(func(f core.Friend) (any, error) { return s.ForgetFriend(f.Game, f.ID), nil }),
+		"friend_search": in(func(p struct {
+			Game  string `json:"game"`
+			Query string `json:"query"`
+		}) (any, error) {
+			return a.FindFriend(p.Game, p.Query)
+		}),
+		"compare": in(func(p struct {
+			Friend core.Friend `json:"friend"`
+			Mode   string      `json:"mode"`
+			Force  bool        `json:"force"`
+		}) (any, error) {
+			return a.Compare(p.Friend, p.Mode, p.Force)
+		}),
+		"save_image": in(func(p struct {
+			Name    string `json:"name"`
+			DataURL string `json:"dataUrl"`
+		}) (any, error) {
+			path, err := core.SaveImage(core.ExportDir(), p.Name, p.DataURL)
+			return map[string]string{"path": path}, err
+		}),
+
 		// ----- Account and cloud -----
 		"auth_status": none(func() (any, error) { return a.Cloud.Auth(), nil }),
 		// One way in. The browser does the signing in; these start it, report

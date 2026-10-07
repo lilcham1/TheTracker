@@ -286,6 +286,7 @@ view("overview", {
           <div class="stat-label">Today</div>
           <div class="display ${today.games ? toneOfRate(today.rate) : ""}">${today.games ? `${today.wins} – ${today.losses}` : "No games yet"}</div>
           ${streak && streak.n >= 2 ? `<div class="muted">${streak.n} ${streak.won ? "wins" : "losses"} in a row</div>` : ""}
+          <button class="btn ghost small share-btn" data-act="share" data-kind="dota" type="button">Share</button>
         </div>
       </section>
 
@@ -719,8 +720,8 @@ view("matches", {
             <td class="num">${dash(m.heroDamage, fmtNum)}</td><td class="num">${dash(m.durationSeconds, fmtClock)}</td><td class="num muted">${ago(m.startTime)}</td></tr>
             ${open ? `<tr class="detail"><td colspan="${MATCH_COLS.length}">${scoreboardHtml(m.matchId)}</td></tr>` : ""}`;
         }).join("")}</tbody></table></div>` : emptyState("Nothing matches those filters", "Try a different mode, queue or hero.")}
-      <p class="hint">Results, modes and scoreboards come from OpenDota${local ? `; ${local} match${local === 1 ? "" : "es"} it doesn't have ${local === 1 ? "was" : "were"} recorded by TheTracker from Dota's live feed` : ""}.
-        A game you just finished can take a few minutes to arrive. <button class="link" data-act="od-rescan" type="button">Ask OpenDota to rescan</button></p>`;
+      <details class="about"><summary>About this data</summary><p>Results, modes and scoreboards come from OpenDota${local ? `; ${local} match${local === 1 ? "" : "es"} it doesn't have ${local === 1 ? "was" : "were"} recorded by TheTracker from Dota's live feed` : ""}.
+        A game you just finished can take a few minutes to arrive. <button class="link" data-act="od-rescan" type="button">Ask OpenDota to rescan</button></p></details>`;
   },
 });
 
@@ -858,7 +859,7 @@ view("heroes", {
         <td class="num">${h.recent || "–"}</td><td class="num ${toneOfRate(h.recentRate)}">${h.r && h.r.games ? pct(h.recentRate) : "–"}</td><td class="num">${h.r ? dash(h.r.kda, (v) => v.toFixed(2)) : "–"}</td>
         <td class="num">${h.l ? h.l.games : "–"}</td><td class="num ${h.l ? toneOfRate(h.l.winRate) : ""}">${h.l ? pct(h.l.winRate) : "–"}</td><td class="num muted">${ago(h.last)}</td>
         <td>${h.r ? formStrip(h.r.rows.map((m) => m.won), 10) : ""}</td></tr>`).join("")}</tbody></table></div>
-      <p class="hint">All-time figures are OpenDota's record for your account across every mode. Recent figures cover your last ${timeline().length} matches.</p>`;
+      <details class="about"><summary>About this data</summary><p>All-time figures are OpenDota's record for your account across every mode. Recent figures cover your last ${timeline().length} matches.</p></details>`;
   },
 });
 

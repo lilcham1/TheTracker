@@ -26,8 +26,12 @@ type OverlaySettings struct {
 	// Show when a match starts, hide when it ends.
 	Auto bool `json:"auto"`
 	// Display name to pin the overlay to; empty follows the main window.
-	Monitor string     `json:"monitor"`
-	Dota    DotaPanels `json:"dota"`
+	Monitor string `json:"monitor"`
+	// Icon and seconds only, without the words.
+	Compact bool `json:"compact"`
+	// One quiet line naming the next two events.
+	NextUp bool       `json:"nextUp"`
+	Dota   DotaPanels `json:"dota"`
 }
 
 type Build struct {

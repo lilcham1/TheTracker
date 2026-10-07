@@ -308,6 +308,11 @@ func (d *Dota) History(limit int, force bool) (DotaHistory, error) {
 	if err != nil {
 		return DotaHistory{}, err
 	}
+	return d.historyFor(account, limit, force)
+}
+
+// historyFor is any public account's recent matches.
+func (d *Dota) historyFor(account uint64, limit int, force bool) (DotaHistory, error) {
 	limit = clampLimit(limit, 100, 500)
 	key := fmt.Sprintf("od_matches_%d_%d", account, limit)
 	matches, fresh, err := cachedFetch(d.store, key, 2*time.Minute, force, func() ([]DotaMatch, error) {

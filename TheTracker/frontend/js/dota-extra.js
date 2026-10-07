@@ -98,7 +98,7 @@ view("draft", {
       body = picks.length
         ? `<div class="sec-head"><h3>Has done well against them</h3></div>${table(top)}
            <div class="sec-head"><h3>Has struggled against them</h3></div>${table(avoid)}
-           <p class="hint">Win rates from OpenDota's hero matchup data, weighted by games played. A matchup number says how a hero has fared, not how you will: your own record on a hero is in the last column.</p>`
+           <details class="about"><summary>About this data</summary><p>Win rates from OpenDota's hero matchup data, weighted by games played. A matchup number says how a hero has fared, not how you will: your own record on a hero is in the last column.</p></details>`
         : emptyState("No hero fits those filters", "Try another role, or include heroes you haven't played.");
     }
 
@@ -192,8 +192,8 @@ view("meta", {
           <td class="num">${pct(h.pickRate, 1)}</td><td class="num">${trendHtml(h.trend)}</td>
           <td class="num ${toneOfRate(h.highWinRate)}">${dash(h.highWinRate, (v) => pct(v, 1))}</td><td class="num ${toneOfRate(h.turboWinRate)}">${dash(h.turboWinRate, (v) => pct(v, 1))}</td>
           <td class="num">${h.proPicks || "–"}</td><td class="num">${h.proBans || "–"}</td></tr>`).join("")}</tbody></table></div>
-      <p class="hint">Computed from OpenDota's public match statistics. Trend is the change in win rate between the earlier and the more recent half of its sample.
-        OpenDota doesn't publish stats by position, so each hero's role here is an estimate from the lane it's usually played in and its role tags.</p>`;
+      <details class="about"><summary>About this data</summary><p>Computed from OpenDota's public match statistics. Trend is the change in win rate between the earlier and the more recent half of its sample.
+        OpenDota doesn't publish stats by position, so each hero's role here is an estimate from the lane it's usually played in and its role tags.</p></details>`;
   },
 });
 

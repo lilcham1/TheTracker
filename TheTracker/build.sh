@@ -22,6 +22,7 @@ echo "== tests"
 go vet ./...
 go test ./...
 for f in frontend/js/*.js; do node --check "$f"; done
+node frontend/js/overlay.test.cjs
 
 echo "== resources"
 go-winres make --in build/windows/winres/winres.json --out rsrc --arch amd64 \

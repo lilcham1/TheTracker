@@ -234,6 +234,11 @@ function statRow(entries) {
     .join("")}</div>`;
 }
 
+/// Where a page's numbers come from, folded away until asked for.
+function aboutData(text) {
+  return `<details class="about"><summary>About this data</summary><p>${text}</p></details>`;
+}
+
 function emptyState(title, body = "", action = "") {
   return `<div class="empty"><h3>${title}</h3>${body ? `<p>${body}</p>` : ""}${action}</div>`;
 }
@@ -294,6 +299,8 @@ const ICONS = {
   overlay: '<rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 9h5M7 13h3"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/>',
   today: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>',
+  compare: '<circle cx="8" cy="8" r="3.2"/><circle cx="16" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5M13 15c.9-.4 1.9-.5 3-.5 3 0 5.5 2.2 5.5 5.5"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
   star: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/>',
 };
 
@@ -711,6 +718,14 @@ async function loadHistory() {
 
 /// App-wide notices above the page: an update, the start-with-Windows
 /// question, a live-feed problem. Each is dismissible or actionable.
+/// The first sentence of a text, or its first words if that runs long.
+function firstSentence(text) {
+  const line = text.split("\n")[0];
+  const cut = line.search(/[.!?](\s|$)/);
+  const s = cut >= 0 ? line.slice(0, cut + 1) : line;
+  return s.length <= 120 ? s : s.slice(0, s.lastIndexOf(" ", 117)) + "…";
+}
+
 function renderBanners() {
   const out = [];
   const b = S.boot;
@@ -722,7 +737,7 @@ function renderBanners() {
   }
   if (S.update && S.update.available && !S.updateDismissed) {
     out.push(`<div class="banner">
-      <span><b>Version ${esc(S.update.version)} is available.</b> ${esc((S.update.notes || "").split("\n")[0].slice(0, 160))}</span>
+      <span><b>Version ${esc(S.update.version)} is available.</b> ${esc(firstSentence(S.update.notes || ""))}</span>
       <button class="btn small" data-act="install-update" type="button" ${S.updating ? "disabled" : ""}>${S.updating ? "Downloading…" : "Update and restart"}</button>
       <button class="link" data-act="dismiss-update" type="button">Later</button>
     </div>`);
@@ -733,12 +748,15 @@ function renderBanners() {
   const liveGames = b.prefs.games.dota || b.prefs.games.cs2;
   if (bg && liveGames && b.prefs.games.chosen && bg.trayAvailable && !bg.startWithWindows && !bg.autostartAsked) {
     out.push(`<div class="banner">
-      <span><b>TheTracker only records matches while it's running.</b> Start it with Windows and it's always there when you play. It opens in the tray, not on screen.</span>
+      <span><b>Never miss a match:</b> start TheTracker with Windows. It opens in the tray, not on screen.</span>
       <button class="btn small" data-act="autostart-yes" type="button">Start with Windows</button>
       <button class="link" data-act="autostart-no" type="button">Not now</button>
     </div>`);
   }
-  const html = out.join("");
+  // One at a time: an update first, then a live-feed problem, then the
+  // start-with-Windows question.
+  const order = (h) => (h.includes("install-update") ? 0 : h.includes("banner warn") ? 1 : 2);
+  const html = out.sort((a, b) => order(a) - order(b)).slice(0, 1).join("");
   const host = $("#banners");
   if (host.dataset.html !== html) {
     host.innerHTML = html;

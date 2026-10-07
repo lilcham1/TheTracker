@@ -313,7 +313,7 @@ view("cs-matches", {
             ${open ? `<tr class="detail"><td colspan="11">
               ${roundStrip(m.rounds)}
               <div class="row wrap">${wk.slice(0, 6).map(([k, n]) => `<span class="chip static">${esc(weaponLabel(k))} <b>${n}</b></span>`).join("")}
-                <span class="grow"></span><button class="link danger" data-act="cs-delete" data-id="${esc(m.id)}" type="button">Delete this match</button></div>
+                <span class="grow"></span><button class="btn ghost small" data-act="share" data-kind="cs" data-id="${esc(m.id)}" type="button">Share</button><button class="link danger" data-act="cs-delete" data-id="${esc(m.id)}" type="button">Delete this match</button></div>
               <p class="hint">Hover a round for what you bought and how it ended. A dot above a round marks the bomb going off or being defused.</p>
             </td></tr>` : ""}`;
         }).join("")}</tbody></table></div>
@@ -323,6 +323,6 @@ view("cs-matches", {
           <td class="num display ${toneOfRate(r.rate)}">${pct(r.rate)}</td><td>${known(r.rate) ? rateBar(r.rate, 0, 100) : ""}</td>
           <td class="num">${r.kd.toFixed(2)}</td><td class="num">${dash(r.adr, (v) => v.toFixed(0))}</td>
           <td class="num ${toneOfRate(r.ct.rate)}">${pct(r.ct.rate)}</td><td class="num ${toneOfRate(r.t.rate)}">${pct(r.t.rate)}</td></tr>`).join("")}</tbody></table></div>
-      <p class="hint">Recorded live from CS2's own feed. Valve publishes no CS2 match history for apps to read, so matches played while TheTracker was closed can't be added.</p>`;
+      <details class="about"><summary>About this data</summary><p>Recorded live from CS2's own feed. Valve publishes no CS2 match history for apps to read, so matches played while TheTracker was closed can't be added.</p></details>`;
   },
 });

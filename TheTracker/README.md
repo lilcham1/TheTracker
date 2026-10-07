@@ -51,6 +51,16 @@ list, only running totals, so TheTracker remembers the totals each time it
 reads your profile and shows the difference as sessions: games, wins, time
 and heroes played, plus a history of your ranks, from the day tracking began.
 
+**Compare** – a friend's public numbers next to yours for Dota 2, Deadlock
+and Overwatch: win rate, KDA, farm or damage, and the heroes you both play.
+Search by name, or paste a Steam profile link or account id.
+
+**Share cards** – save your form, a CS2 match, a comparison or your week as
+a PNG in Documents\TheTracker.
+
+**Quick search** – Ctrl+K jumps to any page or hero. Ctrl+1–4 switch games,
+Ctrl+T opens Today.
+
 **Notifications** – optionally, a Windows notification when a Dota 2 or CS2
 match has been saved. Off by default; Settings, General.
 
