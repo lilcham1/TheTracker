@@ -171,7 +171,7 @@ function dlBoardHtml(id) {
 // Only streamers who are in a live standard match on the hero (ranked first);
 // no Street Brawl, and no stream whose hero isn't known.
 
-const dlBoard = resource("dlBoard", "deadlock_live_board", { ttl: 55000 });
+const dlBoard = resource("dlBoard", "deadlock_live_board", { ttl: 20000 });
 // hero: "all", a hero id, or null for "the hero I'm playing, if any".
 const DLL = { hero: null, query: "" };
 const fmtViewers = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n));
@@ -192,7 +192,7 @@ document.addEventListener("input", (e) => {
 // Keep the board current while it is on screen.
 setInterval(() => {
   if (S.view === "dl-live" && document.visibilityState === "visible") dlBoard.load();
-}, 60000);
+}, 25000);
 
 function streamCard(p) {
   const s = p.stream;
@@ -201,7 +201,7 @@ function streamCard(p) {
     <span class="stream-body">
       <span class="stream-name"><b>${esc(s.name)}</b></span>
       <span class="stream-title">${esc(s.title || "")}</span>
-      <span class="muted stream-meta">${p.startTime ? `${minsIn(p.startTime)} min into the match` : ""}${p.name && liveSame(p.name, s.name) ? "" : ` · in game as ${esc(p.name || "?")}`}</span>
+      <span class="muted stream-meta">${p.startTime ? (minsIn(p.startTime) > 45 ? "may have just ended" : `${minsIn(p.startTime)} min into the match`) : ""}${p.name && liveSame(p.name, s.name) ? "" : ` · in game as ${esc(p.name || "?")}`}</span>
     </span></button>`;
 }
 const liveSame = (a, b) => a.toLowerCase().replace(/[^a-z0-9]/g, "") === b.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -263,7 +263,7 @@ view("dl-live", {
         <div class="chips">${chip("all", "All heroes")}${chips.join("")}</div>
       </div>
       ${shown.length ? shown.map(block).join("") : emptyState(q ? "No streamer matches that" : "No one is streaming a top live match right now", q ? "Try another name." : "Check back in a few minutes; the list refreshes every minute.")}
-      ${aboutData(`Only standard matches are shown, ranked first; Street Brawl is left out. Matches come from the community Deadlock API's copy of the game's Watch tab, which lists the top live games only. Streams come from Twitch. A stream appears under a hero when the streamer's Twitch name matches the in-game Steam name or custom Steam profile address of someone playing that hero right now, so a streamer who uses a different name in game won't be found.`)}`;
+      ${aboutData(`Only standard matches are shown, ranked first; Street Brawl is left out. Matches come from the community Deadlock API's copy of the game's Watch tab, which lists the top live games only. Streams come from Twitch. A stream appears under a hero when the streamer's Twitch name matches the in-game Steam name or custom Steam profile address of someone playing that hero right now, so a streamer who uses a different name in game won't be found. The list of live matches is a few minutes behind the game, so right after a match ends a streamer can still show under the hero they just played.`)}`;
   },
 });
 

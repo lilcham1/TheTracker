@@ -12,15 +12,18 @@ func TestLiveNamesMatchTheSamePersonOnly(t *testing.T) {
 	}{
 		{"Mew2King", stream("mew2king", "Mew2King")},
 		{"TTV_HazeMain", stream("hazemain", "HazeMain")},
+		{"ttvHazeMain", stream("hazemain", "HazeMain")},
 		{"HazeMain twitch", stream("hazemain", "HazeMain")},
 		{"[EU] SoulTaker ttv", stream("soultaker", "SoulTaker")},
 		{"twitch.tv/lockjaw99", stream("lockjaw99", "Lockjaw99")},
-		{"Ʀüh - xNovaa", stream("xnovaa", "xNovaa")},
-		{"metro_mann", stream("metro", "Metro")},
-		{"sidescrap<3jula", stream("sidescrap", "sidescrap")},
+		{"pandaego live", stream("pandaego", "Pandaego")},
+		{"MaleniaDL on twitch", stream("maleniadl", "maleniadl")},
+		{"LukieVibinYT", stream("lukievibin", "lukievibin")},
+		{"connorDMG + TTV", stream("connordmg", "connorDMG")},
+		{"(TTV) Gibdin", stream("gibdin", "Gibdin")},
 	}
 	for _, c := range yes {
-		if !sameStreamer(c.steam, "", c.s, false) {
+		if !sameStreamer(c.steam, "", c.s) {
 			t.Errorf("%q should match %q", c.steam, c.s.Login)
 		}
 	}
@@ -28,16 +31,18 @@ func TestLiveNamesMatchTheSamePersonOnly(t *testing.T) {
 		steam string
 		s     LiveStream
 	}{
-		{"Bob", stream("bobross", "BobRoss")},    // a short name inside a longer one
-		{"Gamer123", stream("gam", "gam")},       // the channel name is too short to trust partly
-		{"Haze", stream("hazemain", "HazeMain")}, // the Steam name is the shorter one
-		{"???", stream("abc", "abc")},            // nothing left to compare
+		{"KenshinH", stream("kenshittv", "KenshiTTV")}, // a different name that starts the same
+		{"metro_mann", stream("metro", "Metro")},       // someone else with a longer name
+		{"Bob", stream("bobross", "BobRoss")},          // a short name inside a longer one
+		{"Haze", stream("hazemain", "HazeMain")},       // the Steam name is the shorter one
+		{"???", stream("abc", "abc")},                  // nothing left to compare
 		{"PlayerOne", stream("playertwo", "PlayerTwo")},
 		{"average catgirl enjoyer", stream("average", "average")}, // a common word in a long name
 		{"thedeathydlfan", stream("deathy", "Deathy")},            // a fan, not the streamer
+		{"olive", stream("o", "o")},                               // "live" is only a tag as a word of its own
 	}
 	for _, c := range no {
-		if sameStreamer(c.steam, "", c.s, false) {
+		if sameStreamer(c.steam, "", c.s) {
 			t.Errorf("%q must not match %q", c.steam, c.s.Login)
 		}
 	}
@@ -45,16 +50,13 @@ func TestLiveNamesMatchTheSamePersonOnly(t *testing.T) {
 
 func TestLiveMatchesTheSteamProfileAddressToo(t *testing.T) {
 	s := LiveStream{Login: "deludeddelirium", Name: "DeludedDelirium"}
-	if !sameStreamer("DΣLIЯIUM", "DeludedDelirium", s, true) {
+	if !sameStreamer("DΣLIЯIUM", "DeludedDelirium", s) {
 		t.Fatal("the custom profile address names the channel")
 	}
 	if steamVanity("https://steamcommunity.com/id/DeludedDelirium/") != "DeludedDelirium" || steamVanity("https://steamcommunity.com/profiles/76561198061446721/") != "" {
 		t.Fatal("profile address read wrongly")
 	}
-	// A partial match is not an exact one.
-	if sameStreamer("metro_mann", "", LiveStream{Login: "metro"}, true) || !sameStreamer("metro_mann", "", LiveStream{Login: "metro"}, false) {
-		t.Fatal("exact and partial passes mixed up")
-	}
+
 }
 
 func TestDeadlockLiveBoard(t *testing.T) {

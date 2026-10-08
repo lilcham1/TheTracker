@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -64,48 +65,55 @@ type DeadlockLiveBoard struct {
 	Freshness
 }
 
-// liveName reduces a name to what two spellings of it share: lowercase
-// letters and digits, without the "ttv"/"twitch" people add to show they
-// stream.
+// streamTags are words people add to a name to say where they stream.
+var streamTags = map[string]bool{"ttv": true, "tv": true, "twitch": true, "twitchtv": true, "live": true, "yt": true, "youtube": true, "on": true, "kick": true}
+
+// bracketed is a clan or region tag: [EU], (TTV), {x}, <3.
+var bracketed = regexp.MustCompile(`\[[^\]]*\]|\([^)]*\)|\{[^}]*\}`)
+
+// liveName reduces a name to what two spellings of the same name share:
+// lowercase letters and digits, without bracketed tags or the words people
+// add to show they stream ("TTV_Gibdin", "pandaego live", "MaleniaDL on
+// twitch", "[EU] SoulTaker").
 func liveName(s string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(s) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
+	s = bracketed.ReplaceAllString(strings.ToLower(s), " ")
+	words := strings.FieldsFunc(s, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	kept := []string{}
+	for _, w := range words {
+		if !streamTags[w] {
+			kept = append(kept, w)
 		}
 	}
-	n := b.String()
-	for _, affix := range []string{"twitchtv", "twitch", "ttv", "tv"} {
-		if strings.HasPrefix(n, affix) && len(n)-len(affix) >= 3 {
+	if len(kept) == 0 {
+		return ""
+	}
+	n := strings.Join(kept, "")
+	// A tag run into the name: "LukieVibinYT", "ttvHazeMain".
+	for _, affix := range []string{"twitchtv", "twitch", "ttv", "yt", "tv"} {
+		if strings.HasPrefix(n, affix) && len(n)-len(affix) >= 4 {
 			n = n[len(affix):]
 		}
-		if strings.HasSuffix(n, affix) && len(n)-len(affix) >= 3 {
+		if strings.HasSuffix(n, affix) && len(n)-len(affix) >= 4 {
 			n = n[:len(n)-len(affix)]
 		}
 	}
 	return n
 }
 
-// sameStreamer says whether a Steam player and a Twitch channel are
-// probably the same person. exact: the Twitch name equals the Steam name or
-// the custom profile address. Otherwise, a partial match: the Twitch name
-// with a short tag on either side of the Steam name ("metro_mann" for
-// "Metro"). A common word inside a long name ("average catgirl enjoyer" for
-// "average") is never enough.
-func sameStreamer(steamName, vanity string, s LiveStream, exact bool) bool {
+// sameStreamer says whether a Steam player and a Twitch channel are the same
+// person: the Twitch name, once tags are set aside, is exactly the player's
+// Steam name or the custom part of their Steam profile address. Anything
+// looser ("KenshinH" for "KenshiTTV", "metro_mann" for "Metro") pairs
+// strangers too often, and showing the wrong person is worse than missing
+// one.
+func sameStreamer(steamName, vanity string, s LiveStream) bool {
 	twitch := []string{liveName(s.Login), liveName(s.Name)}
 	for _, mine := range []string{liveName(steamName), liveName(vanity)} {
 		if len(mine) < 3 {
 			continue
 		}
 		for _, tw := range twitch {
-			if tw == "" {
-				continue
-			}
 			if tw == mine {
-				return true
-			}
-			if !exact && len(tw) >= 5 && len(mine)-len(tw) <= 5 && (strings.HasPrefix(mine, tw) || strings.HasSuffix(mine, tw)) {
 				return true
 			}
 		}
@@ -129,7 +137,7 @@ func (d *Deadlock) livePlayers(force bool) ([]LivePlayer, map[uint64]int, int, F
 		Players []LivePlayer   `json:"players"`
 		Heroes  map[string]int `json:"heroes"`
 	}
-	c, fresh, err := cachedFetch(d.store, "dl_live_players", time.Minute, force, func() (cached, error) {
+	c, fresh, err := cachedFetch(d.store, "dl_live_players", 20*time.Second, force, func() (cached, error) {
 		var rows []jsonMap
 		if err := d.api.get("/v1/matches/active", &rows); err != nil {
 			return cached{}, err
@@ -199,22 +207,18 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 	streams, reason := a.liveStreams(force)
 	board.StreamsAvailable, board.Reason = reason == "", reason
 
-	// Each stream goes to at most one player. Exact names are matched first
-	// everywhere, so a partial match can never take a stream that belongs
-	// to someone else exactly.
+	// Each stream goes to at most one player.
 	used := map[string]bool{}
-	for _, exact := range []bool{true, false} {
-		for i := range players {
-			if players[i].Stream != nil || (players[i].Name == "" && players[i].Vanity == "") {
-				continue
-			}
-			for j := range streams {
-				if !used[streams[j].Login] && sameStreamer(players[i].Name, players[i].Vanity, streams[j], exact) {
-					s := streams[j]
-					players[i].Stream = &s
-					used[s.Login] = true
-					break
-				}
+	for i := range players {
+		if players[i].Name == "" && players[i].Vanity == "" {
+			continue
+		}
+		for j := range streams {
+			if !used[streams[j].Login] && sameStreamer(players[i].Name, players[i].Vanity, streams[j]) {
+				s := streams[j]
+				players[i].Stream = &s
+				used[s.Login] = true
+				break
 			}
 		}
 	}
@@ -281,7 +285,7 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 // liveStreams asks the cloud for Twitch's live Deadlock streams. The second
 // value is why there are none, or "".
 func (a *App) liveStreams(force bool) ([]LiveStream, string) {
-	streams, _, err := cachedFetch(a.Store, "dl_live_streams", 90*time.Second, force, func() ([]LiveStream, error) {
+	streams, _, err := cachedFetch(a.Store, "dl_live_streams", 45*time.Second, force, func() ([]LiveStream, error) {
 		v, err := a.Cloud.call("action", "twitch:deadlockStreams", nil, "")
 		if err != nil {
 			return nil, err
