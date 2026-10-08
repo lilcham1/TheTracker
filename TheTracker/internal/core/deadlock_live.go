@@ -45,6 +45,8 @@ type LivePlayer struct {
 	// True when the stream was linked to this account by hand, not guessed
 	// from names.
 	Linked bool `json:"linked,omitempty"`
+	// How the stream was tied to this player: link | name | leaderboard.
+	Via string `json:"via,omitempty"`
 	// The player's rank, for streamers only.
 	Rank *DeadlockRank `json:"rank,omitempty"`
 }
@@ -65,6 +67,8 @@ type DeadlockLiveBoard struct {
 	Matches int          `json:"matches"` // standard matches only
 	// Every streamer linked by hand, live or not.
 	Linked []LinkedStatus `json:"linked"`
+	// Live streamers found on a leaderboard whose match isn't listed.
+	Ranked []RankedStreamer `json:"ranked"`
 	// Whether Twitch could be asked; Reason says why not: not_set_up |
 	// bad_credentials | unreachable.
 	StreamsAvailable bool   `json:"streamsAvailable"`
@@ -135,6 +139,43 @@ func steamVanity(profileURL string) string {
 		return ""
 	}
 	return strings.Trim(rest, "/")
+}
+
+// RankedStreamer is a live streamer found on a leaderboard by their Twitch
+// name, whose match is not among the listed ones.
+type RankedStreamer struct {
+	Stream   LiveStream    `json:"stream"`
+	Region   string        `json:"region"`
+	Position int           `json:"position"`
+	Rank     *DeadlockRank `json:"rank,omitempty"`
+	// Set when the leaderboard name points at a single Steam account.
+	AccountID uint64 `json:"accountId,omitempty"`
+}
+
+type leaderEntry struct {
+	region   string
+	position int
+	accounts []uint64
+}
+
+// leaderboardNames is every region's leaderboard by name, for matching
+// streams. A region that can't be read is left out.
+func (d *Deadlock) leaderboardNames(force bool) map[string][]leaderEntry {
+	out := map[string][]leaderEntry{}
+	for _, r := range DeadlockRegions {
+		rows, _, err := d.leaderboardRaw(r.ID, false)
+		if err != nil {
+			continue
+		}
+		for _, e := range rows {
+			// No candidate account (or more than five, already dropped):
+			// the name can't be tied to anyone.
+			if n := liveName(e.Name); len(n) >= 3 && len(e.Maybe) > 0 {
+				out[n] = append(out[n], leaderEntry{region: r.Label, position: e.Rank, accounts: e.Maybe})
+			}
+		}
+	}
+	return out
 }
 
 // livePlayers is everyone in the Watch tab's matches, with names.
@@ -209,7 +250,7 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 	if err != nil {
 		return DeadlockLiveBoard{}, err
 	}
-	board := DeadlockLiveBoard{Matches: matches, Other: []LiveStream{}, Heroes: []LiveHero{}, Linked: []LinkedStatus{}, Freshness: fresh}
+	board := DeadlockLiveBoard{Matches: matches, Other: []LiveStream{}, Heroes: []LiveHero{}, Linked: []LinkedStatus{}, Ranked: []RankedStreamer{}, Freshness: fresh}
 
 	streams, reason := a.liveStreams(force)
 	board.StreamsAvailable, board.Reason = reason == "", reason
@@ -229,7 +270,7 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 	for i := range players {
 		if login, ok := linkOf[players[i].AccountID]; ok {
 			if s, live := byLogin[login]; live && !used[s.Login] {
-				players[i].Stream, players[i].Linked = &s, true
+				players[i].Stream, players[i].Linked, players[i].Via = &s, true, "link"
 				used[s.Login] = true
 			}
 		}
@@ -241,11 +282,69 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 		for j := range streams {
 			if !used[streams[j].Login] && sameStreamer(players[i].Name, players[i].Vanity, streams[j]) {
 				s := streams[j]
-				players[i].Stream = &s
+				players[i].Stream, players[i].Via = &s, "name"
 				used[s.Login] = true
 				break
 			}
 		}
+	}
+	// Last, the leaderboards: a Twitch name that is a leaderboard name gives
+	// the Steam accounts behind it. The stream goes to a player only when
+	// exactly one of those accounts is in a listed match.
+	if len(streams) > 0 {
+		names := a.Deadlock.leaderboardNames(force)
+		at := map[uint64]int{}
+		for i, p := range players {
+			at[p.AccountID] = i
+		}
+		for _, s := range streams {
+			if used[s.Login] {
+				continue
+			}
+			var hits []leaderEntry
+			seen := map[string]bool{}
+			for _, n := range []string{liveName(s.Login), liveName(s.Name)} {
+				if !seen[n] {
+					hits = append(hits, names[n]...)
+					seen[n] = true
+				}
+			}
+			if len(hits) == 0 {
+				continue
+			}
+			accounts := map[uint64]bool{}
+			for _, h := range hits {
+				for _, id := range h.accounts {
+					accounts[id] = true
+				}
+			}
+			live := []int{}
+			for id := range accounts {
+				if i, ok := at[id]; ok && players[i].Stream == nil {
+					live = append(live, i)
+				}
+			}
+			switch {
+			case len(live) == 1:
+				st := s
+				players[live[0]].Stream, players[live[0]].Via = &st, "leaderboard"
+				used[s.Login] = true
+			case len(live) == 0:
+				best := hits[0]
+				for _, h := range hits {
+					if h.position < best.position {
+						best = h
+					}
+				}
+				rs := RankedStreamer{Stream: s, Region: best.region, Position: best.position}
+				if len(accounts) == 1 {
+					rs.AccountID = best.accounts[0]
+				}
+				board.Ranked = append(board.Ranked, rs)
+				used[s.Login] = true
+			}
+		}
+		sort.SliceStable(board.Ranked, func(i, j int) bool { return board.Ranked[i].Stream.Viewers > board.Ranked[j].Stream.Viewers })
 	}
 	for _, s := range streams {
 		if !used[s.Login] {
@@ -266,7 +365,17 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 	for _, l := range links {
 		rankIDs = append(rankIDs, l.AccountID)
 	}
+	for _, r := range board.Ranked {
+		if r.AccountID != 0 {
+			rankIDs = append(rankIDs, r.AccountID)
+		}
+	}
 	ranks := a.Deadlock.RanksFor(rankIDs)
+	for i := range board.Ranked {
+		if r, ok := ranks[board.Ranked[i].AccountID]; ok && board.Ranked[i].AccountID != 0 {
+			board.Ranked[i].Rank = &r
+		}
+	}
 	for i := range players {
 		if r, ok := ranks[players[i].AccountID]; ok && players[i].Stream != nil {
 			players[i].Rank = &r

@@ -207,10 +207,29 @@ function streamCard(p) {
     <span class="stream-body">
       <span class="stream-name">${rankBadge(p.rank)}<b>${esc(s.name)}</b></span>
       <span class="stream-title">${esc(s.title || "")}</span>
-      <span class="muted stream-meta">${p.startTime ? (minsIn(p.startTime) > 45 ? "may have just ended" : `${minsIn(p.startTime)} min into the match`) : ""}${p.linked ? " · linked by you" : p.name && liveSame(p.name, s.name) ? "" : ` · in game as ${esc(p.name || "?")}`}</span>
+      <span class="muted stream-meta">${p.startTime ? (minsIn(p.startTime) > 45 ? "may have just ended" : `${minsIn(p.startTime)} min into the match`) : ""}${p.via === "leaderboard" ? " · found on the leaderboard" : p.linked ? " · linked by you" : p.name && liveSame(p.name, s.name) ? "" : ` · in game as ${esc(p.name || "?")}`}</span>
     </span></button>`;
 }
 const liveSame = (a, b) => a.toLowerCase().replace(/[^a-z0-9]/g, "") === b.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/// Live streamers on a leaderboard whose match isn't in the Watch tab.
+function rankedStreamersHtml(b) {
+  const list = (b.ranked || []).filter((r) => !DLL.query || r.stream.name.toLowerCase().includes(DLL.query.trim().toLowerCase()));
+  if (!b.streamsAvailable || !list.length || (DLL.hero && DLL.hero !== "all")) return "";
+  return `<section class="live-hero">
+      <div class="sec-head"><h3>Top-ranked streamers live</h3><span class="muted">on a leaderboard · match not in the Watch tab, so the hero isn't known</span></div>
+      <div class="stream-grid">${list.map((r) => {
+        const s = r.stream;
+        return `<button class="stream-card" data-act="open-url" data-url="${esc(twitchUrl(s.login))}" type="button" title="Watch ${esc(s.name)} on Twitch">
+          <span class="stream-thumb">${s.thumbnail ? `<img src="${esc(s.thumbnail)}" alt="" loading="lazy" />` : ""}<span class="live-tag">Live</span><span class="mode-tag">#${r.position} ${esc(r.region)}</span><span class="viewers">${fmtViewers(s.viewers)} watching</span></span>
+          <span class="stream-body">
+            <span class="stream-name">${rankBadge(r.rank)}<b>${esc(s.name)}</b></span>
+            <span class="stream-title">${esc(s.title || "")}</span>
+            <span class="muted stream-meta">Leaderboard #${r.position} in ${esc(r.region)}</span>
+          </span></button>`;
+      }).join("")}</div>
+    </section>`;
+}
 
 function dlLiveSetupNote(reason) {
   if (reason === "bad_credentials") return `<div class="note warn">Twitch refused the app's credentials. Check the Twitch client ID and secret set on the cloud service.</div>`;
@@ -344,7 +363,8 @@ view("dl-live", {
         <div class="chips">${chip("all", "All heroes")}${chips.join("")}</div>
       </div>
       ${shown.length ? shown.map(block).join("") : emptyState(q ? "No streamer matches that" : "No one is streaming a top live match right now", q ? "Try another name." : "Check back in a few minutes; the list refreshes every minute.")}
-      ${aboutData(`Only standard matches are shown, ranked first; Street Brawl is left out. Matches come from the community Deadlock API's copy of the game's Watch tab, which lists the top live games only. Streams come from Twitch. A stream appears under a hero when the streamer's Twitch name matches the in-game Steam name or custom Steam profile address of someone playing that hero right now, or when you have linked the channel to that Steam account. The list of live matches is a few minutes behind the game, so right after a match ends a streamer can still show under the hero they just played.`)}`;
+      ${rankedStreamersHtml(b)}
+      ${aboutData(`Only standard matches are shown, ranked first; Street Brawl is left out. Matches come from the community Deadlock API's copy of the game's Watch tab, which lists the top live games only. Streams come from Twitch. A stream appears under a hero when the streamer's Twitch name matches the in-game Steam name or custom Steam profile address of someone playing that hero right now, or matches the name of a leaderboard player whose Steam account is in that match, or when you have linked the channel to that Steam account. Leaderboard streamers whose match isn't listed appear under Top-ranked streamers live, without a hero. The list of live matches is a few minutes behind the game, so right after a match ends a streamer can still show under the hero they just played.`)}`;
   },
 });
 

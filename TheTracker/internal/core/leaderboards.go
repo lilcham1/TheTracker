@@ -124,10 +124,9 @@ type dlLeaderRaw struct {
 	Maybe   []uint64 `json:"maybe"`
 }
 
-// Leaderboard is Deadlock's ranked leaderboard for one region.
-func (d *Deadlock) Leaderboard(region string, force bool) (DeadlockLeaderboard, error) {
-	region = validRegion(DeadlockRegions, region)
-	raw, fresh, err := cachedFetch(d.store, "dl_leaderboard_"+region, 30*time.Minute, force, func() ([]dlLeaderRaw, error) {
+// leaderboardRaw is one region's board as the API gives it, kept 30 minutes.
+func (d *Deadlock) leaderboardRaw(region string, force bool) ([]dlLeaderRaw, Freshness, error) {
+	return cachedFetch(d.store, "dl_leaderboard_"+region, 30*time.Minute, force, func() ([]dlLeaderRaw, error) {
 		var v jsonMap
 		if err := d.api.get("/v1/leaderboard/"+region, &v); err != nil {
 			return nil, err
@@ -160,6 +159,12 @@ func (d *Deadlock) Leaderboard(region string, force bool) (DeadlockLeaderboard, 
 		}
 		return out, nil
 	})
+}
+
+// Leaderboard is Deadlock's ranked leaderboard for one region.
+func (d *Deadlock) Leaderboard(region string, force bool) (DeadlockLeaderboard, error) {
+	region = validRegion(DeadlockRegions, region)
+	raw, fresh, err := d.leaderboardRaw(region, force)
 	board := DeadlockLeaderboard{Region: region, Regions: DeadlockRegions, Players: []DeadlockLeader{}, Freshness: fresh}
 	if err != nil {
 		return board, err

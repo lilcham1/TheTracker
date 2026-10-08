@@ -244,3 +244,80 @@ func TestStreamersCarryTheirRankAndIcon(t *testing.T) {
 		t.Fatalf("only the streamer's rank should be asked for: %s", q)
 	}
 }
+
+func TestLeaderboardNamesFindStreamers(t *testing.T) {
+	liveRanks.mu.Lock()
+	liveRanks.seen = map[uint64]rankSeen{}
+	liveRanks.mu.Unlock()
+	board := func(entries ...map[string]any) map[string]any {
+		list := []any{}
+		for _, e := range entries {
+			list = append(list, e)
+		}
+		return map[string]any{"entries": list}
+	}
+	f := newFakeAPI(t, map[string]any{
+		"/v1/assets/heroes": []any{map[string]any{"id": 13, "name": "Haze"}, map[string]any{"id": 2, "name": "Seven"}},
+		"/v1/matches/active": []any{
+			map[string]any{"match_id": 10, "start_time": 1000, "match_mode_parsed": "Ranked", "game_mode_parsed": "KECitadelGameModeNormal", "players": []any{
+				map[string]any{"account_id": 7, "hero_id": 13}, // "BigStreamer" on the board, a different Steam name now
+				map[string]any{"account_id": 8, "hero_id": 2},  // named exactly like the "Twin" channel
+				map[string]any{"account_id": 20, "hero_id": 2}, // one of two accounts behind "Twin" on the board
+				map[string]any{"account_id": 30, "hero_id": 13},
+				map[string]any{"account_id": 31, "hero_id": 13}, // "Doubled": two candidates both live
+			}},
+		},
+		"/v1/players/steam": []any{
+			map[string]any{"account_id": 7, "personaname": "renamed lol"},
+			map[string]any{"account_id": 8, "personaname": "Twin"},
+			map[string]any{"account_id": 20, "personaname": "x"},
+			map[string]any{"account_id": 30, "personaname": "y"},
+			map[string]any{"account_id": 31, "personaname": "z"},
+		},
+		"/v1/leaderboard/Europe": board(
+			map[string]any{"rank": 3, "account_name": "BigStreamer", "possible_account_ids": []any{7}},
+			map[string]any{"rank": 9, "account_name": "Twin", "possible_account_ids": []any{20, 21}},
+			map[string]any{"rank": 12, "account_name": "Doubled", "possible_account_ids": []any{30, 31}},
+			map[string]any{"rank": 40, "account_name": "Elsewhere", "possible_account_ids": []any{99}},
+		),
+		"/v1/players/rank": []any{map[string]any{"account_id": 99, "badge": 114}},
+	})
+	a := newTestApp(t)
+	a.Deadlock.api = &service{Name: "The Deadlock API", Base: f.srv.URL, Attempts: 1}
+	conv := newFakeConvex(t)
+	a.Cloud.base = conv.srv.URL
+	conv.twitch = map[string]any{"ok": true, "streams": []any{
+		map[string]any{"login": "bigstreamer", "name": "BigStreamer", "viewers": 900},
+		map[string]any{"login": "twin", "name": "Twin", "viewers": 50},
+		map[string]any{"login": "doubled", "name": "Doubled", "viewers": 30},
+		map[string]any{"login": "elsewhere", "name": "Elsewhere", "viewers": 70},
+	}}
+
+	b, err := a.DeadlockLive(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[uint64]LivePlayer{}
+	for _, h := range b.Heroes {
+		for _, p := range h.Players {
+			by[p.AccountID] = p
+		}
+	}
+	if p := by[7]; p.Stream == nil || p.Stream.Login != "bigstreamer" || p.Via != "leaderboard" {
+		t.Fatalf("the leaderboard should tie BigStreamer to account 7: %+v", p)
+	}
+	// An exact Steam name beats the leaderboard.
+	if p := by[8]; p.Stream == nil || p.Via != "name" || by[20].Stream != nil {
+		t.Fatalf("the Steam name should win over the leaderboard: %+v / %+v", p, by[20])
+	}
+	// Two live candidates: nobody gets the stream.
+	if by[30].Stream != nil || by[31].Stream != nil {
+		t.Fatal("an ambiguous leaderboard name must not place a stream")
+	}
+	if len(b.Ranked) != 1 || b.Ranked[0].Stream.Login != "elsewhere" || b.Ranked[0].Position != 40 || b.Ranked[0].Region != "Europe" || b.Ranked[0].Rank == nil || b.Ranked[0].Rank.Label != "Eternus 4" {
+		t.Fatalf("a leaderboard streamer whose match isn't listed: %+v", b.Ranked)
+	}
+	if len(b.Other) != 1 || b.Other[0].Login != "doubled" {
+		t.Fatalf("the ambiguous stream stays unplaced: %+v", b.Other)
+	}
+}
