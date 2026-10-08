@@ -99,6 +99,7 @@ func searchQuery(q string) (string, error) {
 var allowedLinks = []string{
 	"https://www.opendota.com/", "https://steamcommunity.com/", "https://github.com/lilcham1/TheTracker",
 	"https://deadlock-api.com/", "https://store.steampowered.com/",
+	"https://www.twitch.tv/", "https://dev.twitch.tv/console",
 }
 
 func commands(a *core.App) map[string]command {
@@ -365,6 +366,8 @@ func commands(a *core.App) map[string]command {
 			return a.Ow.Progress(p.Mode), nil
 		}),
 
+		"deadlock_live_board": in(func(p forceArg) (any, error) { return a.DeadlockLive(p.Force) }),
+
 		// ----- Compare and share -----
 		"friends":       none(func() (any, error) { return s.Friends(), nil }),
 		"friend_forget": in(func(f core.Friend) (any, error) { return s.ForgetFriend(f.Game, f.ID), nil }),
@@ -441,7 +444,8 @@ func commands(a *core.App) map[string]command {
 const csp = "default-src 'self'; " +
 	"img-src 'self' data: https://cdn.cloudflare.steamstatic.com https://assets-bucket.deadlock-api.com " +
 	"https://avatars.steamstatic.com https://avatars.akamai.steamstatic.com https://avatars.cloudflare.steamstatic.com " +
-	"https://d15f34w2p8l1cc.cloudfront.net https://static.playoverwatch.com https://blz-contentstack-images.akamaized.net; " +
+	"https://d15f34w2p8l1cc.cloudfront.net https://static.playoverwatch.com https://blz-contentstack-images.akamaized.net " +
+	"https://static-cdn.jtvnw.net; " +
 	"style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
 
 // New returns the handler the window loads: /api/* for commands, everything

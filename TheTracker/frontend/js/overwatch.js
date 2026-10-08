@@ -345,7 +345,7 @@ view("welcome", {
       <p class="muted">TheTracker only sets up and shows the ones you pick. You can change this any time under Settings.</p>
       <div class="game-cards">
         ${card("dota", "Dota 2", "Live match tracking, an in-game overlay for runes and stacks, match history, draft help and the meta.")}
-        ${card("deadlock", "Deadlock", "Match history with scoreboards, your heroes, the meta and the ranked leaderboard.")}
+        ${card("deadlock", "Deadlock", "Match history with scoreboards, your heroes, the meta, the ranked leaderboard, and who is streaming each hero live.")}
         ${card("cs2", "Counter-Strike 2", "Live tracking of your own matches, round by round: kills, damage, headshots, weapons, buys and sides, saved as you play.")}
         ${card("overwatch", "Overwatch", "Your career by mode, role and hero from your public profile, what changed session by session, and the hero meta by rank and map.")}
       </div>

@@ -33,6 +33,14 @@ feed, so there is no live page or overlay for it.
 **Today** – one page across every game you have switched on: today's and
 this week's record, streaks and the last match in each.
 
+**Deadlock Live** – the game's top live matches by hero, with the players
+on each hero who are streaming it on Twitch first (viewers, title, a link to
+the stream). Players come from the Deadlock API; streams from Twitch's
+official API through `convex/twitch.ts`, which needs a Twitch app's client
+ID and secret set once on the deployment (`npx convex env set
+TWITCH_CLIENT_ID …` and `TWITCH_CLIENT_SECRET …`). Streams are matched to
+players by name, as nothing links a Steam account to a Twitch channel.
+
 **Counter-Strike 2** – live tracking of your own matches from Valve's Game
 State Integration, round by round: kills, damage (ADR), headshots, the weapon
 behind each kill, the side played, what you bought (pistol, eco, force or

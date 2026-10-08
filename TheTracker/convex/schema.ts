@@ -49,6 +49,14 @@ export default defineSchema({
     // Leaderboard filtered to one game type.
     .index("by_gameType", ["gameType"]),
 
+  // Small server-side values that outlive one call, such as the Twitch app
+  // token. Never readable from the app: only internal functions touch it.
+  kv: defineTable({
+    key: v.string(),
+    value: v.string(),
+    expires: v.number(),
+  }).index("by_key", ["key"]),
+
   profiles: defineTable({
     userId: v.id("users"),
     deviceId: v.string(),
