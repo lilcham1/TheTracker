@@ -58,6 +58,7 @@ const POSITIONS = [
 const positionLabel = (p) => (POSITIONS.find((x) => x[0] === p) || [, ""])[1];
 
 view("draft", {
+  tabOf: "live",
   game: "dota", nav: true, icon: "draft", title: "Draft",
   sub: () => "Pick the heroes the other team has shown, and see what has done well against them",
   load(force) {
@@ -150,6 +151,7 @@ function rateBar(rate, lo = 40, hi = 60) {
 }
 
 view("meta", {
+  tabOf: "heroes",
   game: "dota", nav: true, icon: "meta", title: "Meta",
   sub: () => (dMeta.data ? `${fmtNum(dMeta.data.matches)} public matches, updated ${ago(dMeta.data.fetchedAt)}` : "Which heroes are winning right now"),
   load: (force) => dMeta.load(force),
@@ -319,6 +321,7 @@ function buildEditorHtml(d, heroOptions) {
 }
 
 view("builds", {
+  tabOf: "heroes",
   game: "dota", nav: true, icon: "builds", title: "Builds",
   sub: () => "Item plans you've saved for your heroes",
   load() {

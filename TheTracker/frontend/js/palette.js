@@ -8,7 +8,10 @@ const PAL = { open: false, q: "", sel: 0 };
 function palEntries() {
   const out = [{ label: "Today", hint: "All games", run: () => go("today") }];
   for (const g of enabledGames()) {
-    for (const id of NAV[g]) out.push({ label: VIEWS[id].title, hint: GAMES[g].label, run: () => go(id) });
+    // Every page of the game, tabs included, under its own name.
+    for (const v of Object.values(VIEWS)) {
+      if (v.game === g && (v.nav || v.tabOf)) out.push({ label: v.title, hint: GAMES[g].label, run: () => go(v.id) });
+    }
   }
   for (const [tab, label] of SETTINGS_TABS) out.push({ label: `Settings: ${label}`, hint: "Settings", run: () => go("settings", { tab }) });
   const on = S.boot.prefs.games;

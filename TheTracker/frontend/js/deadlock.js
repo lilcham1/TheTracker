@@ -223,6 +223,7 @@ function loadDlPopular(heroId) {
 }
 
 view("dl-heroes", {
+  tab: "Your heroes",
   game: "deadlock", nav: true, icon: "heroes", title: "Heroes",
   sub: () => (S.params.hero ? "Your record and popular items" : "Every hero in your recent matches"),
   load(force) {
@@ -290,6 +291,7 @@ onChange("dlmeta-query", (el) => {
 });
 
 view("dl-meta", {
+  tabOf: "dl-heroes",
   game: "deadlock", nav: true, icon: "meta", title: "Meta",
   sub: () => (dlMeta.data ? `${fmtNum(dlMeta.data.matches)} matches, updated ${ago(dlMeta.data.fetchedAt)}` : "Which heroes and items are winning"),
   load: (force) => dlMeta.load(force),
@@ -327,6 +329,7 @@ view("dl-meta", {
 // ---------- Builds ----------
 
 view("dl-builds", {
+  tabOf: "dl-heroes",
   game: "deadlock", nav: true, icon: "builds", title: "Builds",
   sub: () => "Item plans you've saved for your heroes",
   load: () => dlHeroes.load(),
@@ -358,6 +361,7 @@ act("dl-region", (el) => {
 });
 
 view("dl-leaderboard", {
+  tabOf: "dl-compare",
   game: "deadlock", nav: true, icon: "leaderboard", title: "Leaderboard",
   sub: () => "Deadlock's ranked leaderboard, by region",
   load: (force) => dlLeaders.load(force),

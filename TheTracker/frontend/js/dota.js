@@ -820,6 +820,7 @@ function heroDetailHtml(slug) {
 }
 
 view("heroes", {
+  tab: "Your heroes",
   game: "dota", nav: true, icon: "heroes", title: "Heroes",
   sub: () => (S.params.hero ? "Your record, builds and matchups" : "Every hero you've played, recent and all-time"),
   load(force) {
@@ -972,6 +973,7 @@ function sessionHtml(m) {
 }
 
 view("sessions", {
+  tabOf: "matches",
   game: "dota", nav: true, icon: "sessions", title: "Sessions",
   sub: () => "Matches TheTracker recorded live, with what Dota's own feed says about your play",
   load(force) {
@@ -1052,6 +1054,7 @@ act("lb-set", (el) => {
 });
 
 view("leaderboard", {
+  tabOf: "compare",
   game: "dota", nav: true, icon: "leaderboard", title: "Leaderboard",
   sub: () => (D.lbScope === "top" ? "Valve's official ranked leaderboard" : D.lbScope === "global" ? "Best recorded games from everyone who syncs" : "Your own best recorded games"),
   load(force) {

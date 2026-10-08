@@ -147,6 +147,8 @@ function compareHtml(game) {
 for (const [game, id] of Object.entries(CMP_VIEW)) {
   view(id, {
     game, nav: true, icon: "compare", title: "Compare",
+    // Dota 2 and Deadlock also have a leaderboard tab here: other players.
+    navTitle: game === "overwatch" ? "Compare" : "Players",
     sub: () => (CMP[game].data ? `You and ${CMP[game].friend.name}` : "Your numbers next to a friend's"),
     load(force) {
       cmpFriends();

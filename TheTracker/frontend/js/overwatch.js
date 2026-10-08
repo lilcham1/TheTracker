@@ -177,6 +177,7 @@ function owHeroDetailHtml() {
 }
 
 view("ow-heroes", {
+  tab: "Your heroes",
   game: "overwatch", nav: true, icon: "heroes", title: "Heroes",
   sub: () => "Every hero on your career profile",
   load: owLoad,
@@ -257,6 +258,7 @@ view("ow-progress", {
 // ---------- Meta ----------
 
 view("ow-meta", {
+  tabOf: "ow-heroes",
   game: "overwatch", nav: true, icon: "meta", title: "Meta",
   sub: () => "How often each hero is picked, wins and is banned",
   load(force) {

@@ -393,7 +393,26 @@ const NAV = { dota: [], deadlock: [], cs2: [], overwatch: [] };
 /// starts whatever it needs and is called on entry and on Refresh.
 function view(id, def) {
   VIEWS[id] = { id, ...def };
-  if (def.nav) NAV[def.game].push(id);
+  if (def.nav && !def.tabOf) NAV[def.game].push(id);
+}
+
+/// Pages can be grouped: a page with `tabOf` has no sidebar entry of its own
+/// and shows as a tab of the page it names. Returns the group's pages, the
+/// sidebar one first, or [] for a page that stands alone.
+function groupOf(id) {
+  const v = VIEWS[id];
+  if (!v) return [];
+  const lead = v.tabOf || id;
+  const tabs = Object.values(VIEWS).filter((x) => x.tabOf === lead);
+  return tabs.length ? [VIEWS[lead], ...tabs] : [];
+}
+
+function tabStrip(id) {
+  const group = groupOf(id);
+  if (!group.length) return "";
+  return `<nav class="page-tabs" aria-label="Sections">${group
+    .map((t) => `<button class="${t.id === id ? "on" : ""}" data-act="go" data-view="${t.id}" type="button">${esc(t.tab || t.title)}</button>`)
+    .join("")}</nav>`;
 }
 
 function renderNav() {
@@ -401,8 +420,9 @@ function renderNav() {
     .map((id) => {
       const v = VIEWS[id];
       const liveDot = id === "live" && S.live && S.live.live ? `<span class="live-dot" title="A match is running"></span>` : "";
-      return `<button class="nav-item ${S.view === id ? "on" : ""}" data-act="go" data-view="${id}" type="button">
-        <span class="ico">${icon(v.icon)}</span><span>${esc(v.title)}</span>${liveDot}</button>`;
+      const on = S.view === id || (VIEWS[S.view] && VIEWS[S.view].tabOf === id);
+      return `<button class="nav-item ${on ? "on" : ""}" data-act="go" data-view="${id}" type="button">
+        <span class="ico">${icon(v.icon)}</span><span>${esc(v.navTitle || v.title)}</span>${liveDot}</button>`;
     })
     .join("");
   // Only the games the player switched on get a tab, and with a single game
@@ -481,7 +501,7 @@ function rerender() {
     if (!v) return;
     let html;
     try {
-      html = v.render();
+      html = tabStrip(S.view) + v.render();
     } catch (e) {
       console.error(e);
       html = `<div class="empty"><h3>This page failed to draw</h3><pre class="trace">${esc((e && e.stack) || e)}</pre></div>`;
