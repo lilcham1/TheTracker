@@ -67,11 +67,11 @@ export const deadlockStreams = action({
       await ctx.runMutation(internal.twitch.setKv, { key: "twitch_deadlock_game", value: game.value, expires: game.expires });
     }
 
-    // Most watched first, as Twitch returns them; three pages is every
+    // Most watched first, as Twitch returns them; four pages is every
     // stream anyone is likely to look for.
     const streams: Stream[] = [];
     let after = "";
-    for (let page = 0; page < 3; page++) {
+    for (let page = 0; page < 4; page++) {
       const q = new URLSearchParams({ game_id: game.value, first: "100", type: "live" });
       if (after) q.set("after", after);
       const r = await fetch(`https://api.twitch.tv/helix/streams?${q}`, { headers });
@@ -86,7 +86,7 @@ export const deadlockStreams = action({
           thumbnail: s.thumbnail_url.replace("{width}", "320").replace("{height}", "180"), language: s.language,
         });
       }
-      if (!j.pagination.cursor || j.data.length < 100) break;
+      if (!j.pagination.cursor || !j.data.length) break;
       after = j.pagination.cursor;
     }
     return { ok: true, streams };

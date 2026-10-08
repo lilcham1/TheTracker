@@ -82,8 +82,9 @@ func liveName(s string) string {
 }
 
 // sameStreamer says whether a Steam name and a Twitch channel are probably
-// the same person. Short names match too much by accident, so a partial
-// match needs at least five characters.
+// the same person: the same name, or the Twitch name with a short tag on
+// either side ("metro_mann" for "Metro"). A common word inside a long name
+// ("average catgirl enjoyer" for "average") is not enough.
 func sameStreamer(steamName string, s LiveStream) bool {
 	steam := liveName(steamName)
 	if len(steam) < 3 {
@@ -96,7 +97,7 @@ func sameStreamer(steamName string, s LiveStream) bool {
 		if tw == steam {
 			return true
 		}
-		if len(tw) >= 5 && strings.Contains(steam, tw) {
+		if len(tw) >= 5 && len(steam)-len(tw) <= 5 && (strings.HasPrefix(steam, tw) || strings.HasSuffix(steam, tw)) {
 			return true
 		}
 	}

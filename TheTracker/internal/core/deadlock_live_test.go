@@ -16,6 +16,8 @@ func TestLiveNamesMatchTheSamePersonOnly(t *testing.T) {
 		{"[EU] SoulTaker ttv", stream("soultaker", "SoulTaker")},
 		{"twitch.tv/lockjaw99", stream("lockjaw99", "Lockjaw99")},
 		{"Ʀüh - xNovaa", stream("xnovaa", "xNovaa")},
+		{"metro_mann", stream("metro", "Metro")},
+		{"sidescrap<3jula", stream("sidescrap", "sidescrap")},
 	}
 	for _, c := range yes {
 		if !sameStreamer(c.steam, c.s) {
@@ -31,6 +33,8 @@ func TestLiveNamesMatchTheSamePersonOnly(t *testing.T) {
 		{"Haze", stream("hazemain", "HazeMain")}, // the Steam name is the shorter one
 		{"???", stream("abc", "abc")},            // nothing left to compare
 		{"PlayerOne", stream("playertwo", "PlayerTwo")},
+		{"average catgirl enjoyer", stream("average", "average")}, // a common word in a long name
+		{"thedeathydlfan", stream("deathy", "Deathy")},            // a fan, not the streamer
 	}
 	for _, c := range no {
 		if sameStreamer(c.steam, c.s) {
