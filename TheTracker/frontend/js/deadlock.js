@@ -194,12 +194,18 @@ setInterval(() => {
   if (S.view === "dl-live" && document.visibilityState === "visible") dlBoard.load();
 }, 25000);
 
+/// A rank icon with its name, or nothing for an unranked or hidden account.
+function rankBadge(r) {
+  if (!r) return "";
+  return `<span class="rank-badge" title="${esc(r.label)}">${r.icon ? `<img src="${esc(r.icon)}" alt="" loading="lazy" />` : ""}<span>${esc(r.label)}</span></span>`;
+}
+
 function streamCard(p) {
   const s = p.stream;
   return `<button class="stream-card" data-act="open-url" data-url="${esc(twitchUrl(s.login))}" type="button" title="Watch ${esc(s.name)} on Twitch">
     <span class="stream-thumb">${s.thumbnail ? `<img src="${esc(s.thumbnail)}" alt="" loading="lazy" />` : ""}<span class="live-tag">Live</span><span class="mode-tag ${p.mode === "Ranked" ? "ranked" : ""}">${esc(p.mode)}</span><span class="viewers">${fmtViewers(s.viewers)} watching</span></span>
     <span class="stream-body">
-      <span class="stream-name"><b>${esc(s.name)}</b></span>
+      <span class="stream-name">${rankBadge(p.rank)}<b>${esc(s.name)}</b></span>
       <span class="stream-title">${esc(s.title || "")}</span>
       <span class="muted stream-meta">${p.startTime ? (minsIn(p.startTime) > 45 ? "may have just ended" : `${minsIn(p.startTime)} min into the match`) : ""}${p.linked ? " · linked by you" : p.name && liveSame(p.name, s.name) ? "" : ` · in game as ${esc(p.name || "?")}`}</span>
     </span></button>`;
@@ -266,7 +272,7 @@ function linkedHtml(b) {
     else if (s) status = `<b>Live on Twitch</b> <span class="muted">· ${fmtViewers(s.viewers)} watching · this match isn't in the game's Watch tab, so the hero isn't known</span>`;
     else if (l.heroName) status = `In a ${esc(l.mode.toLowerCase())} match on <b>${esc(l.heroName)}</b> <span class="muted">· not streaming Deadlock right now</span>`;
     else status = `<span class="muted">Offline, or in a match that isn't in the Watch tab</span>`;
-    return `<div class="line static">${imgHtml(l.avatar, "avatar tiny")}<span class="grow"><b>${esc(s ? s.name : l.twitch)}</b> <span class="muted">as ${esc(l.steamName || "Steam " + l.accountId)}</span><br />${status}</span>
+    return `<div class="line static">${imgHtml(l.avatar, "avatar tiny")}<span class="grow">${rankBadge(l.rank)}<b>${esc(s ? s.name : l.twitch)}</b> <span class="muted">as ${esc(l.steamName || "Steam " + l.accountId)}</span><br />${status}</span>
       ${s ? `<button class="btn ghost small" data-act="open-url" data-url="${esc(twitchUrl(l.twitch))}" type="button">Watch</button>` : ""}
       <button class="link danger" data-act="lnk-remove" data-twitch="${esc(l.twitch)}" type="button" title="Remove this link">Remove</button></div>`;
   });

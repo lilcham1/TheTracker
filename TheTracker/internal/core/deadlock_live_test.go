@@ -1,6 +1,7 @@
 package core
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -187,5 +188,59 @@ func TestLinkedStreamersAreFoundWhateverTheirName(t *testing.T) {
 	}
 	if left := a.Store.UnlinkStreamer("https://twitch.tv/offmatch"); len(left) != 1 || left[0].Twitch != "tiffispurrfect" {
 		t.Fatalf("unlink failed: %+v", left)
+	}
+}
+
+func TestStreamersCarryTheirRankAndIcon(t *testing.T) {
+	liveRanks.mu.Lock()
+	liveRanks.seen = map[uint64]rankSeen{}
+	liveRanks.mu.Unlock()
+	f := newFakeAPI(t, map[string]any{
+		"/v1/assets/heroes": []any{map[string]any{"id": 13, "name": "Haze"}},
+		"/v1/assets/ranks": []any{map[string]any{"tier": 8, "name": "Oracle", "images": map[string]any{
+			"large": "rank08_lg.png", "small_subrank3": "rank08_sm_3.png", "small_subrank3_webp": "rank08_sm_3.webp",
+		}}},
+		"/v1/matches/active": []any{
+			map[string]any{"match_id": 10, "start_time": 1000, "match_mode_parsed": "Ranked", "game_mode_parsed": "KECitadelGameModeNormal", "players": []any{
+				map[string]any{"account_id": 7, "hero_id": 13}, map[string]any{"account_id": 8, "hero_id": 13},
+			}},
+		},
+		"/v1/players/steam": []any{
+			map[string]any{"account_id": 7, "personaname": "TTV_Streamer"},
+			map[string]any{"account_id": 8, "personaname": "quiet"},
+		},
+		"/v1/players/rank": []any{
+			map[string]any{"account_id": 7, "badge": 83},
+			map[string]any{"account_id": 8, "badge": 115},
+		},
+	})
+	a := newTestApp(t)
+	a.Deadlock.api = &service{Name: "The Deadlock API", Base: f.srv.URL, Attempts: 1}
+	conv := newFakeConvex(t)
+	a.Cloud.base = conv.srv.URL
+	conv.twitch = map[string]any{"ok": true, "streams": []any{map[string]any{"login": "streamer", "name": "Streamer", "viewers": 10}}}
+
+	b, err := a.DeadlockLive(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var streamer, quiet *LivePlayer
+	for i := range b.Heroes[0].Players {
+		p := &b.Heroes[0].Players[i]
+		if p.AccountID == 7 {
+			streamer = p
+		} else {
+			quiet = p
+		}
+	}
+	if streamer == nil || streamer.Rank == nil || streamer.Rank.Label != "Oracle 3" || streamer.Rank.Icon == nil || *streamer.Rank.Icon != "rank08_sm_3.png" {
+		t.Fatalf("the streamer's rank and icon: %+v", streamer)
+	}
+	if quiet.Rank != nil {
+		t.Fatal("ranks are only looked up for streamers")
+	}
+	q := strings.Join(f.queries, " ")
+	if !strings.Contains(q, "/v1/players/rank?account_ids=7") || strings.Contains(q, "/v1/players/rank?account_ids=7,8") {
+		t.Fatalf("only the streamer's rank should be asked for: %s", q)
 	}
 }

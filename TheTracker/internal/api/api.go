@@ -458,7 +458,7 @@ func commands(a *core.App) map[string]command {
 // CDNs the portraits and icons live on; no outbound connections from the page
 // at all — the backend makes those.
 const csp = "default-src 'self'; " +
-	"img-src 'self' data: https://cdn.cloudflare.steamstatic.com https://assets-bucket.deadlock-api.com " +
+	"img-src 'self' data: https://cdn.cloudflare.steamstatic.com https://assets-bucket.deadlock-api.com https://api.deadlock-api.com " +
 	"https://avatars.steamstatic.com https://avatars.akamai.steamstatic.com https://avatars.cloudflare.steamstatic.com " +
 	"https://d15f34w2p8l1cc.cloudfront.net https://static.playoverwatch.com https://blz-contentstack-images.akamaized.net " +
 	"https://static-cdn.jtvnw.net; " +

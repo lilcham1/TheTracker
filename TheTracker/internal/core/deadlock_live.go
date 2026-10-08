@@ -45,6 +45,8 @@ type LivePlayer struct {
 	// True when the stream was linked to this account by hand, not guessed
 	// from names.
 	Linked bool `json:"linked,omitempty"`
+	// The player's rank, for streamers only.
+	Rank *DeadlockRank `json:"rank,omitempty"`
 }
 
 type LiveHero struct {
@@ -253,6 +255,24 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 
 	info := a.Deadlock.Heroes()
 
+	// Ranks for the streamers and the linked accounts: a few dozen at most,
+	// in one call.
+	rankIDs := []uint64{}
+	for _, p := range players {
+		if p.Stream != nil {
+			rankIDs = append(rankIDs, p.AccountID)
+		}
+	}
+	for _, l := range links {
+		rankIDs = append(rankIDs, l.AccountID)
+	}
+	ranks := a.Deadlock.RanksFor(rankIDs)
+	for i := range players {
+		if r, ok := ranks[players[i].AccountID]; ok && players[i].Stream != nil {
+			players[i].Rank = &r
+		}
+	}
+
 	// Where each linked streamer is right now.
 	inMatch := map[uint64]LivePlayer{}
 	for _, p := range players {
@@ -260,6 +280,9 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 	}
 	for _, l := range links {
 		st := LinkedStatus{StreamLink: l}
+		if r, ok := ranks[l.AccountID]; ok {
+			st.Rank = &r
+		}
 		if s, live := byLogin[l.Twitch]; live {
 			st.Stream = &s
 		}

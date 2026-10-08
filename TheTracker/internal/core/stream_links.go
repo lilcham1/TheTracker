@@ -26,9 +26,10 @@ type LinkedStatus struct {
 	// The channel as Twitch shows it, when live in the Deadlock category.
 	Stream *LiveStream `json:"stream"`
 	// Set when the account is in one of the listed live matches.
-	HeroID   int    `json:"heroId,omitempty"`
-	HeroName string `json:"heroName,omitempty"`
-	Mode     string `json:"mode,omitempty"`
+	HeroID   int           `json:"heroId,omitempty"`
+	HeroName string        `json:"heroName,omitempty"`
+	Rank     *DeadlockRank `json:"rank,omitempty"`
+	Mode     string        `json:"mode,omitempty"`
 }
 
 var twitchLogin = regexp.MustCompile(`^[a-z0-9_]{3,25}$`)

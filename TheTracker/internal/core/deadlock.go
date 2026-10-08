@@ -123,6 +123,8 @@ type DeadlockRank struct {
 	Subrank  int    `json:"subrank"`
 	TierName string `json:"tierName"`
 	Label    string `json:"label"`
+	// The game's icon for this rank, when known.
+	Icon *string `json:"icon,omitempty"`
 }
 
 // decodeBadge unpacks tier*10 + subrank: badge 26 is Seeker 6.
