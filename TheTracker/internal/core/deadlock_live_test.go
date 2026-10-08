@@ -20,7 +20,7 @@ func TestLiveNamesMatchTheSamePersonOnly(t *testing.T) {
 		{"sidescrap<3jula", stream("sidescrap", "sidescrap")},
 	}
 	for _, c := range yes {
-		if !sameStreamer(c.steam, c.s) {
+		if !sameStreamer(c.steam, "", c.s, false) {
 			t.Errorf("%q should match %q", c.steam, c.s.Login)
 		}
 	}
@@ -37,9 +37,23 @@ func TestLiveNamesMatchTheSamePersonOnly(t *testing.T) {
 		{"thedeathydlfan", stream("deathy", "Deathy")},            // a fan, not the streamer
 	}
 	for _, c := range no {
-		if sameStreamer(c.steam, c.s) {
+		if sameStreamer(c.steam, "", c.s, false) {
 			t.Errorf("%q must not match %q", c.steam, c.s.Login)
 		}
+	}
+}
+
+func TestLiveMatchesTheSteamProfileAddressToo(t *testing.T) {
+	s := LiveStream{Login: "deludeddelirium", Name: "DeludedDelirium"}
+	if !sameStreamer("DΣLIЯIUM", "DeludedDelirium", s, true) {
+		t.Fatal("the custom profile address names the channel")
+	}
+	if steamVanity("https://steamcommunity.com/id/DeludedDelirium/") != "DeludedDelirium" || steamVanity("https://steamcommunity.com/profiles/76561198061446721/") != "" {
+		t.Fatal("profile address read wrongly")
+	}
+	// A partial match is not an exact one.
+	if sameStreamer("metro_mann", "", LiveStream{Login: "metro"}, true) || !sameStreamer("metro_mann", "", LiveStream{Login: "metro"}, false) {
+		t.Fatal("exact and partial passes mixed up")
 	}
 }
 
@@ -73,10 +87,10 @@ func TestDeadlockLiveBoard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b.StreamsAvailable || b.Matches != 2 || len(b.Heroes) != 3 || b.Heroes[0].Name != "Haze" || len(b.Heroes[0].Players) != 3 {
-		t.Fatalf("without Twitch: %+v", b)
+	if b.StreamsAvailable || b.Matches != 1 || len(b.Heroes) != 2 || b.Heroes[0].Name != "Haze" || len(b.Heroes[0].Players) != 2 {
+		t.Fatalf("without Twitch, and without the Street Brawl match: %+v", b)
 	}
-	if b.Heroes[0].Players[1].Mode != "Ranked" || b.Heroes[0].Players[2].Mode != "Street Brawl" {
+	if b.Heroes[0].Players[0].Mode != "Ranked" {
 		t.Fatalf("modes wrong: %+v", b.Heroes[0].Players)
 	}
 
@@ -100,7 +114,7 @@ func TestDeadlockLiveBoard(t *testing.T) {
 		t.Fatalf("streams should be available: %+v", b)
 	}
 	haze := b.Heroes[0]
-	if haze.Name != "Haze" || haze.Streams != 1 || haze.Players[0].Stream == nil || haze.Players[0].Stream.Login != "bighaze" || haze.Players[0].Name != "TTV_BigHaze" {
+	if haze.Name != "Haze" || haze.Streams != 1 || haze.Ranked != 1 || haze.Players[0].Stream == nil || haze.Players[0].Stream.Login != "bighaze" || haze.Players[0].Name != "TTV_BigHaze" {
 		t.Fatalf("the Haze streamer should lead: %+v", haze)
 	}
 	if b.Heroes[1].Name != "Seven" || b.Heroes[1].Players[0].Stream == nil {

@@ -167,11 +167,15 @@ function dlBoardHtml(id) {
 }
 
 // ---------- Live: who is streaming each hero right now ----------
+//
+// Only streamers who are in a live standard match on the hero (ranked first);
+// no Street Brawl, and no stream whose hero isn't known.
 
 const dlBoard = resource("dlBoard", "deadlock_live_board", { ttl: 55000 });
-const DLL = { hero: "all", query: "" };
+// hero: "all", a hero id, or null for "the hero I'm playing, if any".
+const DLL = { hero: null, query: "" };
 const fmtViewers = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n));
-const minsIn = (start) => (start ? Math.max(0, Math.round((Date.now() / 1000 - start) / 60)) : null);
+const minsIn = (start) => Math.max(0, Math.round((Date.now() / 1000 - start) / 60));
 const twitchUrl = (login) => "https://www.twitch.tv/" + encodeURIComponent(login);
 
 act("dll-hero", (el) => {
@@ -190,27 +194,27 @@ setInterval(() => {
   if (S.view === "dl-live" && document.visibilityState === "visible") dlBoard.load();
 }, 60000);
 
-function streamCard(p, hero) {
+function streamCard(p) {
   const s = p.stream;
   return `<button class="stream-card" data-act="open-url" data-url="${esc(twitchUrl(s.login))}" type="button" title="Watch ${esc(s.name)} on Twitch">
-    <span class="stream-thumb">${s.thumbnail ? `<img src="${esc(s.thumbnail)}" alt="" loading="lazy" />` : ""}<span class="live-tag">Live</span><span class="viewers">${fmtViewers(s.viewers)} watching</span></span>
+    <span class="stream-thumb">${s.thumbnail ? `<img src="${esc(s.thumbnail)}" alt="" loading="lazy" />` : ""}<span class="live-tag">Live</span><span class="mode-tag ${p.mode === "Ranked" ? "ranked" : ""}">${esc(p.mode)}</span><span class="viewers">${fmtViewers(s.viewers)} watching</span></span>
     <span class="stream-body">
-      <span class="stream-name"><b>${esc(s.name)}</b>${hero ? `<span class="muted"> on ${esc(hero)}</span>` : ""}</span>
+      <span class="stream-name"><b>${esc(s.name)}</b></span>
       <span class="stream-title">${esc(s.title || "")}</span>
-      <span class="muted stream-meta">${[p.mode ? esc(p.mode) : "", p.startTime ? `${minsIn(p.startTime)} min in` : ""].filter(Boolean).join(" · ")}${p.name && p.name !== s.name ? ` · in game as ${esc(p.name)}` : ""}</span>
+      <span class="muted stream-meta">${p.startTime ? `${minsIn(p.startTime)} min into the match` : ""}${p.name && liveSame(p.name, s.name) ? "" : ` · in game as ${esc(p.name || "?")}`}</span>
     </span></button>`;
 }
+const liveSame = (a, b) => a.toLowerCase().replace(/[^a-z0-9]/g, "") === b.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 function dlLiveSetupNote(reason) {
   if (reason === "bad_credentials") return `<div class="note warn">Twitch refused the app's credentials. Check the Twitch client ID and secret set on the cloud service.</div>`;
-  if (reason === "unreachable") return `<div class="note">Twitch couldn't be reached just now, so streams aren't shown. Players still are.</div>`;
-  return `<div class="note">Streams appear here once Twitch is connected to TheTracker's cloud service (a one-time setup by whoever runs it). Until then you can see who is playing each hero in the top live matches.
-    <button class="link" data-act="open-url" data-url="https://dev.twitch.tv/console" type="button">Twitch developer console</button></div>`;
+  if (reason === "unreachable") return `<div class="note">Twitch couldn't be reached just now. Try Refresh in a moment.</div>`;
+  return `<div class="note">Streams appear here once Twitch is connected to TheTracker's cloud service (a one-time setup by whoever runs it).</div>`;
 }
 
 view("dl-live", {
   game: "deadlock", nav: true, icon: "live", title: "Live",
-  sub: () => (dlBoard.data ? `${dlBoard.data.matches} top matches being played right now` : "Who is streaming each hero right now"),
+  sub: () => "Streamers playing each hero right now",
   load(force) {
     if (dlLinked()) checkDlLive();
     return dlBoard.load(force);
@@ -219,41 +223,47 @@ view("dl-live", {
     const wait = gate(dlBoard, "Reading the live matches…");
     if (wait) return wait;
     const b = dlBoard.data;
+    // Until a hero is picked, follow the hero being played right now.
+    const mine = DL.live && DL.live.heroId ? String(DL.live.heroId) : null;
+    const pick = DLL.hero || mine || "all";
     const q = DLL.query.trim().toLowerCase();
-    const streaming = b.heroes.reduce((a, h) => a + h.streams, 0);
-    const heroes = b.heroes
-      .filter((h) => DLL.hero === "all" || String(h.heroId) === DLL.hero)
-      .map((h) => ({ ...h, players: q ? h.players.filter((p) => (p.name || "").toLowerCase().includes(q) || (p.stream && p.stream.name.toLowerCase().includes(q))) : h.players }))
-      .filter((h) => !q || h.players.length || h.name.toLowerCase().includes(q));
-    const chip = (id, label, n) => `<button class="chip ${DLL.hero === id ? "on" : ""}" data-act="dll-hero" data-hero="${id}" type="button">${label}${n ? ` <b>${n}</b>` : ""}</button>`;
+    const streamed = b.heroes.filter((h) => h.streams);
+    const total = streamed.reduce((a, h) => a + h.streams, 0), ranked = streamed.reduce((a, h) => a + h.ranked, 0);
 
-    const heroBlock = (h) => {
-      const streamers = h.players.filter((p) => p.stream);
-      const others = h.players.filter((p) => !p.stream).slice(0, streamers.length ? 4 : 6);
-      return `<section class="live-hero">
-        <div class="sec-head"><h3 class="cell">${imgHtml(h.image, "avatar small")}${esc(h.name)}</h3>
-          <span class="muted">${h.streams ? `${h.streams} streaming · ` : ""}${h.players.length} playing</span></div>
-        ${streamers.length ? `<div class="stream-grid">${streamers.map((p) => streamCard(p)).join("")}</div>` : ""}
-        ${others.length ? `<div class="lines compact">${others.map((p) => `<div class="line static">${imgHtml(p.avatar, "avatar tiny")}<span class="grow"><b>${esc(p.name || "Private profile")}</b><span class="muted"> ${esc(p.mode || "")}${p.startTime ? ` · ${minsIn(p.startTime)} min in` : ""}</span></span><span class="muted mono" title="Type this match ID in Deadlock's Watch tab to spectate">Match ${p.matchId}</span></div>`).join("")}</div>` : ""}
+    const shown = b.heroes
+      .filter((h) => (pick === "all" ? h.streams : String(h.heroId) === pick))
+      .map((h) => ({ ...h, players: h.players.filter((p) => p.stream && (!q || p.stream.name.toLowerCase().includes(q) || (p.name || "").toLowerCase().includes(q))) }))
+      .filter((h) => h.players.length || pick !== "all");
+    const pickedHero = pick !== "all" ? b.heroes.find((h) => String(h.heroId) === pick) : null;
+    const chip = (id, label, n) => `<button class="chip ${pick === id ? "on" : ""}" data-act="dll-hero" data-hero="${id}" type="button">${label}${n ? ` <b>${n}</b>` : ""}</button>`;
+    const chips = streamed.map((h) => chip(String(h.heroId), esc(h.name), h.streams));
+    if (pickedHero && !pickedHero.streams) chips.unshift(chip(pick, esc(pickedHero.name)));
+    if (mine && mine !== pick && !streamed.some((h) => String(h.heroId) === mine)) {
+      const h = b.heroes.find((x) => String(x.heroId) === mine);
+      if (h) chips.unshift(chip(mine, esc(h.name) + " (you)"));
+    }
+
+    const block = (h) => `<section class="live-hero">
+        <div class="sec-head"><h3 class="cell">${imgHtml(h.image, "avatar small")}${esc(h.name)}${mine === String(h.heroId) ? ` <span class="muted">· your hero</span>` : ""}</h3>
+          <span class="muted">${h.streams ? `${h.ranked} ranked · ${h.streams - h.ranked} standard` : ""}</span></div>
+        ${h.players.length ? `<div class="stream-grid">${h.players.map(streamCard).join("")}</div>`
+          : `<p class="muted">Nobody is streaming ${esc(h.name)} in a top live match right now.</p>`}
       </section>`;
-    };
 
     return `${staleNote(dlBoard)}
-      ${DL.live ? `<div class="note"><span class="live-dot"></span> You're in a match right now as <b>${esc(DL.live.heroName)}</b>.</div>` : ""}
+      ${DL.live ? `<div class="note"><span class="live-dot"></span> You're in a match as <b>${esc(DL.live.heroName)}</b>${pick === mine ? ", so this shows streamers on that hero." : "."}</div>` : ""}
       ${b.streamsAvailable ? "" : dlLiveSetupNote(b.reason)}
       ${statRow([
-        { label: "Live matches", value: fmtNum(b.matches), sub: "the top of the game's Watch tab" },
-        { label: "Streaming Deadlock", value: b.streamsAvailable ? fmtNum(streaming + b.other.length) : "–", sub: b.streamsAvailable ? `${streaming} matched to a hero` : "Twitch not connected" },
-        { label: "Heroes being played", value: b.heroes.length },
+        { label: "Streamers in live matches", value: b.streamsAvailable ? fmtNum(total) : "–", sub: b.streamsAvailable ? `${ranked} ranked, ${total - ranked} standard` : "Twitch not connected" },
+        { label: "Heroes being streamed", value: streamed.length },
+        { label: "Matches checked", value: fmtNum(b.matches), sub: "standard games in the Watch tab" },
       ])}
       <div class="filters">
-        <div class="row"><input class="input grow" id="dllQuery" type="text" placeholder="Find a player or streamer" value="${esc(DLL.query)}" /></div>
-        <div class="chips">${chip("all", "All heroes")}${b.heroes.filter((h) => h.streams || DLL.hero === String(h.heroId)).map((h) => chip(String(h.heroId), esc(h.name), h.streams)).join("")}</div>
+        <div class="row"><input class="input grow" id="dllQuery" type="text" placeholder="Find a streamer" value="${esc(DLL.query)}" /></div>
+        <div class="chips">${chip("all", "All heroes")}${chips.join("")}</div>
       </div>
-      ${heroes.length ? heroes.map(heroBlock).join("") : emptyState("Nobody matches that", "Try another name, or pick All heroes.")}
-      ${b.streamsAvailable && b.other.length && DLL.hero === "all" && !q ? `<div class="sec-head"><h3>Other Deadlock streams</h3><span class="muted">hero not known</span></div>
-        <div class="stream-grid">${b.other.slice(0, 12).map((s) => streamCard({ stream: s })).join("")}</div>` : ""}
-      ${aboutData(`Players come from the community Deadlock API's copy of the game's Watch tab, which lists only the top live matches, so lower-ranked and private games aren't here. Streams come from Twitch. Nothing links a Steam account to a Twitch channel, so a stream is shown under a hero when the streamer's Twitch name matches a player's Steam name. That is usually right but can miss streamers whose names differ. To spectate a match, enter its ID in Deadlock's Watch tab.`)}`;
+      ${shown.length ? shown.map(block).join("") : emptyState(q ? "No streamer matches that" : "No one is streaming a top live match right now", q ? "Try another name." : "Check back in a few minutes; the list refreshes every minute.")}
+      ${aboutData(`Only standard matches are shown, ranked first; Street Brawl is left out. Matches come from the community Deadlock API's copy of the game's Watch tab, which lists the top live games only. Streams come from Twitch. A stream appears under a hero when the streamer's Twitch name matches the in-game Steam name or custom Steam profile address of someone playing that hero right now, so a streamer who uses a different name in game won't be found.`)}`;
   },
 });
 

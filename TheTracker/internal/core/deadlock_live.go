@@ -33,8 +33,12 @@ type LivePlayer struct {
 	Name      string  `json:"name"`
 	Avatar    *string `json:"avatar"`
 	MatchID   uint64  `json:"matchId"`
-	Mode      string  `json:"mode"`
-	StartTime int64   `json:"startTime"`
+	Mode      string  `json:"mode"` // Ranked | Standard
+	// The custom part of the player's Steam profile address
+	// (steamcommunity.com/id/<this>), which streamers often set to their
+	// Twitch name. Used for matching only.
+	Vanity    string `json:"vanity,omitempty"`
+	StartTime int64  `json:"startTime"`
 	// The player's stream, when one was matched.
 	Stream *LiveStream `json:"stream"`
 }
@@ -44,6 +48,7 @@ type LiveHero struct {
 	Name    string       `json:"name"`
 	Image   *string      `json:"image"`
 	Streams int          `json:"streams"`
+	Ranked  int          `json:"ranked"`  // of Streams, how many in ranked matches
 	Players []LivePlayer `json:"players"` // streamers first, by viewers
 }
 
@@ -51,7 +56,7 @@ type DeadlockLiveBoard struct {
 	Heroes []LiveHero `json:"heroes"`
 	// Deadlock streams no live player could be matched to.
 	Other   []LiveStream `json:"other"`
-	Matches int          `json:"matches"`
+	Matches int          `json:"matches"` // standard matches only
 	// Whether Twitch could be asked; Reason says why not: not_set_up |
 	// bad_credentials | unreachable.
 	StreamsAvailable bool   `json:"streamsAvailable"`
@@ -81,27 +86,40 @@ func liveName(s string) string {
 	return n
 }
 
-// sameStreamer says whether a Steam name and a Twitch channel are probably
-// the same person: the same name, or the Twitch name with a short tag on
-// either side ("metro_mann" for "Metro"). A common word inside a long name
-// ("average catgirl enjoyer" for "average") is not enough.
-func sameStreamer(steamName string, s LiveStream) bool {
-	steam := liveName(steamName)
-	if len(steam) < 3 {
-		return false
-	}
-	for _, tw := range []string{liveName(s.Login), liveName(s.Name)} {
-		if tw == "" {
+// sameStreamer says whether a Steam player and a Twitch channel are
+// probably the same person. exact: the Twitch name equals the Steam name or
+// the custom profile address. Otherwise, a partial match: the Twitch name
+// with a short tag on either side of the Steam name ("metro_mann" for
+// "Metro"). A common word inside a long name ("average catgirl enjoyer" for
+// "average") is never enough.
+func sameStreamer(steamName, vanity string, s LiveStream, exact bool) bool {
+	twitch := []string{liveName(s.Login), liveName(s.Name)}
+	for _, mine := range []string{liveName(steamName), liveName(vanity)} {
+		if len(mine) < 3 {
 			continue
 		}
-		if tw == steam {
-			return true
-		}
-		if len(tw) >= 5 && len(steam)-len(tw) <= 5 && (strings.HasPrefix(steam, tw) || strings.HasSuffix(steam, tw)) {
-			return true
+		for _, tw := range twitch {
+			if tw == "" {
+				continue
+			}
+			if tw == mine {
+				return true
+			}
+			if !exact && len(tw) >= 5 && len(mine)-len(tw) <= 5 && (strings.HasPrefix(mine, tw) || strings.HasSuffix(mine, tw)) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// steamVanity reads the custom part of a Steam profile address.
+func steamVanity(profileURL string) string {
+	_, rest, ok := strings.Cut(profileURL, "steamcommunity.com/id/")
+	if !ok {
+		return ""
+	}
+	return strings.Trim(rest, "/")
 }
 
 // livePlayers is everyone in the Watch tab's matches, with names.
@@ -116,12 +134,18 @@ func (d *Deadlock) livePlayers(force bool) ([]LivePlayer, map[uint64]int, int, F
 		if err := d.api.get("/v1/matches/active", &rows); err != nil {
 			return cached{}, err
 		}
-		out := cached{Matches: len(rows), Players: []LivePlayer{}, Heroes: map[string]int{}}
+		out := cached{Players: []LivePlayer{}, Heroes: map[string]int{}}
 		ids := []string{}
 		for _, m := range rows {
-			mode := jStr(m, "match_mode_parsed", "")
-			if strings.Contains(jStr(m, "game_mode_parsed", ""), "StreetBrawl") {
-				mode = "Street Brawl"
+			// Standard 6v6 games only: Street Brawl and anything else is left
+			// out.
+			if !strings.HasSuffix(jStr(m, "game_mode_parsed", ""), "GameModeNormal") {
+				continue
+			}
+			out.Matches++
+			mode := "Standard"
+			if jStr(m, "match_mode_parsed", "") == "Ranked" {
+				mode = "Ranked"
 			}
 			for _, p := range jList(m["players"]) {
 				id := jU64(p, "account_id")
@@ -149,6 +173,7 @@ func (d *Deadlock) livePlayers(force bool) ([]LivePlayer, map[uint64]int, int, F
 			if p, ok := names[out.Players[i].AccountID]; ok {
 				out.Players[i].Name = jStr(p, "personaname", "")
 				out.Players[i].Avatar = jStrPtr(p, "avatarmedium")
+				out.Players[i].Vanity = steamVanity(jStr(p, "profileurl", ""))
 			}
 		}
 		return out, nil
@@ -174,18 +199,22 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 	streams, reason := a.liveStreams(force)
 	board.StreamsAvailable, board.Reason = reason == "", reason
 
-	// Each stream goes to at most one player: the first whose name agrees.
+	// Each stream goes to at most one player. Exact names are matched first
+	// everywhere, so a partial match can never take a stream that belongs
+	// to someone else exactly.
 	used := map[string]bool{}
-	for i := range players {
-		if players[i].Name == "" {
-			continue
-		}
-		for j := range streams {
-			if !used[streams[j].Login] && sameStreamer(players[i].Name, streams[j]) {
-				s := streams[j]
-				players[i].Stream = &s
-				used[s.Login] = true
-				break
+	for _, exact := range []bool{true, false} {
+		for i := range players {
+			if players[i].Stream != nil || (players[i].Name == "" && players[i].Vanity == "") {
+				continue
+			}
+			for j := range streams {
+				if !used[streams[j].Login] && sameStreamer(players[i].Name, players[i].Vanity, streams[j], exact) {
+					s := streams[j]
+					players[i].Stream = &s
+					used[s.Login] = true
+					break
+				}
 			}
 		}
 	}
@@ -211,6 +240,9 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 		h.Players = append(h.Players, p)
 		if p.Stream != nil {
 			h.Streams++
+			if p.Mode == "Ranked" {
+				h.Ranked++
+			}
 		}
 	}
 	for _, h := range byHero {
@@ -220,6 +252,10 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 				return a.Stream != nil
 			}
 			if a.Stream != nil {
+				// Ranked games first, then the most watched.
+				if (a.Mode == "Ranked") != (b.Mode == "Ranked") {
+					return a.Mode == "Ranked"
+				}
 				return a.Stream.Viewers > b.Stream.Viewers
 			}
 			return a.StartTime < b.StartTime
@@ -230,6 +266,9 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 		a, b := board.Heroes[i], board.Heroes[j]
 		if a.Streams != b.Streams {
 			return a.Streams > b.Streams
+		}
+		if a.Ranked != b.Ranked {
+			return a.Ranked > b.Ranked
 		}
 		if len(a.Players) != len(b.Players) {
 			return len(a.Players) > len(b.Players)

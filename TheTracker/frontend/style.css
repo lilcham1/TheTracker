@@ -566,3 +566,6 @@ kbd { font: 500 11px var(--body); padding: 1px 5px; border: 1px solid var(--line
 .stream-meta { font-size: 12px; }
 .lines.compact .line { min-height: 36px; }
 .mono { font-variant-numeric: tabular-nums; font-size: 12px; }
+
+.mode-tag { position: absolute; right: 8px; top: 8px; padding: 1px 7px; border-radius: 4px; background: rgba(0, 0, 0, .7); font: 600 11px var(--display); text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
+.mode-tag.ranked { background: var(--accent); color: var(--accent-ink); }
