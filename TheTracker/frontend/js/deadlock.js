@@ -201,7 +201,7 @@ function streamCard(p) {
     <span class="stream-body">
       <span class="stream-name"><b>${esc(s.name)}</b></span>
       <span class="stream-title">${esc(s.title || "")}</span>
-      <span class="muted stream-meta">${p.startTime ? (minsIn(p.startTime) > 45 ? "may have just ended" : `${minsIn(p.startTime)} min into the match`) : ""}${p.name && liveSame(p.name, s.name) ? "" : ` · in game as ${esc(p.name || "?")}`}</span>
+      <span class="muted stream-meta">${p.startTime ? (minsIn(p.startTime) > 45 ? "may have just ended" : `${minsIn(p.startTime)} min into the match`) : ""}${p.linked ? " · linked by you" : p.name && liveSame(p.name, s.name) ? "" : ` · in game as ${esc(p.name || "?")}`}</span>
     </span></button>`;
 }
 const liveSame = (a, b) => a.toLowerCase().replace(/[^a-z0-9]/g, "") === b.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -210,6 +210,80 @@ function dlLiveSetupNote(reason) {
   if (reason === "bad_credentials") return `<div class="note warn">Twitch refused the app's credentials. Check the Twitch client ID and secret set on the cloud service.</div>`;
   if (reason === "unreachable") return `<div class="note">Twitch couldn't be reached just now. Try Refresh in a moment.</div>`;
   return `<div class="note">Streams appear here once Twitch is connected to TheTracker's cloud service (a one-time setup by whoever runs it).</div>`;
+}
+
+// ---------- Linked streamers ----------
+//
+// A Twitch channel tied by hand to the Steam account its streamer plays on,
+// for streamers whose in-game name differs from their channel's.
+
+const LNK = { open: false, twitch: "", query: "", results: [], searching: false, error: null };
+
+act("lnk-open", () => {
+  LNK.open = !LNK.open;
+  LNK.error = null;
+  rerender();
+});
+act("lnk-search", async () => {
+  LNK.twitch = ($("#lnkTwitch") || {}).value || LNK.twitch;
+  LNK.query = ($("#lnkSteam") || {}).value || "";
+  LNK.searching = true;
+  LNK.error = null;
+  LNK.results = [];
+  rerender();
+  try {
+    LNK.results = await invoke("friend_search", { game: "deadlock", query: LNK.query });
+    if (!LNK.results.length) LNK.error = "No Steam account matches that. Try their exact Steam name, or paste their Steam profile link.";
+  } catch (e) {
+    LNK.error = e.message;
+  }
+  LNK.searching = false;
+  rerender();
+});
+act("lnk-pick", async (el) => {
+  const f = JSON.parse(el.dataset.friend);
+  const twitch = ($("#lnkTwitch") || {}).value || LNK.twitch;
+  try {
+    await invoke("stream_link_add", { twitch, accountId: f.id, steamName: f.name, avatar: f.avatar || null });
+  } catch (e) {
+    LNK.error = e.message;
+    return rerender();
+  }
+  Object.assign(LNK, { open: false, twitch: "", query: "", results: [], error: null });
+  toast(`Linked ${twitch.replace(/^.*twitch\.tv\//i, "")} to ${f.name}.`);
+  dlBoard.load(true);
+});
+act("lnk-remove", async (el) => {
+  await attempt(() => invoke("stream_link_remove", { twitch: el.dataset.twitch }), "Link removed.");
+  dlBoard.load(true);
+});
+
+function linkedHtml(b) {
+  const rows = (b.linked || []).map((l) => {
+    const s = l.stream;
+    let status;
+    if (s && l.heroName) status = `<b class="win">Live on ${esc(l.heroName)}</b> <span class="muted">· ${esc(l.mode)} · ${fmtViewers(s.viewers)} watching</span>`;
+    else if (s) status = `<b>Live on Twitch</b> <span class="muted">· ${fmtViewers(s.viewers)} watching · this match isn't in the game's Watch tab, so the hero isn't known</span>`;
+    else if (l.heroName) status = `In a ${esc(l.mode.toLowerCase())} match on <b>${esc(l.heroName)}</b> <span class="muted">· not streaming Deadlock right now</span>`;
+    else status = `<span class="muted">Offline, or in a match that isn't in the Watch tab</span>`;
+    return `<div class="line static">${imgHtml(l.avatar, "avatar tiny")}<span class="grow"><b>${esc(s ? s.name : l.twitch)}</b> <span class="muted">as ${esc(l.steamName || "Steam " + l.accountId)}</span><br />${status}</span>
+      ${s ? `<button class="btn ghost small" data-act="open-url" data-url="${esc(twitchUrl(l.twitch))}" type="button">Watch</button>` : ""}
+      <button class="link danger" data-act="lnk-remove" data-twitch="${esc(l.twitch)}" type="button" title="Remove this link">Remove</button></div>`;
+  });
+  const form = LNK.open ? `<div class="panel lnk-form">
+      <p class="muted">Use this when a streamer's Steam name isn't the same as their Twitch channel. It's kept on this PC only.</p>
+      <div class="row wrap"><input class="input grow" id="lnkTwitch" type="text" placeholder="Twitch channel, e.g. twitch.tv/name" value="${esc(LNK.twitch)}" />
+        <input class="input grow" id="lnkSteam" type="text" placeholder="Their Steam name, profile link or ID" value="${esc(LNK.query)}" data-enter="lnk-search" />
+        <button class="btn" data-act="lnk-search" type="button" ${LNK.searching ? "disabled" : ""}>${LNK.searching ? "Searching…" : "Find account"}</button></div>
+      ${LNK.error ? `<div class="note err">${esc(LNK.error)}</div>` : ""}
+      ${LNK.results.length ? `<div class="pick-list">${LNK.results.map((f) => `<button class="pick" data-act="lnk-pick" data-friend="${esc(JSON.stringify(f))}" type="button">
+        <span class="row">${imgHtml(f.avatar, "avatar small")}<b>${esc(f.name)}</b><span class="muted">Steam ${esc(f.id)}</span></span><span class="muted">Link to this account</span></button>`).join("")}</div>` : ""}
+    </div>` : "";
+  return `<section class="linked">
+      <div class="sec-head"><h3>Your linked streamers</h3><button class="link" data-act="lnk-open" type="button">${LNK.open ? "Cancel" : "Link a streamer"}</button></div>
+      ${form}
+      ${rows.length ? `<div class="lines">${rows.join("")}</div>` : LNK.open ? "" : `<p class="muted">Link a streamer whose Steam name isn't their Twitch name, and they'll be found in live matches and listed here.</p>`}
+    </section>`;
 }
 
 view("dl-live", {
@@ -253,6 +327,7 @@ view("dl-live", {
     return `${staleNote(dlBoard)}
       ${DL.live ? `<div class="note"><span class="live-dot"></span> You're in a match as <b>${esc(DL.live.heroName)}</b>${pick === mine ? ", so this shows streamers on that hero." : "."}</div>` : ""}
       ${b.streamsAvailable ? "" : dlLiveSetupNote(b.reason)}
+      ${linkedHtml(b)}
       ${statRow([
         { label: "Streamers in live matches", value: b.streamsAvailable ? fmtNum(total) : "–", sub: b.streamsAvailable ? `${ranked} ranked, ${total - ranked} standard` : "Twitch not connected" },
         { label: "Heroes being streamed", value: streamed.length },
@@ -263,7 +338,7 @@ view("dl-live", {
         <div class="chips">${chip("all", "All heroes")}${chips.join("")}</div>
       </div>
       ${shown.length ? shown.map(block).join("") : emptyState(q ? "No streamer matches that" : "No one is streaming a top live match right now", q ? "Try another name." : "Check back in a few minutes; the list refreshes every minute.")}
-      ${aboutData(`Only standard matches are shown, ranked first; Street Brawl is left out. Matches come from the community Deadlock API's copy of the game's Watch tab, which lists the top live games only. Streams come from Twitch. A stream appears under a hero when the streamer's Twitch name matches the in-game Steam name or custom Steam profile address of someone playing that hero right now, so a streamer who uses a different name in game won't be found. The list of live matches is a few minutes behind the game, so right after a match ends a streamer can still show under the hero they just played.`)}`;
+      ${aboutData(`Only standard matches are shown, ranked first; Street Brawl is left out. Matches come from the community Deadlock API's copy of the game's Watch tab, which lists the top live games only. Streams come from Twitch. A stream appears under a hero when the streamer's Twitch name matches the in-game Steam name or custom Steam profile address of someone playing that hero right now, or when you have linked the channel to that Steam account. The list of live matches is a few minutes behind the game, so right after a match ends a streamer can still show under the hero they just played.`)}`;
   },
 });
 

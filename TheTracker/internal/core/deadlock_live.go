@@ -42,6 +42,9 @@ type LivePlayer struct {
 	StartTime int64  `json:"startTime"`
 	// The player's stream, when one was matched.
 	Stream *LiveStream `json:"stream"`
+	// True when the stream was linked to this account by hand, not guessed
+	// from names.
+	Linked bool `json:"linked,omitempty"`
 }
 
 type LiveHero struct {
@@ -58,6 +61,8 @@ type DeadlockLiveBoard struct {
 	// Deadlock streams no live player could be matched to.
 	Other   []LiveStream `json:"other"`
 	Matches int          `json:"matches"` // standard matches only
+	// Every streamer linked by hand, live or not.
+	Linked []LinkedStatus `json:"linked"`
 	// Whether Twitch could be asked; Reason says why not: not_set_up |
 	// bad_credentials | unreachable.
 	StreamsAvailable bool   `json:"streamsAvailable"`
@@ -202,15 +207,33 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 	if err != nil {
 		return DeadlockLiveBoard{}, err
 	}
-	board := DeadlockLiveBoard{Matches: matches, Other: []LiveStream{}, Heroes: []LiveHero{}, Freshness: fresh}
+	board := DeadlockLiveBoard{Matches: matches, Other: []LiveStream{}, Heroes: []LiveHero{}, Linked: []LinkedStatus{}, Freshness: fresh}
 
 	streams, reason := a.liveStreams(force)
 	board.StreamsAvailable, board.Reason = reason == "", reason
+	byLogin := map[string]LiveStream{}
+	for _, s := range streams {
+		byLogin[strings.ToLower(s.Login)] = s
+	}
 
-	// Each stream goes to at most one player.
+	// Each stream goes to at most one player. Links made by hand come first:
+	// they are certain, names are a guess.
 	used := map[string]bool{}
+	links := a.Store.StreamLinks()
+	linkOf := map[uint64]string{}
+	for _, l := range links {
+		linkOf[l.AccountID] = l.Twitch
+	}
 	for i := range players {
-		if players[i].Name == "" && players[i].Vanity == "" {
+		if login, ok := linkOf[players[i].AccountID]; ok {
+			if s, live := byLogin[login]; live && !used[s.Login] {
+				players[i].Stream, players[i].Linked = &s, true
+				used[s.Login] = true
+			}
+		}
+	}
+	for i := range players {
+		if players[i].Stream != nil || (players[i].Name == "" && players[i].Vanity == "") {
 			continue
 		}
 		for j := range streams {
@@ -229,6 +252,24 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 	}
 
 	info := a.Deadlock.Heroes()
+
+	// Where each linked streamer is right now.
+	inMatch := map[uint64]LivePlayer{}
+	for _, p := range players {
+		inMatch[p.AccountID] = p
+	}
+	for _, l := range links {
+		st := LinkedStatus{StreamLink: l}
+		if s, live := byLogin[l.Twitch]; live {
+			st.Stream = &s
+		}
+		if p, ok := inMatch[l.AccountID]; ok {
+			id := heroOf[l.AccountID]
+			st.HeroID, st.HeroName, st.Mode = id, info[id].Name, p.Mode
+		}
+		board.Linked = append(board.Linked, st)
+	}
+
 	byHero := map[int]*LiveHero{}
 	for _, p := range players {
 		id := heroOf[p.AccountID]

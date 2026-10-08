@@ -569,3 +569,7 @@ kbd { font: 500 11px var(--body); padding: 1px 5px; border: 1px solid var(--line
 
 .mode-tag { position: absolute; right: 8px; top: 8px; padding: 1px 7px; border-radius: 4px; background: rgba(0, 0, 0, .7); font: 600 11px var(--display); text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
 .mode-tag.ranked { background: var(--accent); color: var(--accent-ink); }
+
+.linked .lines .line { align-items: center; }
+.lnk-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.lnk-form .row.wrap .input { min-width: 220px; }

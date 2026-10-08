@@ -126,3 +126,66 @@ func TestDeadlockLiveBoard(t *testing.T) {
 		t.Fatalf("an unmatched stream is listed apart: %+v", b.Other)
 	}
 }
+
+func TestLinkedStreamersAreFoundWhateverTheirName(t *testing.T) {
+	if l, ok := twitchFrom("https://www.twitch.tv/TiffIsPurrfect?sr=a"); !ok || l != "tiffispurrfect" {
+		t.Fatalf("twitch link read wrongly: %q", l)
+	}
+	if _, ok := twitchFrom("not a channel!"); ok {
+		t.Fatal("rubbish accepted as a channel")
+	}
+
+	f := newFakeAPI(t, map[string]any{
+		"/v1/assets/heroes": []any{map[string]any{"id": 13, "name": "Haze"}, map[string]any{"id": 2, "name": "Seven"}},
+		"/v1/matches/active": []any{
+			map[string]any{"match_id": 10, "start_time": 1000, "match_mode_parsed": "Ranked", "game_mode_parsed": "KECitadelGameModeNormal", "players": []any{
+				map[string]any{"account_id": 7, "hero_id": 13}, map[string]any{"account_id": 8, "hero_id": 2},
+			}},
+		},
+		"/v1/players/steam": []any{
+			map[string]any{"account_id": 7, "personaname": "Tiff ♡"},
+			map[string]any{"account_id": 8, "personaname": "someone"},
+		},
+	})
+	a := newTestApp(t)
+	a.Deadlock.api = &service{Name: "The Deadlock API", Base: f.srv.URL, Attempts: 1}
+	conv := newFakeConvex(t)
+	a.Cloud.base = conv.srv.URL
+	conv.twitch = map[string]any{"ok": true, "streams": []any{
+		map[string]any{"login": "tiffispurrfect", "name": "TiffIsPurrfect", "viewers": 79},
+		map[string]any{"login": "offmatch", "name": "OffMatch", "viewers": 5},
+	}}
+
+	// Without a link the names don't agree, so she isn't found.
+	b, err := a.DeadlockLive(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Heroes[0].Streams != 0 || b.Heroes[1].Streams != 0 {
+		t.Fatalf("a different name must not match: %+v", b.Heroes)
+	}
+
+	if _, err := a.Store.LinkStreamer("twitch.tv/TiffIsPurrfect", 7, "Tiff ♡", nil); err != nil {
+		t.Fatal(err)
+	}
+	a.Store.LinkStreamer("offmatch", 99, "Elsewhere", nil)
+	b, _ = a.DeadlockLive(true)
+	var haze LiveHero
+	for _, h := range b.Heroes {
+		if h.Name == "Haze" {
+			haze = h
+		}
+	}
+	if haze.Streams != 1 || haze.Players[0].Stream == nil || haze.Players[0].Stream.Login != "tiffispurrfect" || !haze.Players[0].Linked {
+		t.Fatalf("the linked account should carry her stream on Haze: %+v", haze)
+	}
+	if len(b.Linked) != 2 || b.Linked[0].Twitch != "offmatch" || b.Linked[0].Stream == nil || b.Linked[0].HeroName != "" {
+		t.Fatalf("a linked streamer who is live but not in a listed match: %+v", b.Linked)
+	}
+	if b.Linked[1].Twitch != "tiffispurrfect" || b.Linked[1].HeroName != "Haze" || b.Linked[1].Mode != "Ranked" {
+		t.Fatalf("a linked streamer in a listed match: %+v", b.Linked)
+	}
+	if left := a.Store.UnlinkStreamer("https://twitch.tv/offmatch"); len(left) != 1 || left[0].Twitch != "tiffispurrfect" {
+		t.Fatalf("unlink failed: %+v", left)
+	}
+}

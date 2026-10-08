@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"thetracker/internal/core"
@@ -366,6 +367,21 @@ func commands(a *core.App) map[string]command {
 			return a.Ow.Progress(p.Mode), nil
 		}),
 
+		"stream_links": none(func() (any, error) { return s.StreamLinks(), nil }),
+		"stream_link_add": in(func(p struct {
+			Twitch    string  `json:"twitch"`
+			AccountID string  `json:"accountId"`
+			SteamName string  `json:"steamName"`
+			Avatar    *string `json:"avatar"`
+		}) (any, error) {
+			id, _ := strconv.ParseUint(p.AccountID, 10, 64)
+			return s.LinkStreamer(p.Twitch, id, p.SteamName, p.Avatar)
+		}),
+		"stream_link_remove": in(func(p struct {
+			Twitch string `json:"twitch"`
+		}) (any, error) {
+			return s.UnlinkStreamer(p.Twitch), nil
+		}),
 		"deadlock_live_board": in(func(p forceArg) (any, error) { return a.DeadlockLive(p.Force) }),
 
 		// ----- Compare and share -----
