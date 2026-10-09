@@ -93,23 +93,34 @@ function sinceLast(clock, every, from = 0) {
 function schedule(clock, gameType) {
   const d = settings.dota || {};
   const lead = settings.leadSeconds || 5;
+  const turbo = gameType === "turbo";
+  const scale = turbo ? 0.5 : 1;
+  const until = d.until || {};
+  // Whether a reminder for an event at time t is still worth showing: within
+  // its window, or (lotus) back for the Great Lotus.
+  const inWindow = (kind, t) => {
+    const mins = until[kind];
+    if (!mins || t <= mins * 60 * scale) return true;
+    return kind === "lotus" && d.lotusLate !== false && t >= GREAT_LOTUS_AT * scale;
+  };
   const out = [];
   const add = (kind, every, from, kLead = lead) => {
     const secs = untilNext(clock, every, from);
-    out.push({ kind, secs, since: sinceLast(clock, every, from), lead: kLead, at: clock + secs });
+    const since = sinceLast(clock, every, from);
+    const at = clock + secs;
+    out.push({ kind, secs: inWindow(kind, at) ? secs : Infinity, since: Number.isFinite(since) && inWindow(kind, clock - since) ? since : Infinity, lead: kLead, at });
   };
-  if (d.runes) {
-    add("bounty", BOUNTY_EVERY, 0);
-    add("power", POWER_EVERY, POWER_FROM);
-    add("wisdom", WISDOM_EVERY, WISDOM_EVERY);
+  // A rune is on when its own switch is and the old all-runes switch is.
+  const rune = (k) => d.runes !== false && d[k] !== false;
+  if (rune("bounty")) add("bounty", BOUNTY_EVERY, 0);
+  if (rune("power")) add("power", POWER_EVERY, POWER_FROM);
+  if (rune("wisdom")) add("wisdom", WISDOM_EVERY, WISDOM_EVERY);
+  if (rune("water")) {
     const next = WATER_TIMES.find((w) => w >= clock);
     const last = [...WATER_TIMES].reverse().find((w) => w <= clock);
     out.push({ kind: "water", secs: next === undefined ? Infinity : next - clock, since: last === undefined ? Infinity : clock - last, lead, at: next });
   }
-  if (d.lotus) {
-    const turbo = gameType === "turbo";
-    add("lotus", turbo ? LOTUS_EVERY / 2 : LOTUS_EVERY, turbo ? LOTUS_FROM / 2 : LOTUS_FROM);
-  }
+  if (d.lotus) add("lotus", turbo ? LOTUS_EVERY / 2 : LOTUS_EVERY, turbo ? LOTUS_FROM / 2 : LOTUS_FROM);
   if (d.stacks) add("stack", 60, STACK_FROM, STACK_LEAD);
   return out;
 }
@@ -118,7 +129,7 @@ function schedule(clock, gameType) {
 /// just happened (`now`).
 function upcoming(clock, gameType) {
   return schedule(clock, gameType)
-    .map((e) => (e.secs === 0 || e.since < NOW_FOR ? { ...e, now: true, secs: 0 } : e))
+    .map((e) => ((e.secs === 0 && e.since === 0) || e.since < NOW_FOR ? { ...e, now: true, secs: 0 } : e))
     .filter((e) => e.now || (e.secs > 0 && e.secs <= e.lead))
     .sort((a, b) => a.secs - b.secs);
 }

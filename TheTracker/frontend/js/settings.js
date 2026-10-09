@@ -129,7 +129,16 @@ onChange("ov-range", (el) => {
   if (out) out.textContent = el.dataset.unit === "%" ? `${Math.round(el.value * 100)}%` : `${el.value} s`;
 });
 onChange("ov-save", (el) => saveOverlay({ [el.dataset.key]: el.type === "checkbox" ? el.checked : el.type === "range" ? Number(el.value) : el.value }));
-onChange("ov-panel", (el) => saveOverlay({ dota: { [el.dataset.key]: el.checked } }));
+// Turning on any rune also turns on the old all-runes switch, which older
+// settings files may have off.
+onChange("ov-panel", (el) => saveOverlay({ dota: { [el.dataset.key]: el.checked, ...(el.checked && ["bounty", "water", "power", "wisdom"].includes(el.dataset.key) ? { runes: true } : {}) } }));
+onChange("ov-until", (el) => saveOverlay({ dota: { until: { ...(S.boot.prefs.overlay.dota.until || {}), [el.dataset.key]: Number(el.value) } } }));
+const OV_PRESETS = {
+  core: { stack: 10, bounty: 12, lotus: 15, power: 0, wisdom: 0 },
+  support: { stack: 20, bounty: 20, lotus: 20, power: 0, wisdom: 0 },
+  all: { stack: 0, bounty: 0, lotus: 0, power: 0, wisdom: 0 },
+};
+act("ov-preset", (el) => saveOverlay({ dota: { until: { ...OV_PRESETS[el.dataset.preset] }, runes: true, bounty: true, water: true, power: true, wisdom: true, lotus: true, stacks: true, lotusLate: true } }));
 act("ov-corner", (el) => saveOverlay({ corner: el.dataset.corner }));
 act("ov-test", async () => {
   if (await attempt(() => invoke("sim_start", { seconds: 90 }))) {
@@ -140,6 +149,23 @@ act("ov-test", async () => {
     pollLive();
   }
 });
+
+const OV_UNTIL = [[10, "until 10:00"], [12, "until 12:00"], [15, "until 15:00"], [20, "until 20:00"], [30, "until 30:00"], [0, "whole game"]];
+
+/// One reminder: its switch, and how long into the game it runs.
+function ovRow(o, key, untilKey, label, note) {
+  const d = o.dota, rune = ["bounty", "water", "power", "wisdom"].includes(key);
+  const on = rune ? d.runes !== false && d[key] !== false : !!d[key];
+  const until = untilKey ? ((d.until || {})[untilKey] ?? 0) : null;
+  return `<div class="ov-row"><label class="switch"><input type="checkbox" data-change="ov-panel" data-key="${key}" ${on ? "checked" : ""} /><span>${label} <span class="muted">(${note})</span></span></label>
+    ${untilKey ? `<select class="input" id="ovUntil_${untilKey}" data-change="ov-until" data-key="${untilKey}" ${on ? "" : "disabled"}>${OV_UNTIL.map(([v, l]) => `<option value="${v}" ${v === until ? "selected" : ""}>${l}</option>`).join("")}</select>` : ""}</div>`;
+}
+
+/// Which preset the windows match, if any.
+function ovPresetOf(d) {
+  const u = d.until || {};
+  return Object.keys(OV_PRESETS).find((k) => Object.entries(OV_PRESETS[k]).every(([kind, v]) => (u[kind] ?? 0) === v)) || null;
+}
 
 function monitorLabel(m, i) {
   return `Display ${i + 1} (${m.width} × ${m.height})${m.primary ? ", main" : ""}`;
@@ -160,9 +186,17 @@ function overlayHtml() {
     </section>
     <section class="set">
       <h3>Reminders</h3>
-      <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="runes" ${o.dota.runes ? "checked" : ""} /><span>Runes and shrines <span class="muted">(bounty every 4 min, water at 2 and 4, power every 2 from 6:00, wisdom shrines every 7)</span></span></label>
-      <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="lotus" ${o.dota.lotus ? "checked" : ""} /><span>Healing lotus <span class="muted">(every 3 min from 3:00)</span></span></label>
-      <label class="switch"><input type="checkbox" data-change="ov-panel" data-key="stacks" ${o.dota.stacks ? "checked" : ""} /><span>Camp pull <span class="muted">(counts down from :45 to the :52 pull, from 1:45)</span></span></label>
+            <p class="muted">Each reminder stops when it stops mattering. Pick a role to set them all, then change any row.</p>
+      <div class="chips">${[["core", "Core"], ["support", "Support"], ["all", "Everything, whole game"]].map(([k, l]) => `<button class="chip ${ovPresetOf(o.dota) === k ? "on" : ""}" data-act="ov-preset" data-preset="${k}" type="button">${l}</button>`).join("")}</div>
+      <div class="ov-rows">
+        ${ovRow(o, "stacks", "stack", "Camp pull", "counts down from :45 to the :52 pull")}
+        ${ovRow(o, "bounty", "bounty", "Bounty runes", "every 4 min")}
+        ${ovRow(o, "lotus", "lotus", "Healing lotus", "every 3 min from 3:00")}
+        <label class="switch ov-sub"><input type="checkbox" data-change="ov-panel" data-key="lotusLate" ${o.dota.lotusLate !== false ? "checked" : ""} /><span>Lotus again from 35:00 <span class="muted">(Great and Greater Lotus)</span></span></label>
+        ${ovRow(o, "power", "power", "Power rune", "every 2 min from 6:00")}
+        ${ovRow(o, "wisdom", "wisdom", "Wisdom shrines", "every 7 min")}
+        ${ovRow(o, "water", null, "Water runes", "at 2:00 and 4:00 only")}
+      </div>
       <label class="field"><span>Warn me <b id="ovLeadVal">${o.leadSeconds} s</b> before runes and lotuses</span>
         <input type="range" id="ovLead" min="3" max="30" step="1" value="${o.leadSeconds}" data-input="ov-range" data-unit="s" data-change="ov-save" data-key="leadSeconds" /></label>
       <p class="hint">Since patch 7.41 a shrine or lotus pool fills more slowly while an enemy stands in it, so those can come a little later than shown. In Turbo the lotus is taken as twice as fast.</p>

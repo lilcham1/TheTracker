@@ -77,4 +77,37 @@ ov.setSettings(base);
 assert.ok(!ov.frame(t(5, 0)).includes('class="next"'), "next up is off by default");
 assert.ok(ov.frame(t(8)).includes(">Now<"), "an event that just happened says Now");
 
+// ---------- Windows: reminders stop when they stop mattering ----------
+const core = { ...base, dota: { runes: true, bounty: true, water: true, power: true, wisdom: true, lotus: true, stacks: true, lotusLate: true, until: { stack: 10, bounty: 12, lotus: 15, power: 0, wisdom: 0 } } };
+ov.setSettings(core);
+// The pull: still at 9:45 (for 9:52), gone from 10:45.
+assert.deepStrictEqual(counting("stack", t(9, 40), t(9, 52)), [t(9, 45), t(9, 46), t(9, 47), t(9, 48), t(9, 49), t(9, 50), t(9, 51)]);
+assert.deepStrictEqual(counting("stack", t(10, 30), t(14, 0)), [], "no pull after 10:00");
+// Bounties: 12:00 is the last.
+assert.deepStrictEqual(nowAt("bounty", t(11, 0), t(20, 0)), [t(12), t(12, 1)]);
+// Lotus: 15:00 the last early one, then back from 35:00.
+assert.deepStrictEqual(nowAt("lotus", t(14, 0), t(40, 0)), [t(15), t(15, 1), t(36), t(36, 1), t(39), t(39, 1)]);
+// Power and shrines all game.
+assert.ok(nowAt("power", t(58, 0), t(60, 5)).includes(t(60)));
+assert.ok(nowAt("wisdom", t(62, 0), t(63, 5)).includes(t(63)));
+// Turbo halves the windows: the pull ends at 5:00, the lotus is back from 17:30.
+assert.deepStrictEqual(counting("stack", t(5, 30), t(8, 0), "turbo"), []);
+assert.deepStrictEqual(counting("stack", t(4, 40), t(4, 52), "turbo"), [t(4, 45), t(4, 46), t(4, 47), t(4, 48), t(4, 49), t(4, 50), t(4, 51)]);
+assert.ok(nowAt("lotus", t(17, 0), t(19, 0), "turbo").includes(t(18)), "turbo great lotus at 18:00");
+assert.ok(!nowAt("lotus", t(9, 0), t(12, 0), "turbo").length, "turbo lotus quiet between 7:30 and 17:30");
+// Without lotusLate the lotus stays quiet after its window.
+ov.setSettings({ ...core, dota: { ...core.dota, lotusLate: false } });
+assert.deepStrictEqual(nowAt("lotus", t(16, 0), t(60, 0)), []);
+// Next up skips what is out of its window.
+ov.setSettings({ ...core, nextUp: true });
+assert.ok(!ov.nextUp(t(20, 0), undefined, []).some((e) => e.kind === "stack" || e.kind === "bounty"), "no pull or bounty in next up at 20:00");
+// One rune switched off on its own.
+ov.setSettings({ ...core, dota: { ...core.dota, wisdom: false } });
+assert.deepStrictEqual(nowAt("wisdom", t(6, 0), t(8, 0)), []);
+// Old settings: only the all-runes switch, no windows: everything all game.
+ov.setSettings({ ...base, dota: { runes: true, lotus: true, stacks: true } });
+assert.ok(counting("stack", t(30, 40), t(30, 52)).length === 7, "old settings keep the pull all game");
+ov.setSettings({ ...base, dota: { runes: false, lotus: true, stacks: true } });
+assert.deepStrictEqual(nowAt("bounty", 1, t(9)), [], "the old all-runes switch still turns runes off");
+
 console.log("overlay timings ok");

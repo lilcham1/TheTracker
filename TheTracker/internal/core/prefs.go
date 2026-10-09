@@ -12,9 +12,26 @@ import (
 // a newer setting and vice versa.
 
 type DotaPanels struct {
+	// Runes switches the four rune reminders together (the only rune switch
+	// before 1.5.1); each also has its own.
 	Runes  bool `json:"runes"`
+	Bounty bool `json:"bounty"`
+	Water  bool `json:"water"`
+	Power  bool `json:"power"`
+	Wisdom bool `json:"wisdom"`
 	Lotus  bool `json:"lotus"`
 	Stacks bool `json:"stacks"`
+	// How many minutes into a game each reminder runs (stack, bounty,
+	// lotus, power, wisdom); 0 is the whole game. Turbo halves them.
+	Until map[string]int `json:"until"`
+	// The lotus reminder comes back from 35:00, when the pools grow Great
+	// and Greater Lotuses.
+	LotusLate bool `json:"lotusLate"`
+}
+
+// The defaults: each reminder for as long as it usually matters.
+func defaultUntil() map[string]int {
+	return map[string]int{"stack": 10, "bounty": 12, "lotus": 15, "power": 0, "wisdom": 0}
 }
 
 type OverlaySettings struct {
@@ -101,7 +118,7 @@ func defaultOverlay() OverlaySettings {
 	return OverlaySettings{
 		Opacity: 0.85, Scale: 1.0, LeadSeconds: 5, Corner: "top-left",
 		ClickThrough: true, Auto: true,
-		Dota: DotaPanels{Runes: true, Lotus: true, Stacks: true},
+		Dota: DotaPanels{Runes: true, Bounty: true, Water: true, Power: true, Wisdom: true, Lotus: true, Stacks: true, Until: defaultUntil(), LotusLate: true},
 	}
 }
 
@@ -140,6 +157,13 @@ func (o OverlaySettings) sanitized() OverlaySettings {
 	o.Opacity = clampF(o.Opacity, 0.25, 1.0)
 	o.Scale = clampF(o.Scale, 0.75, 1.5)
 	o.LeadSeconds = clampI(o.LeadSeconds, 1, 30)
+	until := defaultUntil()
+	for k := range until {
+		if v, ok := o.Dota.Until[k]; ok {
+			until[k] = clampI(v, 0, 90)
+		}
+	}
+	o.Dota.Until = until
 	switch o.Corner {
 	case "top-left", "top-right", "bottom-left", "bottom-right":
 	default:
