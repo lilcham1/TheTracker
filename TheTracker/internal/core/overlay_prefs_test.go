@@ -27,3 +27,18 @@ func TestOverlayReminderWindowsDefaultsAndOldFiles(t *testing.T) {
 		t.Fatal("an unknown reminder kept a window")
 	}
 }
+
+func TestOverlayOffsetKeptAndClamped(t *testing.T) {
+	o := defaultOverlay()
+	if o.sanitized().OffsetY != 0 {
+		t.Fatal("no offset by default: the overlay stays where it was")
+	}
+	o.OffsetY = 120
+	if o.sanitized().OffsetY != 120 {
+		t.Fatal("a chosen offset is kept")
+	}
+	o.OffsetY = 5000
+	if o.sanitized().OffsetY != 600 {
+		t.Fatal("the offset is clamped")
+	}
+}

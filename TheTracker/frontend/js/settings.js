@@ -126,7 +126,7 @@ async function saveOverlay(patch) {
 onChange("ov-range", (el) => {
   // The label follows the slider as it moves; the save happens on release.
   const out = document.getElementById(el.id + "Val");
-  if (out) out.textContent = el.dataset.unit === "%" ? `${Math.round(el.value * 100)}%` : `${el.value} s`;
+  if (out) out.textContent = el.dataset.unit === "%" ? `${Math.round(el.value * 100)}%` : el.dataset.unit === "px" ? `${el.value} px` : `${el.value} s`;
 });
 onChange("ov-save", (el) => saveOverlay({ [el.dataset.key]: el.type === "checkbox" ? el.checked : el.type === "range" ? Number(el.value) : el.value }));
 // Turning on any rune also turns on the old all-runes switch, which older
@@ -225,6 +225,8 @@ function overlayHtml() {
       <label class="field"><span>Display</span><select class="input" data-change="ov-save" data-key="monitor">
         <option value="" ${o.monitor ? "" : "selected"}>The one TheTracker's window is on</option>
         ${monitors.map((m, i) => `<option value="${esc(m.name)}" ${o.monitor === m.name ? "selected" : ""}>${esc(monitorLabel(m, i))}</option>`).join("")}</select></label>
+      <label class="field"><span>${/^bottom/.test(o.corner) ? "Raise it by" : "Lower it by"} <b id="ovOffsetVal">${o.offsetY || 0} px</b> <span class="muted">to clear the game's own buttons in that corner</span></span>
+        <input type="range" id="ovOffset" min="0" max="600" step="10" value="${o.offsetY || 0}" data-input="ov-range" data-unit="px" data-change="ov-save" data-key="offsetY" /></label>
       <label class="field"><span>Size <b id="ovScaleVal">${Math.round(o.scale * 100)}%</b></span>
         <input type="range" id="ovScale" min="0.75" max="1.5" step="0.05" value="${o.scale}" data-input="ov-range" data-unit="%" data-change="ov-save" data-key="scale" /></label>
       <label class="field"><span>Opacity <b id="ovOpacityVal">${Math.round(o.opacity * 100)}%</b></span>

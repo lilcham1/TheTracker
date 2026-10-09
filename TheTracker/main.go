@@ -391,12 +391,15 @@ func (s *shell) ApplyOverlay(o core.OverlaySettings) {
 	// screen's own origin is part of every position; without it the window
 	// lands on the primary display whichever one was chosen.
 	b := sc.Bounds
-	x, y := b.X+overlayMargin, b.Y+overlayMargin
+	// The offset moves it in from the top or bottom edge, never off the
+	// screen.
+	in := min(overlayMargin+o.OffsetY, max(overlayMargin, b.Height-h-overlayMargin))
+	x, y := b.X+overlayMargin, b.Y+in
 	if strings.HasSuffix(o.Corner, "right") {
 		x = b.X + b.Width - w - overlayMargin
 	}
 	if strings.HasPrefix(o.Corner, "bottom") {
-		y = b.Y + b.Height - h - overlayMargin
+		y = b.Y + b.Height - h - in
 	}
 	s.overlay.SetBounds(application.Rect{X: x, Y: y, Width: w, Height: h})
 }

@@ -66,11 +66,14 @@ func defaultUntil() map[string]int {
 }
 
 type OverlaySettings struct {
-	Opacity      float64 `json:"opacity"`     // 0.25–1.0
-	Scale        float64 `json:"scale"`       // 0.75–1.5
-	LeadSeconds  int     `json:"leadSeconds"` // 1–30
-	Corner       string  `json:"corner"`      // top-left | top-right | bottom-left | bottom-right
-	ClickThrough bool    `json:"clickThrough"`
+	Opacity     float64 `json:"opacity"`     // 0.25–1.0
+	Scale       float64 `json:"scale"`       // 0.75–1.5
+	LeadSeconds int     `json:"leadSeconds"` // 1–30
+	Corner      string  `json:"corner"`      // top-left | top-right | bottom-left | bottom-right
+	// Pixels further in from the corner's top or bottom edge, to clear the
+	// game's own HUD there. 0–600.
+	OffsetY      int  `json:"offsetY"`
+	ClickThrough bool `json:"clickThrough"`
 	// Show when a match starts, hide when it ends.
 	Auto bool `json:"auto"`
 	// Display name to pin the overlay to; empty follows the main window.
@@ -188,6 +191,7 @@ func (o OverlaySettings) sanitized() OverlaySettings {
 	o.Opacity = clampF(o.Opacity, 0.25, 1.0)
 	o.Scale = clampF(o.Scale, 0.75, 1.5)
 	o.LeadSeconds = clampI(o.LeadSeconds, 1, 30)
+	o.OffsetY = clampI(o.OffsetY, 0, 600)
 	until := defaultUntil()
 	for k := range until {
 		if v, ok := o.Dota.Until[k]; ok {
