@@ -166,10 +166,10 @@ func TestLinkedStreamersAreFoundWhateverTheirName(t *testing.T) {
 		t.Fatalf("a different name must not match: %+v", b.Heroes)
 	}
 
-	if _, err := a.Store.LinkStreamer("twitch.tv/TiffIsPurrfect", 7, "Tiff ♡", nil); err != nil {
+	if _, err := a.Store.LinkStreamer("deadlock", "twitch.tv/TiffIsPurrfect", 7, "Tiff ♡", nil); err != nil {
 		t.Fatal(err)
 	}
-	a.Store.LinkStreamer("offmatch", 99, "Elsewhere", nil)
+	a.Store.LinkStreamer("deadlock", "offmatch", 99, "Elsewhere", nil)
 	b, _ = a.DeadlockLive(true)
 	var haze LiveHero
 	for _, h := range b.Heroes {
@@ -186,7 +186,7 @@ func TestLinkedStreamersAreFoundWhateverTheirName(t *testing.T) {
 	if b.Linked[1].Twitch != "tiffispurrfect" || b.Linked[1].HeroName != "Haze" || b.Linked[1].Mode != "Ranked" {
 		t.Fatalf("a linked streamer in a listed match: %+v", b.Linked)
 	}
-	if left := a.Store.UnlinkStreamer("https://twitch.tv/offmatch"); len(left) != 1 || left[0].Twitch != "tiffispurrfect" {
+	if left := a.Store.UnlinkStreamer("deadlock", "https://twitch.tv/offmatch"); len(left) != 1 || left[0].Twitch != "tiffispurrfect" {
 		t.Fatalf("unlink failed: %+v", left)
 	}
 }

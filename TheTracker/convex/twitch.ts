@@ -1,10 +1,10 @@
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 /**
- * Live Deadlock streams from Twitch's official API, for the app's Deadlock
- * Live page. Twitch needs an app's client ID and secret, which can never
+ * Live Deadlock and Dota 2 streams from Twitch's official API, for the app's
+ * streamer pages. Twitch needs an app's client ID and secret, which can never
  * ship inside a desktop app, so the call is made here with the two values
  * the deployment's owner sets once:
  *
@@ -32,10 +32,30 @@ export const setKv = internalMutation({
 });
 
 type Stream = { login: string; name: string; title: string; viewers: number; startedAt: string; thumbnail: string; language: string };
+type Result = { ok: true; streams: Stream[] } | { ok: false; reason: string };
 
+// The Twitch categories the app reads, by the app's own game keys.
+const CATEGORIES: Record<string, string> = { deadlock: "Deadlock", dota: "Dota 2" };
+
+/** Live streams in one game's Twitch category, most watched first. */
+export const streams = action({
+  args: { game: v.string() },
+  handler: async (ctx, { game }): Promise<Result> => {
+    if (!CATEGORIES[game]) return { ok: false, reason: "unknown_game" };
+    return await ctx.runAction(internal.twitch.fetchStreams, { game });
+  },
+});
+
+/** The first version's name, still used by TheTracker 1.3.x. */
 export const deadlockStreams = action({
   args: {},
-  handler: async (ctx): Promise<{ ok: true; streams: Stream[] } | { ok: false; reason: string }> => {
+  handler: async (ctx): Promise<Result> => await ctx.runAction(internal.twitch.fetchStreams, { game: "deadlock" }),
+});
+
+export const fetchStreams = internalAction({
+  args: { game: v.string() },
+  handler: async (ctx, { game: gameKey }): Promise<Result> => {
+    const category = CATEGORIES[gameKey];
     const id = process.env.TWITCH_CLIENT_ID;
     const secret = process.env.TWITCH_CLIENT_SECRET;
     if (!id || !secret) return { ok: false, reason: "not_set_up" };
@@ -57,14 +77,16 @@ export const deadlockStreams = action({
     }
     const headers = { "Client-Id": id, Authorization: `Bearer ${token.value}` };
 
-    let game = await ctx.runQuery(internal.twitch.getKv, { key: "twitch_deadlock_game" });
+    // The Deadlock key keeps its first name, so its cached id is reused.
+    const gameKv = gameKey === "deadlock" ? "twitch_deadlock_game" : `twitch_game_${gameKey}`;
+    let game = await ctx.runQuery(internal.twitch.getKv, { key: gameKv });
     if (!game || game.expires < now) {
-      const r = await fetch("https://api.twitch.tv/helix/games?name=Deadlock", { headers });
+      const r = await fetch(`https://api.twitch.tv/helix/games?name=${encodeURIComponent(category)}`, { headers });
       if (!r.ok) return { ok: false, reason: r.status === 401 ? "bad_credentials" : "unreachable" };
       const j = (await r.json()) as { data: { id: string }[] };
       if (!j.data.length) return { ok: false, reason: "unreachable" };
       game = { value: j.data[0].id, expires: now + 7 * 86_400_000 };
-      await ctx.runMutation(internal.twitch.setKv, { key: "twitch_deadlock_game", value: game.value, expires: game.expires });
+      await ctx.runMutation(internal.twitch.setKv, { key: gameKv, value: game.value, expires: game.expires });
     }
 
     // Most watched first, as Twitch returns them; four pages is every

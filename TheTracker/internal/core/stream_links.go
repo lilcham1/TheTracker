@@ -13,6 +13,7 @@ import (
 // kept on this PC only.
 
 type StreamLink struct {
+	Game      string  `json:"game"`   // deadlock | dota
 	Twitch    string  `json:"twitch"` // the channel's login, lowercase
 	AccountID uint64  `json:"accountId"`
 	SteamName string  `json:"steamName"`
@@ -51,12 +52,36 @@ func twitchFrom(s string) (string, bool) {
 func (s *Store) StreamLinks() []StreamLink {
 	out := []StreamLink{}
 	s.readJSON("stream_links.json", &out)
+	for i := range out {
+		if out[i].Game == "" {
+			out[i].Game = "deadlock"
+		}
+	}
 	return out
 }
 
-// LinkStreamer ties a Twitch channel to a Steam account. A channel has one
-// account; linking it again replaces the old one.
-func (s *Store) LinkStreamer(channel string, accountID uint64, steamName string, avatar *string) ([]StreamLink, error) {
+// StreamLinksFor is one game's links.
+func (s *Store) StreamLinksFor(game string) []StreamLink {
+	out := []StreamLink{}
+	for _, l := range s.StreamLinks() {
+		if l.Game == game {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+func validLinkGame(game string) string {
+	if game == "dota" {
+		return "dota"
+	}
+	return "deadlock"
+}
+
+// LinkStreamer ties a Twitch channel to the Steam account its streamer plays
+// a game on. A channel has one account per game; linking again replaces it.
+func (s *Store) LinkStreamer(game, channel string, accountID uint64, steamName string, avatar *string) ([]StreamLink, error) {
+	game = validLinkGame(game)
 	login, ok := twitchFrom(channel)
 	if !ok {
 		return s.StreamLinks(), errors.New("That isn't a Twitch channel name. Paste the channel's name or its twitch.tv link.")
@@ -64,20 +89,21 @@ func (s *Store) LinkStreamer(channel string, accountID uint64, steamName string,
 	if accountID == 0 {
 		return s.StreamLinks(), errors.New("Pick the Steam account this streamer plays on.")
 	}
-	list := []StreamLink{{Twitch: login, AccountID: accountID, SteamName: steamName, Avatar: avatar, AddedAt: time.Now().Unix()}}
+	list := []StreamLink{{Game: game, Twitch: login, AccountID: accountID, SteamName: steamName, Avatar: avatar, AddedAt: time.Now().Unix()}}
 	for _, l := range s.StreamLinks() {
-		if l.Twitch != login {
+		if l.Twitch != login || l.Game != game {
 			list = append(list, l)
 		}
 	}
 	return list, s.writeJSON("stream_links.json", list)
 }
 
-func (s *Store) UnlinkStreamer(channel string) []StreamLink {
+func (s *Store) UnlinkStreamer(game, channel string) []StreamLink {
+	game = validLinkGame(game)
 	login, _ := twitchFrom(channel)
 	list := []StreamLink{}
 	for _, l := range s.StreamLinks() {
-		if l.Twitch != login {
+		if l.Twitch != login || l.Game != game {
 			list = append(list, l)
 		}
 	}

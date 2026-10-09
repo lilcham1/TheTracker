@@ -125,6 +125,8 @@ type DeadlockRank struct {
 	Label    string `json:"label"`
 	// The game's icon for this rank, when known.
 	Icon *string `json:"icon,omitempty"`
+	// Dota medals draw their stars as a second image over the medal.
+	Star *string `json:"star,omitempty"`
 }
 
 // decodeBadge unpacks tier*10 + subrank: badge 26 is Seeker 6.

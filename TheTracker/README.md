@@ -41,6 +41,8 @@ ID and secret set once on the deployment (`npx convex env set
 TWITCH_CLIENT_ID …` and `TWITCH_CLIENT_SECRET …`). Streams are matched to
 players by name, as nothing links a Steam account to a Twitch channel.
 
+**Dota 2 Streamers** – the same for Dota, as a tab under Live: Twitch streamers on each hero in Dota's top live games (from OpenDota), found by their in-game name, OpenDota's pro list, an exact Steam-name search run in the background, or your own links, with their medal. Dota's live list holds only the top ~100 games, so far fewer streamers can be placed than in Deadlock.
+
 **Counter-Strike 2** – live tracking of your own matches from Valve's Game
 State Integration, round by round: kills, damage (ADR), headshots, the weapon
 behind each kill, the side played, what you bought (pistol, eco, force or

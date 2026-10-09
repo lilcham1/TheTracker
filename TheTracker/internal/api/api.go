@@ -369,19 +369,22 @@ func commands(a *core.App) map[string]command {
 
 		"stream_links": none(func() (any, error) { return s.StreamLinks(), nil }),
 		"stream_link_add": in(func(p struct {
+			Game      string  `json:"game"`
 			Twitch    string  `json:"twitch"`
 			AccountID string  `json:"accountId"`
 			SteamName string  `json:"steamName"`
 			Avatar    *string `json:"avatar"`
 		}) (any, error) {
 			id, _ := strconv.ParseUint(p.AccountID, 10, 64)
-			return s.LinkStreamer(p.Twitch, id, p.SteamName, p.Avatar)
+			return s.LinkStreamer(p.Game, p.Twitch, id, p.SteamName, p.Avatar)
 		}),
 		"stream_link_remove": in(func(p struct {
+			Game   string `json:"game"`
 			Twitch string `json:"twitch"`
 		}) (any, error) {
-			return s.UnlinkStreamer(p.Twitch), nil
+			return s.UnlinkStreamer(p.Game, p.Twitch), nil
 		}),
+		"dota_streamers":      in(func(p forceArg) (any, error) { return a.DotaStreamers(p.Force) }),
 		"deadlock_live_board": in(func(p forceArg) (any, error) { return a.DeadlockLive(p.Force) }),
 
 		// ----- Compare and share -----
@@ -458,7 +461,7 @@ func commands(a *core.App) map[string]command {
 // CDNs the portraits and icons live on; no outbound connections from the page
 // at all — the backend makes those.
 const csp = "default-src 'self'; " +
-	"img-src 'self' data: https://cdn.cloudflare.steamstatic.com https://assets-bucket.deadlock-api.com https://api.deadlock-api.com " +
+	"img-src 'self' data: https://cdn.cloudflare.steamstatic.com https://assets-bucket.deadlock-api.com https://api.deadlock-api.com https://www.opendota.com " +
 	"https://avatars.steamstatic.com https://avatars.akamai.steamstatic.com https://avatars.cloudflare.steamstatic.com " +
 	"https://d15f34w2p8l1cc.cloudfront.net https://static.playoverwatch.com https://blz-contentstack-images.akamaized.net " +
 	"https://static-cdn.jtvnw.net; " +

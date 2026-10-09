@@ -252,7 +252,7 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 	}
 	board := DeadlockLiveBoard{Matches: matches, Other: []LiveStream{}, Heroes: []LiveHero{}, Linked: []LinkedStatus{}, Ranked: []RankedStreamer{}, Freshness: fresh}
 
-	streams, reason := a.liveStreams(force)
+	streams, reason := a.liveStreams("deadlock", force)
 	board.StreamsAvailable, board.Reason = reason == "", reason
 	byLogin := map[string]LiveStream{}
 	for _, s := range streams {
@@ -262,7 +262,7 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 	// Each stream goes to at most one player. Links made by hand come first:
 	// they are certain, names are a guess.
 	used := map[string]bool{}
-	links := a.Store.StreamLinks()
+	links := a.Store.StreamLinksFor("deadlock")
 	linkOf := map[uint64]string{}
 	for _, l := range links {
 		linkOf[l.AccountID] = l.Twitch
@@ -402,16 +402,24 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 		board.Linked = append(board.Linked, st)
 	}
 
+	board.Heroes = groupByHero(players, heroOf, func(id int) (string, *string) { return info[id].Name, info[id].Image })
+	return board, nil
+}
+
+// groupByHero puts live players under the hero they're on: streamers first,
+// ranked before unranked, most watched first; heroes with the most
+// streamers first.
+func groupByHero(players []LivePlayer, heroOf map[uint64]int, hero func(id int) (string, *string)) []LiveHero {
 	byHero := map[int]*LiveHero{}
 	for _, p := range players {
 		id := heroOf[p.AccountID]
 		h := byHero[id]
 		if h == nil {
-			name := info[id].Name
+			name, image := hero(id)
 			if name == "" {
 				name = fmt.Sprintf("Hero %d", id)
 			}
-			h = &LiveHero{HeroID: id, Name: name, Image: info[id].Image, Players: []LivePlayer{}}
+			h = &LiveHero{HeroID: id, Name: name, Image: image, Players: []LivePlayer{}}
 			byHero[id] = h
 		}
 		h.Players = append(h.Players, p)
@@ -422,6 +430,7 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 			}
 		}
 	}
+	out := []LiveHero{}
 	for _, h := range byHero {
 		sort.SliceStable(h.Players, func(i, j int) bool {
 			a, b := h.Players[i], h.Players[j]
@@ -429,7 +438,6 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 				return a.Stream != nil
 			}
 			if a.Stream != nil {
-				// Ranked games first, then the most watched.
 				if (a.Mode == "Ranked") != (b.Mode == "Ranked") {
 					return a.Mode == "Ranked"
 				}
@@ -437,10 +445,10 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 			}
 			return a.StartTime < b.StartTime
 		})
-		board.Heroes = append(board.Heroes, *h)
+		out = append(out, *h)
 	}
-	sort.Slice(board.Heroes, func(i, j int) bool {
-		a, b := board.Heroes[i], board.Heroes[j]
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
 		if a.Streams != b.Streams {
 			return a.Streams > b.Streams
 		}
@@ -452,14 +460,18 @@ func (a *App) DeadlockLive(force bool) (DeadlockLiveBoard, error) {
 		}
 		return a.Name < b.Name
 	})
-	return board, nil
+	return out
 }
 
-// liveStreams asks the cloud for Twitch's live Deadlock streams. The second
-// value is why there are none, or "".
-func (a *App) liveStreams(force bool) ([]LiveStream, string) {
-	streams, _, err := cachedFetch(a.Store, "dl_live_streams", 45*time.Second, force, func() ([]LiveStream, error) {
-		v, err := a.Cloud.call("action", "twitch:deadlockStreams", nil, "")
+// liveStreams asks the cloud for one game's live Twitch streams (deadlock or
+// dota). The second value is why there are none, or "".
+func (a *App) liveStreams(game string, force bool) ([]LiveStream, string) {
+	key := "dl_live_streams"
+	if game != "deadlock" {
+		key = game + "_live_streams"
+	}
+	streams, _, err := cachedFetch(a.Store, key, 45*time.Second, force, func() ([]LiveStream, error) {
+		v, err := a.Cloud.call("action", "twitch:streams", map[string]any{"game": game}, "")
 		if err != nil {
 			return nil, err
 		}

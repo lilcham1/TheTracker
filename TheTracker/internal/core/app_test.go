@@ -246,7 +246,7 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 			}
 			reply(map[string]any{"tokens": map[string]any{"token": "jwt-1", "refreshToken": "refresh-1"}})
 
-		case "twitch:deadlockStreams":
+		case "twitch:deadlockStreams", "twitch:streams":
 			if twitch == nil {
 				fail("Could not find public function for 'twitch:deadlockStreams'")
 				return
