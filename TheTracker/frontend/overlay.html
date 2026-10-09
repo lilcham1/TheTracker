@@ -15,38 +15,49 @@
     body.preview, body.preview.bottom { display: block; height: auto; }
     body.preview #chips { align-items: flex-start; transform-origin: top left; }
 
-    /* Each reminder carries its own colour in --c: the icon, the number and
-       the draining bar all take it, so the kind of event reads at a glance.
-       The number is the largest thing on the chip: it is what the eye comes
-       for. */
-    .chip { position: relative; display: grid; grid-template-columns: 34px minmax(78px, auto) 48px; align-items: center; column-gap: 10px;
-      width: fit-content; padding: 6px 12px 8px 7px; border-radius: 9px; overflow: hidden;
-      background: linear-gradient(90deg, color-mix(in srgb, var(--c) 18%, rgba(10, 12, 17, .92)), rgba(10, 12, 17, .92) 60%);
-      border: 1px solid color-mix(in srgb, var(--c) 38%, transparent); box-shadow: 0 3px 12px rgba(0, 0, 0, .45); }
-    .chip .icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; color: var(--c);
-      background: color-mix(in srgb, var(--c) 16%, transparent); border: 1.5px solid color-mix(in srgb, var(--c) 55%, transparent); }
-    .chip .icon svg { width: 20px; height: 20px; }
-    
-    .chip .label { font-size: 16px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
-    
-    .chip .secs { font-size: 32px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; color: var(--c);
-      text-shadow: 0 0 12px color-mix(in srgb, var(--c) 45%, transparent); }
-    .chip .secs.now { font-size: 19px; letter-spacing: .03em; text-transform: uppercase; }
-    /* How much of the warning is left, draining towards zero. */
-    .chip .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, .08); }
-    .chip .bar i { display: block; height: 100%; background: var(--c); transition: width .25s linear; }
-    /* The last three seconds: the frame lights up in the chip's own colour. */
-    .chip.soon { border-color: var(--c); box-shadow: 0 0 0 1px var(--c), 0 3px 16px color-mix(in srgb, var(--c) 38%, transparent); }
-    .chip.soon .icon { background: color-mix(in srgb, var(--c) 30%, transparent); }
-    /* It has happened: filled in its colour, one pulse, then gone. */
-    .chip.is-now { border-color: var(--c); background: color-mix(in srgb, var(--c) 28%, rgba(10, 12, 17, .92)); animation: pulse .9s ease-out 1; }
-    .chip.is-now .icon { background: var(--c); color: rgba(10, 12, 17, .95); }
-    @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 70%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+    /* Rings side by side, soonest first, four to a row. */
+    .rings { display: flex; flex-wrap: wrap; gap: 6px 4px; max-width: 324px; }
+    body.right .rings { justify-content: flex-end; }
+    body.preview .rings { justify-content: flex-start; }
 
-    /* Compact: the icon and the number, nothing to read. */
-    .chip.compact { grid-template-columns: 34px 46px; column-gap: 8px; padding-right: 10px; }
-    .chip.compact .secs { font-size: 28px; }
-    .chip.compact .secs.now { font-size: 15px; }
+    /* Each reminder is a cooldown ring in its own colour (--c): the ring
+       empties clockwise as the warning runs out, the seconds sit on the
+       game's picture of the rune, the name sits underneath. */
+    .ring { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 78px; }
+    .ring.compact { width: 64px; }
+    .dial { position: relative; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(16, 19, 26, .9) 55%, rgba(10, 12, 17, .94));
+      box-shadow: 0 3px 12px rgba(0, 0, 0, .5); }
+    .dial > * { grid-area: 1 / 1; }
+    .arc { width: 64px; height: 64px; overflow: visible; }
+    .arc circle { fill: none; stroke-width: 4; }
+    .arc .track { stroke: color-mix(in srgb, var(--c) 18%, rgba(255, 255, 255, .06)); }
+    /* Drawn from twelve o'clock anticlockwise, so the gap grows clockwise. */
+    .arc .fill { stroke: var(--c); stroke-linecap: round; transform: rotate(90deg) scaleX(-1); transform-origin: 32px 32px;
+      filter: drop-shadow(0 0 3px color-mix(in srgb, var(--c) 60%, transparent)); }
+    /* The picture, dimmed under the number like an ability on cooldown. */
+    .art { width: 38px; height: 38px; object-fit: contain; filter: brightness(.6) saturate(.9); }
+    .art.item { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+    .art.icon { width: 28px; height: 28px; color: var(--c); filter: none; opacity: .55; }
+    .secs { position: relative; z-index: 1; font-size: 27px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: rgba(255, 255, 255, .92);
+      text-shadow: 0 0 3px #000, 0 1px 3px #000, 0 0 8px rgba(0, 0, 0, .8); }
+    .name { max-width: 100%; font-size: 12.5px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      text-align: center; color: rgba(242, 244, 247, .88); text-shadow: 0 1px 2px #000, 0 0 4px rgba(0, 0, 0, .8); }
+
+    /* The last three seconds: a thicker ring and a brighter number. */
+    .ring.soon .arc circle { stroke-width: 6; }
+    .ring.soon .secs { color: #fff; text-shadow: 0 0 3px #000, 0 1px 3px #000, 0 0 12px var(--c); }
+    .ring.soon .art { filter: brightness(.75); }
+
+    /* It has happened: the disc fills with its colour and the picture comes
+       up to full size and brightness, one pulse, then gone. */
+    .ring.is-now .dial { background: radial-gradient(circle, color-mix(in srgb, var(--c) 55%, rgba(10, 12, 17, .9)) 40%, color-mix(in srgb, var(--c) 30%, rgba(10, 12, 17, .94)));
+      animation: pulse .9s ease-out 1; }
+    .ring.is-now .art { width: 46px; height: 46px; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c) 80%, transparent)); }
+    .ring.is-now .art.item { width: 48px; height: 48px; }
+    .ring.is-now .art.icon { width: 32px; height: 32px; opacity: 1; color: #0a0c11; }
+    .ring.is-now .name { color: var(--c); }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 75%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
 
     /* Next up: one quiet line, not a reminder. */
     .next { display: flex; gap: 12px; padding: 4px 10px; border-radius: 7px; background: rgba(10, 12, 17, .72); font-size: 13px; color: rgba(242, 244, 247, .78); white-space: nowrap; }
@@ -54,7 +65,7 @@
     .next i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
     .next b { font-weight: 600; color: #f2f4f7; font-variant-numeric: tabular-nums; }
 
-    @media (prefers-reduced-motion: reduce) { .chip .bar i { transition: none; } .chip.is-now { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { .ring.is-now .dial { animation: none; } }
   </style>
 </head>
 <body>

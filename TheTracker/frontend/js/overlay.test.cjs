@@ -70,12 +70,25 @@ assert.ok(!ov.nextUp(t(5, 55), undefined, shownLate).some((e) => e.kind === "pow
 // The drawn frame follows the settings.
 ov.setSettings({ ...base, compact: true, nextUp: true });
 const html = ov.frame(t(7, 58.5));
-assert.ok(html.includes('class="chip compact'), "compact chips");
-assert.ok(!html.includes('class="label"'), "compact chips have no label");
+assert.ok(html.includes('class="ring compact'), "compact rings");
+assert.ok(!html.includes('class="name"'), "compact rings have no name");
 assert.ok(html.includes('class="next"'), "next up line");
 ov.setSettings(base);
 assert.ok(!ov.frame(t(5, 0)).includes('class="next"'), "next up is off by default");
-assert.ok(ov.frame(t(8)).includes(">Now<"), "an event that just happened says Now");
+const nowHtml = ov.frame(t(8));
+assert.ok(nowHtml.includes("ring is-now") && nowHtml.includes(">Bounty now<"), "an event that just happened says so");
+assert.ok(nowHtml.includes("runes/5.png"), "the bounty ring shows the bounty rune");
+// The ring empties as the warning runs out: full at the start, half way at half.
+const offset = (h) => Number(/stroke-dashoffset="([\d.]+)"/.exec(h)[1]);
+const ring = (secs, frac) => ov.chipHtml({ kind: "power", secs, lead: 4, at: 480 }, frac);
+assert.ok(offset(ring(4, 0)) < 0.5, "a full ring when the warning starts");
+assert.ok(Math.abs(offset(ring(2, 0)) - Math.PI * 29) < 0.5, "half a ring half way");
+assert.ok(ring(3, 0).includes("ring soon") && !ring(4, 0).includes("soon"), "the last three seconds stand out");
+// The lotus picture grows with the game; the pull has no picture and keeps its drawn icon.
+assert.ok(ov.artFor({ kind: "lotus", at: 180 }).endsWith("/famango.png"));
+assert.ok(ov.artFor({ kind: "lotus", at: 2160 }).endsWith("/great_famango.png"));
+assert.ok(ov.artFor({ kind: "lotus", at: 3600 }).endsWith("/greater_famango.png"));
+assert.ok(ov.chipHtml({ kind: "stack", secs: 5, lead: 7, at: 472 }).includes("art icon"), "the pull uses the drawn icon");
 
 // ---------- Windows: reminders stop when they stop mattering ----------
 const core = { ...base, dota: { runes: true, bounty: true, water: true, power: true, wisdom: true, lotus: true, stacks: true, lotusLate: true, until: { stack: 10, bounty: 12, lotus: 15, power: 0, wisdom: 0 } } };

@@ -36,29 +36,32 @@ const STACK_LEAD = 7;
 // How long "Now" stays up after an event, in seconds of game time.
 const NOW_FOR = 2;
 
-// One look per kind of reminder: its own colour and its own icon, so which
-// rune it is can be read from the corner of the eye without reading a word.
-// The icons are drawn here rather than loaded, so the overlay never waits on
-// the network mid-fight.
+// One look per kind of reminder: its own colour and the game's own picture
+// of it, so which rune it is can be read from the corner of the eye without
+// reading a word. The pictures are loaded once when the overlay starts (see
+// preloadArt); a drawn icon stands in for any that can't be loaded, and for
+// the camp pull, which has no picture in the game.
+const OD_RUNES = "https://www.opendota.com/assets/images/dota2/runes/";
+const VALVE_ITEMS = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/";
 const KINDS = {
   bounty: {
-    label: "Bounty", short: "Bounty", color: "#f4c34f",
+    label: "Bounty", short: "Bounty", color: "#f4c34f", img: OD_RUNES + "5.png",
     icon: '<circle cx="12" cy="12" r="8"/><path d="M12 7l3 5-3 5-3-5z" fill="currentColor" stroke="none"/>',
   },
   water: {
-    label: "Water", short: "Water", color: "#56b8f5",
+    label: "Water", short: "Water", color: "#56b8f5", img: OD_RUNES + "7.png",
     icon: '<path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z" fill="currentColor" fill-opacity="0.25"/><path d="M9 14a3 3 0 0 0 3 3"/>',
   },
   power: {
-    label: "Power", short: "Power", color: "#ff8452",
+    label: "Power", short: "Power", color: "#ff8452", img: OD_RUNES + "0.png",
     icon: '<path d="M14 2L5 14h6l-1 8 9-12h-6z" fill="currentColor" fill-opacity="0.25"/>',
   },
   wisdom: {
-    label: "Shrines", short: "Shrines", color: "#b48cff",
+    label: "Shrines", short: "Shrines", color: "#b48cff", img: OD_RUNES + "8.png",
     icon: '<path d="M12 7c-2-2-5-2-8-1v12c3-1 6-1 8 1 2-2 5-2 8-1V6c-3-1-6-1-8 1z" fill="currentColor" fill-opacity="0.2"/><path d="M12 7v12"/>',
   },
   lotus: {
-    label: "Lotus", short: "Lotus", color: "#ff8fb8",
+    label: "Lotus", short: "Lotus", color: "#ff8fb8", img: VALVE_ITEMS + "famango.png",
     icon: '<path d="M12 4c2 2 3 4 3 7s-1 4-3 6c-2-2-3-3-3-6s1-5 3-7z" fill="currentColor" fill-opacity="0.3"/><path d="M4 11c3 0 6 2 8 6 2-4 5-6 8-6 0 5-3 8-8 8s-8-3-8-8z"/>',
   },
   stack: {
@@ -152,21 +155,58 @@ function labelFor(e) {
   return KINDS[e.kind].label;
 }
 
+/// The picture for an event: the lotus grows with the game, like its name.
+function artFor(e) {
+  if (e.kind === "lotus" && e.at >= GREATER_LOTUS_AT) return VALVE_ITEMS + "greater_famango.png";
+  if (e.kind === "lotus" && e.at >= GREAT_LOTUS_AT) return VALVE_ITEMS + "great_famango.png";
+  return KINDS[e.kind].img;
+}
+
+// Pictures that failed to load; their reminders fall back to the drawn icon.
+const artFailed = new Set();
+const artKept = [];
+function preloadArt() {
+  const urls = [...Object.values(KINDS).map((k) => k.img).filter(Boolean), VALVE_ITEMS + "great_famango.png", VALVE_ITEMS + "greater_famango.png"];
+  for (const url of urls) {
+    const im = new Image();
+    im.onerror = () => {
+      artFailed.add(url);
+      lastHtml = "";
+    };
+    im.src = url;
+    artKept.push(im);
+  }
+}
+
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-/// `frac` is how far into the current second the clock is, so the bar drains
-/// smoothly instead of stepping once a second.
+// The ring's circumference (r = 29 in a 64-unit box).
+const RING = 2 * Math.PI * 29;
+
+/// One reminder as a cooldown ring, like an ability's in the game: the
+/// coloured ring empties clockwise as the warning runs out, the seconds sit
+/// on the picture, the name underneath. `frac` is how far into the current
+/// second the clock is, so the ring moves smoothly instead of stepping once a
+/// second.
 function chipHtml(e, frac = 0) {
   const k = KINDS[e.kind];
-  const left = e.now ? 0 : Math.max(0, Math.min(100, ((e.secs - frac) / e.lead) * 100));
-  const state = e.now ? "is-now" : e.secs <= 3 ? "soon" : "";
-  const icon = `<span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${k.icon}</svg></span>`;
-  const time = e.now ? `<span class="secs now">Now</span>` : `<span class="secs">${Math.ceil(e.secs)}</span>`;
-  const bar = `<span class="bar"><i style="width:${left.toFixed(1)}%"></i></span>`;
-  if (settings.compact) {
-    return `<div class="chip compact ${state}" style="--c:${k.color}" title="${labelFor(e)}">${icon}${time}${bar}</div>`;
-  }
-  return `<div class="chip ${state}" style="--c:${k.color}">${icon}<span class="label">${labelFor(e)}</span>${time}${bar}</div>`;
+  const left = e.now ? 1 : Math.max(0, Math.min(1, (e.secs - frac) / e.lead));
+  const state = e.now ? " is-now" : e.secs <= 3 ? " soon" : "";
+  const label = e.kind === "stack" ? k.short : labelFor(e);
+  const src = artFor(e);
+  const art = src && !artFailed.has(src)
+    ? `<img class="art${e.kind === "lotus" ? " item" : ""}" src="${src}" alt="">`
+    : `<svg class="art icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${k.icon}</svg>`;
+  const arc = `<svg class="arc" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="29"/><circle class="fill" cx="32" cy="32" r="29" stroke-dasharray="${RING.toFixed(1)}" stroke-dashoffset="${(RING * (1 - left)).toFixed(1)}"/></svg>`;
+  const secs = e.now ? "" : `<span class="secs">${Math.ceil(e.secs)}</span>`;
+  // "Now" uses the short name so it fits; the picture still shows which lotus.
+  const name = settings.compact ? "" : `<span class="name">${e.now ? k.short + " now" : label}</span>`;
+  return `<div class="ring${settings.compact ? " compact" : ""}${state}" style="--c:${k.color}" title="${label}"><div class="dial">${arc}${art}${secs}</div>${name}</div>`;
+}
+
+/// The rings side by side, soonest first.
+function ringsHtml(list, frac) {
+  return list.length ? `<div class="rings">${list.map((e) => chipHtml(e, frac)).join("")}</div>` : "";
 }
 
 function nextUpHtml(list) {
@@ -178,8 +218,7 @@ function nextUpHtml(list) {
 function frame(clock, gameType) {
   const whole = Math.floor(clock);
   const shown = upcoming(whole, gameType);
-  const chips = shown.map((e) => chipHtml(e, clock - whole)).join("");
-  return chips + (settings.nextUp ? nextUpHtml(nextUp(whole, gameType, shown)) : "");
+  return ringsHtml(shown, clock - whole) + (settings.nextUp ? nextUpHtml(nextUp(whole, gameType, shown)) : "");
 }
 
 let lastHtml = "";
@@ -231,7 +270,7 @@ function paintPreview() {
     { kind: "stack", secs: 5, lead: STACK_LEAD, at: 472 },
   ];
   const next = [{ kind: "lotus", secs: 83 }, { kind: "wisdom", secs: 362 }];
-  paint(sample.map((e) => chipHtml(e, 0.4)).join("") + (settings.nextUp ? nextUpHtml(next) : ""));
+  paint(ringsHtml(sample, 0.4) + (settings.nextUp ? nextUpHtml(next) : ""));
 }
 
 async function loadSettings() {
@@ -246,6 +285,7 @@ async function loadSettings() {
 
 if (typeof document !== "undefined") {
   applySettings();
+  preloadArt();
   loadSettings();
   if (PREVIEW) {
     document.body.classList.add("preview");
@@ -255,4 +295,4 @@ if (typeof document !== "undefined") {
     setInterval(tick, 250);
   }
 }
-if (typeof module !== "undefined") module.exports = { upcoming, nextUp, schedule, untilNext, sinceLast, chipHtml, labelFor, frame, KINDS, setSettings: (s) => (settings = s) };
+if (typeof module !== "undefined") module.exports = { upcoming, nextUp, schedule, untilNext, sinceLast, chipHtml, labelFor, artFor, frame, KINDS, setSettings: (s) => (settings = s) };
