@@ -14,6 +14,7 @@ import type * as leaderboard from "../leaderboard.js";
 import type * as maintenance from "../maintenance.js";
 import type * as matches from "../matches.js";
 import type * as profiles from "../profiles.js";
+import type * as steamlive from "../steamlive.js";
 import type * as twitch from "../twitch.js";
 
 import type {
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   maintenance: typeof maintenance;
   matches: typeof matches;
   profiles: typeof profiles;
+  steamlive: typeof steamlive;
   twitch: typeof twitch;
 }>;
 

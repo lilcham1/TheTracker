@@ -69,6 +69,13 @@ type DeadlockLiveBoard struct {
 	Linked []LinkedStatus `json:"linked"`
 	// Live streamers found on a leaderboard whose match isn't listed.
 	Ranked []RankedStreamer `json:"ranked"`
+	// Dota: streamers whose account is known but who aren't placed live,
+	// with the hero of their last finished game.
+	Recent []RecentStreamer `json:"recent,omitempty"`
+	// Dota: whether the live check through Steam ran; SteamReason says why
+	// not: not_set_up | bad_credentials | unreachable.
+	SteamAvailable bool   `json:"steamAvailable,omitempty"`
+	SteamReason    string `json:"steamReason,omitempty"`
 	// Whether Twitch could be asked; Reason says why not: not_set_up |
 	// bad_credentials | unreachable.
 	StreamsAvailable bool   `json:"streamsAvailable"`

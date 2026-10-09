@@ -3,6 +3,7 @@ package core
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDotaStreamersPlacesStreamsOnHeroes(t *testing.T) {
@@ -34,8 +35,9 @@ func TestDotaStreamersPlacesStreamsOnHeroes(t *testing.T) {
 			map[string]any{"account_id": 14, "name": "Twice", "personaname": "x"}, // two live accounts: ambiguous
 		},
 		"/search": []any{
-			map[string]any{"account_id": 21, "personaname": "SearchMe"},
-			map[string]any{"account_id": 99, "personaname": "SearchMeNot"},
+			map[string]any{"account_id": 21, "personaname": "SearchMe", "last_match_time": time.Now().Add(-48 * time.Hour).Format(time.RFC3339)},
+			map[string]any{"account_id": 22, "personaname": "SearchMe", "last_match_time": "2019-03-01T10:00:00.000Z"}, // abandoned
+			map[string]any{"account_id": 99, "personaname": "SearchMeNot", "last_match_time": time.Now().Format(time.RFC3339)},
 		},
 		"/players/11":       map[string]any{"rank_tier": 80, "leaderboard_rank": 42},
 		"/players/12":       map[string]any{"rank_tier": 54},
@@ -144,5 +146,95 @@ func TestDotaMedals(t *testing.T) {
 	}
 	if m := dotaMedal(80, 0); m.Label != "Immortal" || m.Star != nil {
 		t.Fatalf("immortal without a place: %+v", m)
+	}
+}
+
+func TestDotaStreamersSteamAndLastGame(t *testing.T) {
+	recentStart := time.Now().Add(-2 * time.Hour).Unix()
+	dotaSearches.mu.Lock()
+	dotaSearches.every = 0
+	dotaSearches.mu.Unlock()
+	dotaLastGames.mu.Lock()
+	dotaLastGames.every = 0
+	dotaLastGames.mu.Unlock()
+	steamMemo.Lock()
+	steamMemo.seen = map[uint64]steamSeen{}
+	steamMemo.Unlock()
+
+	f := newFakeAPI(t, map[string]any{
+		"/heroes": odHeroes,
+		"/live":   []any{}, // nothing in the top list
+		"/proPlayers": []any{
+			map[string]any{"account_id": 50, "name": "FarGuy"},
+			map[string]any{"account_id": 51, "name": "TurboFan"},
+			map[string]any{"account_id": 52, "name": "Between"},
+		},
+		"/search":                   []any{},
+		"/players/52/recentMatches": []any{map[string]any{"hero_id": 5, "player_slot": 130, "radiant_win": false, "start_time": recentStart, "duration": 1800}},
+		"/players/50":               map[string]any{"rank_tier": 65},
+		"/v1/players/steam":         []any{},
+		"/ILeaderboard/GetDivisionLeaderboard/v0001": map[string]any{"leaderboard": []any{}},
+	})
+	a := newTestApp(t)
+	a.Dota.api = &service{Name: "OpenDota", Base: f.srv.URL, Attempts: 1}
+	a.Dota.valve = &service{Name: "Dota's leaderboard", Base: f.srv.URL, Attempts: 1}
+	a.Deadlock.api = &service{Name: "The Deadlock API", Base: f.srv.URL, Attempts: 1}
+	conv := newFakeConvex(t)
+	a.Cloud.base = conv.srv.URL
+	conv.twitch = map[string]any{"ok": true, "streams": []any{
+		map[string]any{"login": "farguy", "name": "FarGuy", "viewers": 90},
+		map[string]any{"login": "turbofan", "name": "TurboFan", "viewers": 40},
+		map[string]any{"login": "between", "name": "Between", "viewers": 30},
+	}}
+
+	// Without the Steam key the page says so, and nothing is placed live.
+	b, err := a.DotaStreamers(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.SteamAvailable || b.SteamReason != "not_set_up" {
+		t.Fatalf("no Steam function should read as not set up: %+v", b)
+	}
+
+	conv.steamLive = map[string]any{"ok": true, "players": []any{
+		map[string]any{"accountId": "50", "heroId": 2, "matchId": "777", "gameMode": 22, "lobbyType": 7, "gameTime": 600},
+		map[string]any{"accountId": "51", "heroId": 1, "matchId": "778", "gameMode": 23, "lobbyType": 0, "gameTime": 300}, // Turbo
+	}}
+	steamMemo.Lock()
+	steamMemo.seen = map[uint64]steamSeen{}
+	steamMemo.Unlock()
+	waitFor(t, "the last games", func() bool {
+		dotaLastGames.mu.Lock()
+		defer dotaLastGames.mu.Unlock()
+		return !dotaLastGames.running
+	})
+	b, err = a.DotaStreamers(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.SteamAvailable {
+		t.Fatalf("Steam should be on: %+v", b)
+	}
+	if len(b.Heroes) != 1 || b.Heroes[0].Name != "Axe" || b.Heroes[0].Players[0].Via != "steam" || b.Heroes[0].Players[0].Mode != "Ranked" || b.Heroes[0].Players[0].Rank == nil {
+		t.Fatalf("FarGuy should be on Axe through Steam, ranked, with a medal: %+v", b.Heroes)
+	}
+	for _, h := range b.Heroes {
+		for _, p := range h.Players {
+			if p.AccountID == 51 {
+				t.Fatal("a Turbo game must not place a streamer")
+			}
+		}
+	}
+	found := false
+	for _, r := range b.Recent {
+		if r.Stream.Login == "between" {
+			found = true
+			if r.HeroName != "Crystal Maiden" || !r.Won || r.EndedAt != recentStart+1800 {
+				t.Fatalf("Between's last game: %+v", r)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("Between should be listed with their last game: %+v", b.Recent)
 	}
 }

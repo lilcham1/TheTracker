@@ -579,3 +579,5 @@ kbd { font: 500 11px var(--body); padding: 1px 5px; border: 1px solid var(--line
 .rank-badge .rank-icon { position: relative; display: inline-grid; width: 20px; height: 20px; }
 .rank-badge .rank-icon img { grid-area: 1 / 1; }
 .stream-name { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
+
+.stream-meta.last-game { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
