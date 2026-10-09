@@ -276,20 +276,15 @@ func commands(a *core.App) map[string]command {
 		"launch_dota": none(func() (any, error) { return ok, a.Gsi.LaunchDota() }),
 
 		// ----- Dota (OpenDota) -----
-		"dota_link_status":  none(func() (any, error) { return s.LoadLink("dota"), nil }),
-		"dota_history":      in(func(p forceArg) (any, error) { return a.Dota.History(p.Limit, p.Force) }),
-		"dota_match_detail": in(func(p matchArg) (any, error) { return a.Dota.Detail(p.MatchID) }),
-		"dota_player":       in(func(p forceArg) (any, error) { return a.Dota.Player(p.Force) }),
-		"dota_refresh":      none(func() (any, error) { return ok, a.Dota.RequestRefresh() }),
-		"dota_heroes":       none(func() (any, error) { return a.Dota.HeroList(), nil }),
-		"dota_items":        none(func() (any, error) { return a.Dota.ItemCatalog(), nil }),
-		"dota_meta":         in(func(p forceArg) (any, error) { return a.Dota.Meta(p.Force) }),
-		"dota_matchups":     in(func(p heroArg) (any, error) { return a.Dota.Matchups(p.HeroID) }),
-		"dota_draft": in(func(p struct {
-			Enemies []int `json:"enemies"`
-		}) (any, error) {
-			return a.Dota.DraftAdvice(p.Enemies)
-		}),
+		"dota_link_status":    none(func() (any, error) { return s.LoadLink("dota"), nil }),
+		"dota_history":        in(func(p forceArg) (any, error) { return a.Dota.History(p.Limit, p.Force) }),
+		"dota_match_detail":   in(func(p matchArg) (any, error) { return a.Dota.Detail(p.MatchID) }),
+		"dota_player":         in(func(p forceArg) (any, error) { return a.Dota.Player(p.Force) }),
+		"dota_refresh":        none(func() (any, error) { return ok, a.Dota.RequestRefresh() }),
+		"dota_heroes":         none(func() (any, error) { return a.Dota.HeroList(), nil }),
+		"dota_items":          none(func() (any, error) { return a.Dota.ItemCatalog(), nil }),
+		"dota_meta":           in(func(p forceArg) (any, error) { return a.Dota.Meta(p.Force) }),
+		"dota_matchups":       in(func(p heroArg) (any, error) { return a.Dota.Matchups(p.HeroID) }),
 		"dota_popular_builds": in(func(p heroArg) (any, error) { return a.Dota.PopularBuilds(p.HeroID) }),
 		"dota_leaderboard":    in(func(p regionArg) (any, error) { return a.Dota.Leaderboard(p.Region, p.Force) }),
 
@@ -384,7 +379,6 @@ func commands(a *core.App) map[string]command {
 		}) (any, error) {
 			return s.UnlinkStreamer(p.Game, p.Twitch), nil
 		}),
-		"dota_streamers":      in(func(p forceArg) (any, error) { return a.DotaStreamers(p.Force) }),
 		"deadlock_live_board": in(func(p forceArg) (any, error) { return a.DeadlockLive(p.Force) }),
 
 		// ----- Compare and share -----

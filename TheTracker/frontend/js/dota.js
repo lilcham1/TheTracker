@@ -220,14 +220,19 @@ const toneOfRate = (rate) => (!known(rate) ? "" : rate >= 50 ? "win" : "loss");
 
 view("overview", {
   game: "dota", nav: true, icon: "overview", title: "Overview",
-  sub: () => (dotaLinked() ? "Your recent form and lifetime record" : "Connect Steam to see your matches"),
+  sub: () => (S.live && S.live.live ? "Your match is live" : dotaLinked() ? "Your recent form and lifetime record" : "Connect Steam to see your matches"),
+  liveSlot: dotaLiveHtml,
   load(force) {
+    refreshGsi();
     if (!dotaLinked()) return loadSteamAccounts();
     ensureHeroList();
     dInsights.load(force);
     return Promise.all([dHist.load(force), dPlayer.load(force), loadHistory()]);
   },
   render() {
+    return `<div id="liveSlot" class="live-slot">${dotaLiveHtml()}</div>${this.body()}`;
+  },
+  body() {
     if (!dotaLinked()) return linkPanelHtml("dota");
     const wait = gate(dHist, "Loading your matches…");
     if (wait) return wait;
@@ -382,16 +387,13 @@ function liveSetupHtml() {
   if (live.trackingEnabled === false) rows.push(setupRow(false, "Recording is paused", "Matches won't be saved until you press Paused in the top bar to resume."));
 
   const bg = S.boot.background;
-  return `<div class="panel narrow">
-    <h2>Waiting for a match</h2>
-    <p class="muted">This page fills in by itself the moment a Dota match starts: your last hits at each mark, deaths, gold lost and key items, compared with your own averages.</p>
+  return `<div class="panel narrow live-setup">
     <div class="checks">${rows.join("")}</div>
     ${GSI.error ? `<div class="note err">${esc(GSI.error)}</div>` : ""}
     <div class="row wrap">
       ${g.cfgDirs.length ? `<button class="btn" data-act="launch-dota" type="button">Play Dota</button>` : ""}
       ${g.cfgDirs.length && !g.installed ? `<button class="btn" data-act="gsi-install" type="button" ${GSI.busy ? "disabled" : ""}>Set up Dota</button>` : ""}
       <button class="btn ghost" data-act="gsi-check" type="button">Check again</button>
-      <button class="btn ghost" data-act="sim-start" type="button" title="Plays a short fake match so you can see this page and the overlay working. Nothing is saved.">Try it with a test match</button>
     </div>
     ${bg && bg.trayAvailable && !bg.startWithWindows ? `<p class="hint">TheTracker can only record a match while it's running. <button class="link" data-act="autostart-yes" type="button">Start it with Windows</button> so it's always there.</p>` : ""}
     ${g.cfgDirs.length ? `<details class="more"><summary>What TheTracker changed on this PC</summary>
@@ -402,6 +404,40 @@ function liveSetupHtml() {
   </div>`;
 }
 
+/// Whether live tracking can't work until the player does something.
+function liveNeedsSetup() {
+  const g = S.boot.gsi || { cfgDirs: [] };
+  return !!(S.live && S.live.serverError) || !g.cfgDirs.length || !g.installed || g.launchOption === false;
+}
+
+/// The live part of Overview: the match while it runs (and its result until
+/// Done), otherwise one line saying whether Dota is connected, with the
+/// setup checklist behind a button (open by itself when something is
+/// missing). It has its own slot, redrawn on each live tick without the
+/// rest of the page.
+function dotaLiveHtml() {
+  const m = S.live && S.live.current;
+  if (m && !(m.ended && D.dismissed === m.matchid)) return liveMatchHtml(m);
+  const live = S.live || {};
+  const needs = liveNeedsSetup();
+  const open = D.setupOpen === undefined ? needs : D.setupOpen;
+  const status = needs ? "Dota isn't fully set up to send match data yet."
+    : dotaConnected() ? "Dota is connected. Your match shows here the moment it starts."
+    : known(live.gsiAgeSecs) ? `Dota is closed. Last heard from it ${agoSecs(live.gsiAgeSecs)}.`
+    : "Waiting for Dota. Your next match shows here when it starts.";
+  return `<div class="live-strip">
+      <span class="live-dot ${dotaConnected() ? "on" : "off"}"></span>
+      <span class="grow"><b>Live match</b> <span class="muted">${status}</span></span>
+      <button class="btn ghost small" data-act="sim-start" type="button" title="Plays a short fake match so you can see this and the overlay working. Nothing is saved.">Try a test match</button>
+      <button class="btn ghost small" data-act="live-setup-toggle" type="button">${open ? "Hide setup" : "Live setup"}</button>
+    </div>
+    ${open ? liveSetupHtml() : ""}`;
+}
+
+act("live-setup-toggle", () => {
+  D.setupOpen = !(D.setupOpen === undefined ? liveNeedsSetup() : D.setupOpen);
+  rerender();
+});
 act("gsi-check", refreshGsi);
 act("gsi-install", async () => {
   GSI.busy = true;
@@ -561,20 +597,6 @@ function liveMatchHtml(m) {
     ${D.showLog ? `<pre class="log">${esc((D.log || []).slice(-60).join("\n")) || "Nothing logged yet."}</pre>` : ""}
   </div>`;
 }
-
-view("live", {
-  game: "dota", nav: true, icon: "live", title: "Live", live: true,
-  sub: () => (S.live && S.live.live ? "Tracking your match" : "Fills in when a match starts"),
-  load() {
-    loadHistory();
-    return refreshGsi();
-  },
-  render() {
-    const m = S.live && S.live.current;
-    if (!m || (m.ended && D.dismissed === m.matchid)) return liveSetupHtml();
-    return liveMatchHtml(m);
-  },
-});
 
 // ---------- Matches ----------
 
@@ -1009,7 +1031,7 @@ view("sessions", {
 
     if (!items.length) {
       return `${emptyState("No sessions recorded yet", "A session is a match TheTracker watched live. Keep the app running while you play and each game lands here when it ends, with your last hits at every mark, each death and what it cost, and your item timings.",
-        `<button class="btn" data-act="go" data-view="live" type="button">Check the live setup</button>`)}${goalsBlock}`;
+        `<button class="btn" data-act="go" data-view="overview" type="button">Check the live setup</button>`)}${goalsBlock}`;
     }
     return `
       ${d && d.insights.length ? `<div class="sec-head"><h3>What your games show</h3></div><div class="insights">${d.insights.map(insightHtml).join("")}</div>`

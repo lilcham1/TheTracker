@@ -109,7 +109,7 @@ view("today", {
     const sum = (k) => totals.reduce((a, t) => ({ games: a.games + t[k].games, won: a.won + t[k].won, lost: a.lost + t[k].lost }), { games: 0, won: 0, lost: 0 });
     const day = sum("today"), week = sum("week");
     const rate = (r) => (r.won + r.lost ? (r.won * 100) / (r.won + r.lost) : null);
-    const liveNow = S.live && S.live.live && games.includes("dota") ? ["Dota 2", "live"] : CS.status && CS.status.live && games.includes("cs2") ? ["Counter-Strike 2", "cs-live"] : null;
+    const liveNow = S.live && S.live.live && games.includes("dota") ? ["Dota 2", "overview"] : CS.status && CS.status.live && games.includes("cs2") ? ["Counter-Strike 2", "cs-live"] : null;
 
     return `${liveNow ? `<button class="since" data-act="go" data-view="${liveNow[1]}" type="button"><span class="live-dot"></span><span class="since-main display">A ${liveNow[0]} match is running</span><span class="grow"></span><span class="link">Watch it live</span></button>` : ""}
       <div class="row"><span class="grow"></span><button class="btn ghost small share-btn" data-act="share" data-kind="today" type="button">Share my week</button></div>

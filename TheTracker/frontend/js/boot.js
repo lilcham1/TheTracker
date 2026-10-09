@@ -23,7 +23,7 @@ async function boot() {
 
   await Promise.all([pollLive(), loadHistory()]);
   // A match in progress is what the player opened the app to see.
-  if (S.live && S.live.live && S.boot.prefs.games.dota) start = "live";
+  if (S.live && S.live.live && S.boot.prefs.games.dota) start = "overview";
   // First run: ask which games before showing any of them.
   if (!S.boot.prefs.games.chosen) start = "welcome";
 

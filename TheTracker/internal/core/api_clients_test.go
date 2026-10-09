@@ -234,30 +234,6 @@ func TestMatchDetailMarksThePlayerAndResolvesItems(t *testing.T) {
 	}
 }
 
-func TestDraftAdviceRanksByResultsAgainstTheEnemyLineup(t *testing.T) {
-	d, _, _ := newTestDota(t, map[string]any{
-		// Anti-Mage's record against each hero: he beats CM, loses to Axe.
-		"/heroes/1/matchups": []any{
-			map[string]any{"hero_id": 2, "games_played": 100, "wins": 40},
-			map[string]any{"hero_id": 5, "games_played": 100, "wins": 65},
-			map[string]any{"hero_id": 99, "games_played": 500, "wins": 0}, // unknown hero
-		},
-	})
-	picks, err := d.DraftAdvice([]int{1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(picks) != 2 || picks[0].HeroName != "Axe" || picks[0].WinRate != 60 || picks[1].HeroName != "Crystal Maiden" || picks[1].WinRate != 35 {
-		t.Fatalf("Axe wins 60%% against Anti-Mage and should lead: %+v", picks)
-	}
-	if *picks[0].Versus[0] != 60 {
-		t.Fatal("per-enemy breakdown wrong")
-	}
-	if none, _ := d.DraftAdvice(nil); len(none) != 0 {
-		t.Fatal("no enemies picked means no advice")
-	}
-}
-
 func TestBackfillOnlyFillsBlanksAndStopsAsking(t *testing.T) {
 	now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
 	mk := func(id, date, gameType string) MatchSummary {

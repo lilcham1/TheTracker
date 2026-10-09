@@ -200,9 +200,7 @@ type fakeConvex struct {
 	// What the Twitch streams function answers; nil means the deployment
 	// predates it.
 	twitch map[string]any
-	// What the Steam live-hero function answers; nil: not deployed.
-	steamLive map[string]any
-	srv       *httptest.Server
+	srv    *httptest.Server
 }
 
 func newFakeConvex(t *testing.T) *fakeConvex {
@@ -214,7 +212,7 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 		f.mu.Lock()
 		f.calls = append(f.calls, body)
 		f.tokens = append(f.tokens, r.Header.Get("Authorization"))
-		expire, steamMode, twitch, steamLive := f.expireJWT, f.steamMode, f.twitch, f.steamLive
+		expire, steamMode, twitch := f.expireJWT, f.steamMode, f.twitch
 		f.mu.Unlock()
 
 		reply := func(v any) { json.NewEncoder(w).Encode(map[string]any{"status": "success", "value": v}) }
@@ -248,12 +246,6 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 			}
 			reply(map[string]any{"tokens": map[string]any{"token": "jwt-1", "refreshToken": "refresh-1"}})
 
-		case "steamlive:dotaLive":
-			if steamLive == nil {
-				fail("Could not find public function for 'steamlive:dotaLive'")
-				return
-			}
-			reply(steamLive)
 		case "twitch:deadlockStreams", "twitch:streams":
 			if twitch == nil {
 				fail("Could not find public function for 'twitch:deadlockStreams'")

@@ -1,125 +1,12 @@
-// Dota pages: Draft helper, Meta, Builds.
+// Dota pages: Meta, Builds.
 
 const dMeta = resource("dotaMeta", "dota_meta", { ttl: 30 * 60000 });
 const dItems = resource("dotaItems", "dota_items", { ttl: 6 * 3600000 });
-
-// ---------- Draft helper ----------
-
-const DRAFT = { enemies: [], query: "", picks: null, loading: false, error: null, position: "all", mineOnly: false };
-
-async function runDraft() {
-  if (!DRAFT.enemies.length) {
-    DRAFT.picks = null;
-    return rerender();
-  }
-  DRAFT.loading = true;
-  DRAFT.error = null;
-  rerender();
-  const asked = DRAFT.enemies.join(",");
-  try {
-    const picks = await invoke("dota_draft", { enemies: DRAFT.enemies });
-    if (asked === DRAFT.enemies.join(",")) DRAFT.picks = picks;
-  } catch (e) {
-    DRAFT.error = e.message;
-  }
-  DRAFT.loading = false;
-  rerender();
-}
-
-act("draft-add", (el) => {
-  const id = Number(el.dataset.id);
-  if (DRAFT.enemies.length >= 5 || DRAFT.enemies.includes(id)) return;
-  DRAFT.enemies.push(id);
-  DRAFT.query = "";
-  const box = $("#draftQuery");
-  if (box) box.value = "";
-  runDraft();
-});
-act("draft-remove", (el) => {
-  DRAFT.enemies = DRAFT.enemies.filter((id) => id !== Number(el.dataset.id));
-  runDraft();
-});
-act("draft-clear", () => {
-  DRAFT.enemies = [];
-  runDraft();
-});
-act("draft-set", (el) => {
-  DRAFT[el.dataset.axis] = el.dataset.value === "toggle" ? !DRAFT[el.dataset.axis] : el.dataset.value;
-  rerender();
-});
-onChange("draft-query", (el) => {
-  DRAFT.query = el.value;
-  rerender();
-});
 
 const POSITIONS = [
   ["carry", "Carry"], ["mid", "Mid"], ["offlane", "Offlane"], ["support", "Support"], ["hard_support", "Hard support"],
 ];
 const positionLabel = (p) => (POSITIONS.find((x) => x[0] === p) || [, ""])[1];
-
-view("draft", {
-  tabOf: "live",
-  game: "dota", nav: true, icon: "draft", title: "Draft",
-  sub: () => "Pick the heroes the other team has shown, and see what has done well against them",
-  load(force) {
-    dMeta.load(force);
-    if (dotaLinked()) dPlayer.load();
-    return ensureHeroList();
-  },
-  render() {
-    const wait = gate(dHeroes, "Loading heroes…");
-    if (wait) return wait;
-    const heroes = dHeroes.data;
-    const q = DRAFT.query.trim().toLowerCase();
-    const matches = q ? heroes.filter((h) => h.name.toLowerCase().includes(q) && !DRAFT.enemies.includes(h.id)).slice(0, 12) : [];
-    const posBy = new Map(((dMeta.data && dMeta.data.heroes) || []).map((h) => [h.id, h.position]));
-    const mine = new Map(((dPlayer.data && dPlayer.data.heroes) || []).map((h) => [h.heroId, h]));
-
-    let body = `<div class="empty"><h3>Add the enemy's heroes as they pick</h3><p>Suggestions update with every hero you add. Everything here is something you can already see on the pick screen.</p></div>`;
-    if (DRAFT.error) body = errorState(DRAFT.error, "draft-retry");
-    else if (DRAFT.enemies.length && !DRAFT.picks) body = loadingState("Checking matchups…");
-    else if (DRAFT.picks) {
-      let picks = DRAFT.picks;
-      if (DRAFT.position !== "all") picks = picks.filter((p) => posBy.get(p.heroId) === DRAFT.position);
-      if (DRAFT.mineOnly) picks = picks.filter((p) => mine.has(p.heroId) && mine.get(p.heroId).games >= 5);
-      const top = picks.slice(0, 15);
-      const avoid = [...picks].reverse().slice(0, 6);
-      const enemyHeroes = DRAFT.enemies.map((id) => S.heroById[id]);
-      const row = (p) => {
-        const m = mine.get(p.heroId);
-        return `<tr class="click" data-act="go" data-view="heroes" data-params='${JSON.stringify({ hero: p.heroSlug })}'>
-          <td><span class="cell">${heroImgHtml(p.heroSlug)}<span><b>${esc(p.heroName)}</b><span class="sub">${esc(positionLabel(posBy.get(p.heroId)))}</span></span></span></td>
-          <td class="num display ${toneOfRate(p.winRate)}">${pct(p.winRate, 1)}</td>
-          ${p.versus.map((v) => `<td class="num ${toneOfRate(v)}">${known(v) ? pct(v) : "–"}</td>`).join("")}
-          <td class="num muted">${fmtNum(p.games)}</td>
-          <td class="num">${m ? `${pct(m.winRate)} <span class="muted">in ${m.games}</span>` : `<span class="muted">not played</span>`}</td></tr>`;
-      };
-      const table = (list) => `<div class="table-wrap"><table class="table"><thead><tr><th>Hero</th><th class="num">Against this lineup</th>
-        ${enemyHeroes.map((h) => `<th class="num">vs ${esc(h ? h.name : "?")}</th>`).join("")}<th class="num">Games</th><th class="num">Your record</th></tr></thead><tbody>${list.map(row).join("")}</tbody></table></div>`;
-      body = picks.length
-        ? `<div class="sec-head"><h3>Has done well against them</h3></div>${table(top)}
-           <div class="sec-head"><h3>Has struggled against them</h3></div>${table(avoid)}
-           <details class="about"><summary>About this data</summary><p>Win rates from OpenDota's hero matchup data, weighted by games played. A matchup number says how a hero has fared, not how you will: your own record on a hero is in the last column.</p></details>`
-        : emptyState("No hero fits those filters", "Try another role, or include heroes you haven't played.");
-    }
-
-    return `<div class="draft-top">
-        <div class="enemy-slots">${[0, 1, 2, 3, 4].map((i) => {
-          const h = S.heroById[DRAFT.enemies[i]];
-          return h ? `<button class="slot filled" data-act="draft-remove" data-id="${h.id}" type="button" title="Remove ${esc(h.name)}">${heroImgHtml(h.slug, "portrait big")}<span>${esc(h.name)}</span></button>` : `<span class="slot"><span class="muted">Enemy ${i + 1}</span></span>`;
-        }).join("")}</div>
-        <div class="row">
-          <input class="input grow" id="draftQuery" type="search" placeholder="${DRAFT.enemies.length >= 5 ? "All five picked" : "Type an enemy hero's name"}" value="${esc(DRAFT.query)}" data-input="draft-query" ${DRAFT.enemies.length >= 5 ? "disabled" : ""} autocomplete="off" />
-          ${DRAFT.enemies.length ? `<button class="btn ghost" data-act="draft-clear" type="button">Clear</button>` : ""}
-        </div>
-        ${matches.length ? `<div class="suggest">${matches.map((h) => `<button class="chip hero-chip" data-act="draft-add" data-id="${h.id}" type="button">${heroImgHtml(h.slug, "portrait small")}${esc(h.name)}</button>`).join("")}</div>` : q ? `<p class="muted">No hero matches "${esc(DRAFT.query)}".</p>` : ""}
-        <div class="chips"><button class="chip ${DRAFT.position === "all" ? "on" : ""}" data-act="draft-set" data-axis="position" data-value="all" type="button">Any role</button>
-          ${POSITIONS.map(([k, l]) => `<button class="chip ${DRAFT.position === k ? "on" : ""}" data-act="draft-set" data-axis="position" data-value="${k}" type="button">${l}</button>`).join("")}
-          ${dotaLinked() ? `<span class="sep"></span><button class="chip ${DRAFT.mineOnly ? "on" : ""}" data-act="draft-set" data-axis="mineOnly" data-value="toggle" type="button">Only heroes I play</button>` : ""}</div>
-      </div>${body}`;
-  },
-});
-act("draft-retry", runDraft);
 
 // ---------- Meta ----------
 

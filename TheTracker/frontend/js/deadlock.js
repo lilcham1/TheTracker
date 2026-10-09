@@ -166,19 +166,19 @@ function dlBoardHtml(id) {
       <td class="num">${p.kills}</td><td class="num">${p.deaths}</td><td class="num">${p.assists}</td><td class="num">${souls(p.netWorth)}</td><td class="num">${p.lastHits}</td><td class="num">${p.level}</td></tr>`).join("")}</tbody></table>`).join("");
 }
 
-// ---------- Streamers by hero (shared by Deadlock and Dota 2) ----------
+// ---------- Streamers by hero ----------
 //
 // Only streamers who are in a listed live standard match on the hero, ranked
 // first. Each game supplies its board (from the backend) and its words.
 
 const dlBoard = resource("dlBoard", "deadlock_live_board", { ttl: 20000 });
 // Per game: hero is "all", a hero id, or null for "the hero I'm playing".
-const SP = { deadlock: { hero: null, query: "" }, dota: { hero: null, query: "" } };
+const SP = { deadlock: { hero: null, query: "" } };
 const DLL = SP.deadlock;
 const fmtViewers = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n));
 const minsIn = (start) => Math.max(0, Math.round((Date.now() / 1000 - start) / 60));
 const twitchUrl = (login) => "https://www.twitch.tv/" + encodeURIComponent(login);
-const VIA_TEXT = { steam: " · seen live through Steam", leaderboard: " · found on the leaderboard", pro: " · found on the pro list", search: " · found by Steam name", link: " · linked by you" };
+const VIA_TEXT = { leaderboard: " · found on the leaderboard", link: " · linked by you" };
 
 act("sp-hero", (el) => {
   SP[el.dataset.game].hero = el.dataset.hero;
@@ -193,7 +193,7 @@ document.addEventListener("input", (e) => {
 });
 
 /// A rank icon with its name, or nothing for an unranked or hidden account.
-/// Dota medals carry their stars as a second image.
+/// A star, when the rank has one, is a second image.
 function rankBadge(r) {
   if (!r) return "";
   const icon = r.icon ? `<span class="rank-icon">${`<img src="${esc(r.icon)}" alt="" loading="lazy" />`}${r.star ? `<img class="star" src="${esc(r.star)}" alt="" loading="lazy" />` : ""}</span>` : "";
@@ -233,39 +233,6 @@ function rankedStreamersHtml(b, st) {
     </section>`;
 }
 
-/// Dota: streamers whose account is known but who aren't in a live game the
-/// app can see, with the hero of their last finished game.
-function recentStreamersHtml(b, st) {
-  const q = st.query.trim().toLowerCase();
-  const list = (b.recent || []).filter((r) => !q || r.stream.name.toLowerCase().includes(q));
-  if (!b.streamsAvailable || !list.length || (st.hero && st.hero !== "all")) return "";
-  const ago = (t) => {
-    const m = Math.max(0, Math.round((Date.now() / 1000 - t) / 60));
-    return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
-  };
-  return `<section class="live-hero">
-      <div class="sec-head"><h3>Streaming now, last game</h3><span class="muted">current game not visible, so this is the hero they last finished a game on</span></div>
-      <div class="stream-grid">${list.map((r) => {
-        const s = r.stream;
-        return `<button class="stream-card" data-act="open-url" data-url="${esc(twitchUrl(s.login))}" type="button" title="Watch ${esc(s.name)} on Twitch">
-          <span class="stream-thumb">${s.thumbnail ? `<img src="${esc(s.thumbnail)}" alt="" loading="lazy" />` : ""}<span class="live-tag">Live</span><span class="mode-tag">Last game</span><span class="viewers">${fmtViewers(s.viewers)} watching</span></span>
-          <span class="stream-body">
-            <span class="stream-name">${rankBadge(r.rank)}<b>${esc(s.name)}</b></span>
-            <span class="stream-title">${esc(s.title || "")}</span>
-            <span class="muted stream-meta last-game">${imgHtml(r.heroImage, "avatar tiny")} Last played <b>${esc(r.heroName || "?")}</b> · ended ${ago(r.endedAt)} · <span class="${r.won ? "win" : "loss"}">${r.won ? "won" : "lost"}</span></span>
-          </span></button>`;
-      }).join("")}</div>
-    </section>`;
-}
-
-/// Dota: what the live check through Steam needs, when it isn't on.
-function steamNote(b) {
-  if (!b.streamsAvailable || b.steamAvailable || !b.steamReason) return "";
-  if (b.steamReason === "bad_credentials") return `<div class="note warn">Steam refused the app's key. Check the Steam Web API key set on the cloud service.</div>`;
-  if (b.steamReason === "unreachable") return `<div class="note">Steam couldn't be reached just now, so only the top games are checked.</div>`;
-  return `<div class="note">Only Dota's top ~100 games are checked right now. With a Steam Web API key on the cloud service, every known streamer's live game can be checked (a one-time setup by whoever runs it).</div>`;
-}
-
 function dlLiveSetupNote(reason) {
   if (reason === "bad_credentials") return `<div class="note warn">Twitch refused the app's credentials. Check the Twitch client ID and secret set on the cloud service.</div>`;
   if (reason === "unreachable") return `<div class="note">Twitch couldn't be reached just now. Try Refresh in a moment.</div>`;
@@ -278,7 +245,7 @@ function dlLiveSetupNote(reason) {
 // for streamers whose in-game name differs from their channel's.
 
 const LNK = { game: "deadlock", open: false, twitch: "", query: "", results: [], searching: false, error: null };
-const boardOf = (game) => (game === "dota" ? dotaBoard : dlBoard);
+const boardOf = () => dlBoard;
 
 act("lnk-open", (el) => {
   LNK.open = !(LNK.open && LNK.game === el.dataset.game);
@@ -388,7 +355,6 @@ function streamerPageHtml(cfg) {
   return `${staleNote(res)}
     ${cfg.mine ? `<div class="note"><span class="live-dot"></span> You're in a match as <b>${esc(cfg.mine.name)}</b>${pick === mine ? ", so this shows streamers on that hero." : "."}</div>` : ""}
         ${b.streamsAvailable ? "" : dlLiveSetupNote(b.reason)}
-    ${cfg.game === "dota" ? steamNote(b) : ""}
     ${linkedHtml(b, cfg.game, cfg.gameName)}
     ${statRow([
       { label: "Streamers in live matches", value: b.streamsAvailable ? fmtNum(total) : "–", sub: b.streamsAvailable ? `${ranked} ranked, ${total - ranked} ${other}` : "Twitch not connected" },
@@ -401,7 +367,6 @@ function streamerPageHtml(cfg) {
     </div>
     ${shown.length ? shown.map(block).join("") : emptyState(q ? "No streamer matches that" : "No one is streaming a listed live match right now", q ? "Try another name." : "Check back in a few minutes; the list refreshes on its own.")}
         ${rankedStreamersHtml(b, st)}
-    ${cfg.game === "dota" ? recentStreamersHtml(b, st) : ""}
     ${aboutData(cfg.about)}`;
 }
 
@@ -409,7 +374,6 @@ function streamerPageHtml(cfg) {
 setInterval(() => {
   if (document.visibilityState !== "visible") return;
   if (S.view === "dl-live") dlBoard.load();
-  if (S.view === "dota-streamers" && typeof dotaBoard !== "undefined") dotaBoard.load();
 }, 25000);
 
 view("dl-live", {

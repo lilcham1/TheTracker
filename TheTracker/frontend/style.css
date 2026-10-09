@@ -284,6 +284,10 @@ button.line:hover { background: var(--panel); }
 .live-head { display: flex; align-items: center; gap: 18px; }
 .live-head h2 { font-size: 26px; }
 .clock { font-size: 40px; font-variant-numeric: tabular-nums; }
+.live-slot:not(:empty) { margin-bottom: 18px; }
+.live-strip { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--panel); }
+.live-strip .live-dot.on { background: var(--win); animation: none; }
+.live-setup { margin-top: 10px; }
 .checks { display: flex; flex-direction: column; gap: 4px; }
 .check { display: flex; gap: 12px; padding: 9px 0; }
 .check .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: var(--faint); flex: none; }
@@ -325,16 +329,6 @@ button.line:hover { background: var(--panel); }
 .menu button { border: 0; background: none; padding: 7px 10px; text-align: left; border-radius: 4px; }
 .menu button:hover { background: var(--line); }
 .menu button.on { color: var(--accent); }
-
-/* ---------- Draft ---------- */
-
-.draft-top { display: flex; flex-direction: column; gap: 12px; }
-.enemy-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-.slot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 96px; border: 1px dashed var(--line); border-radius: var(--radius); background: transparent; font-size: 12.5px; }
-.slot.filled { border-style: solid; background: var(--panel); }
-.slot.filled:hover { border-color: var(--loss); }
-.suggest { display: flex; flex-wrap: wrap; gap: 6px; }
-.hero-chip { height: 34px; padding-left: 5px; }
 
 /* ---------- Builds ---------- */
 

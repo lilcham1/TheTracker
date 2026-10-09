@@ -419,7 +419,7 @@ function renderNav() {
   $("#nav").innerHTML = NAV[S.game]
     .map((id) => {
       const v = VIEWS[id];
-      const liveDot = id === "live" && S.live && S.live.live ? `<span class="live-dot" title="A match is running"></span>` : "";
+      const liveDot = VIEWS[id].liveSlot && S.live && S.live.live ? `<span class="live-dot" title="A match is running"></span>` : "";
       const on = S.view === id || (VIEWS[S.view] && VIEWS[S.view].tabOf === id);
       return `<button class="nav-item ${on ? "on" : ""}" data-act="go" data-view="${id}" type="button">
         <span class="ico">${icon(v.icon)}</span><span>${esc(v.navTitle || v.title)}</span>${liveDot}</button>`;
@@ -696,13 +696,18 @@ function applyLive(live) {
     RES.insights && RES.insights.clear();
   }
   // Only pages that show live data are redrawn on a tick, and only when
-  // something they show has changed.
+  // something they show has changed. A page with a live slot redraws just
+  // that slot (and its subtitle).
   const v = VIEWS[S.view];
-  if (v && v.live) {
+  if (v && (v.live || v.liveSlot)) {
     const sig = JSON.stringify(live);
     if (sig !== liveSig) {
       liveSig = sig;
-      rerender();
+      const slot = v.liveSlot && $("#liveSlot");
+      if (slot) {
+        slot.innerHTML = v.liveSlot();
+        if (typeof v.sub === "function") $("#viewSub").textContent = v.sub() || "";
+      } else rerender();
     }
   }
 }
