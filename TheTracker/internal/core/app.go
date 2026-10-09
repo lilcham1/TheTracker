@@ -109,6 +109,9 @@ type App struct {
 	simMu   sync.Mutex
 	simStop chan struct{}
 
+	// What the player's history and the hero say about their role.
+	hints roleHints
+
 	pendingUpdate string
 }
 
@@ -244,6 +247,8 @@ type LiveView struct {
 	Simulating  bool   `json:"simulating"`
 	// Progress against the player's goals in the running match.
 	Goals []GoalResult `json:"goals"`
+	// Core or support, for the overlay's reminder windows.
+	Role *LiveRole `json:"role,omitempty"`
 }
 
 func (a *App) Live(withLog bool) LiveView {
@@ -253,6 +258,7 @@ func (a *App) Live(withLog bool) LiveView {
 		g := a.Store.LoadPrefs().Goals
 		snap := buildSummary(m, false, time.Now())
 		v.Goals = EvaluateGoals(g, &snap)
+		v.Role = a.liveRole(m)
 	}
 	return v
 }

@@ -35,6 +35,15 @@ const STACK_FROM = 112;
 const STACK_LEAD = 7;
 // How long "Now" stays up after an event, in seconds of game time.
 const NOW_FOR = 2;
+// The reminder windows for each role, in minutes (0: the whole game), used
+// when the settings say to follow the role. The same presets are in
+// prefs.go and settings.js.
+const ROLE_UNTIL = {
+  core: { stack: 10, bounty: 12, lotus: 15, power: 0, wisdom: 0 },
+  support: { stack: 20, bounty: 20, lotus: 20, power: 0, wisdom: 0 },
+};
+// The role the app worked out for the match on screen (core | support).
+let liveRole = null;
 
 // One look per kind of reminder: its own colour and the game's own picture
 // of it, so which rune it is can be read from the corner of the eye without
@@ -98,7 +107,7 @@ function schedule(clock, gameType) {
   const lead = settings.leadSeconds || 5;
   const turbo = gameType === "turbo";
   const scale = turbo ? 0.5 : 1;
-  const until = d.until || {};
+  const until = d.roleMode === "auto" ? ROLE_UNTIL[liveRole] || ROLE_UNTIL.core : d.until || {};
   // Whether a reminder for an event at time t is still worth showing: within
   // its window, or (lotus) back for the Great Lotus.
   const inWindow = (kind, t) => {
@@ -254,6 +263,7 @@ async function tick() {
     lastClock = null;
     return paint("");
   }
+  liveRole = live.role ? live.role.role : null;
   if (!lastClock || lastClock.value !== m.lastClockTime) lastClock = { value: m.lastClockTime, at: performance.now() };
   const ahead = Math.min(1, (performance.now() - lastClock.at) / 1000);
   paint(frame(m.lastClockTime + ahead, m.gameType));
@@ -295,4 +305,4 @@ if (typeof document !== "undefined") {
     setInterval(tick, 250);
   }
 }
-if (typeof module !== "undefined") module.exports = { upcoming, nextUp, schedule, untilNext, sinceLast, chipHtml, labelFor, artFor, frame, KINDS, setSettings: (s) => (settings = s) };
+if (typeof module !== "undefined") module.exports = { upcoming, nextUp, schedule, untilNext, sinceLast, chipHtml, labelFor, artFor, frame, KINDS, setSettings: (s) => (settings = s), setRole: (r) => (liveRole = r) };

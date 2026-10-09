@@ -525,6 +525,34 @@ function comparisonHtml(s) {
   </table><p class="hint">Compared with your other ${s.gamesComparedAgainst} ${esc(gameTypeLabel(s.gameType))} games.</p>`;
 }
 
+const ROLE_WHY = {
+  chosen: "you chose it",
+  last_hits: "from your last hits",
+  wards: "you bought wards early",
+  your_games: "how you usually play this hero",
+  hero: "this hero's usual role",
+  default: "nothing to go on yet",
+};
+
+/// Which role the overlay's reminders follow this match, and why.
+function roleHtml() {
+  const live = S.live || {};
+  const r = live.role;
+  if (!r) return "";
+  if (S.boot.prefs.overlay.dota.roleMode !== "auto") {
+    return `<div class="sec-head"><h3>Overlay reminders</h3></div><p class="hint">Set by hand in Settings, so they don't follow your role. <button class="link" data-act="go" data-view="settings" data-params='{"tab":"overlay"}' type="button">Change</button></p>`;
+  }
+  const chip = (id, label) => `<button class="chip ${(id === "auto" ? r.why !== "chosen" : r.why === "chosen" && r.role === id) ? "on" : ""}" data-act="live-role" data-role="${id}" type="button">${label}</button>`;
+  return `<div class="sec-head"><h3>Overlay reminders</h3></div>
+    <div class="chips">${chip("auto", "Auto")}${chip("core", "Core")}${chip("support", "Support")}</div>
+    <p class="hint">Following <b>${r.role === "support" ? "Support" : "Core"}</b>: ${esc(ROLE_WHY[r.why] || r.why)}.</p>`;
+}
+
+act("live-role", async (el) => {
+  const live = await attempt(() => invoke("set_live_role", { role: el.dataset.role }));
+  if (live) applyLive(live);
+});
+
 function liveMatchHtml(m) {
   const live = S.live;
   const cps = [5, 10, 15, 20, 25];
@@ -579,6 +607,7 @@ function liveMatchHtml(m) {
             <td>${known(diff) ? `<span class="${diff >= 0 ? "win" : "loss"}">${diff >= 0 ? "+" : ""}${diff.toFixed(0)}</span> <span class="muted">vs your ${avg.toFixed(0)} average</span>` : known(avg) ? `<span class="muted">you average ${avg.toFixed(0)}</span>` : ""}</td></tr>`;
         }).join("")}</table>
 
+        ${roleHtml()}
         <div class="sec-head"><h3>Game type</h3></div>
         <div class="chips">${typeChips}</div>
         <p class="hint">Dota doesn't say which mode a match is. Pick one, or leave it: TheTracker fills it in from OpenDota afterwards. Turbo changes the overlay's lotus timing.</p>

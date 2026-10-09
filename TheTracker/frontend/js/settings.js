@@ -132,13 +132,15 @@ onChange("ov-save", (el) => saveOverlay({ [el.dataset.key]: el.type === "checkbo
 // Turning on any rune also turns on the old all-runes switch, which older
 // settings files may have off.
 onChange("ov-panel", (el) => saveOverlay({ dota: { [el.dataset.key]: el.checked, ...(el.checked && ["bounty", "water", "power", "wisdom"].includes(el.dataset.key) ? { runes: true } : {}) } }));
-onChange("ov-until", (el) => saveOverlay({ dota: { until: { ...(S.boot.prefs.overlay.dota.until || {}), [el.dataset.key]: Number(el.value) } } }));
+onChange("ov-until", (el) => saveOverlay({ dota: { roleMode: "fixed", until: { ...(S.boot.prefs.overlay.dota.until || {}), [el.dataset.key]: Number(el.value) } } }));
+// The same presets are in prefs.go and overlay.js.
 const OV_PRESETS = {
   core: { stack: 10, bounty: 12, lotus: 15, power: 0, wisdom: 0 },
   support: { stack: 20, bounty: 20, lotus: 20, power: 0, wisdom: 0 },
   all: { stack: 0, bounty: 0, lotus: 0, power: 0, wisdom: 0 },
 };
-act("ov-preset", (el) => saveOverlay({ dota: { until: { ...OV_PRESETS[el.dataset.preset] }, runes: true, bounty: true, water: true, power: true, wisdom: true, lotus: true, stacks: true, lotusLate: true } }));
+act("ov-role-auto", () => saveOverlay({ dota: { roleMode: "auto" } }));
+act("ov-preset", (el) => saveOverlay({ dota: { roleMode: "fixed", until: { ...OV_PRESETS[el.dataset.preset] }, runes: true, bounty: true, water: true, power: true, wisdom: true, lotus: true, stacks: true, lotusLate: true } }));
 act("ov-corner", (el) => saveOverlay({ corner: el.dataset.corner }));
 act("ov-test", async () => {
   if (await attempt(() => invoke("sim_start", { seconds: 90 }))) {
@@ -157,6 +159,8 @@ function ovRow(o, key, untilKey, label, note) {
   const d = o.dota, rune = ["bounty", "water", "power", "wisdom"].includes(key);
   const on = rune ? d.runes !== false && d[key] !== false : !!d[key];
   const until = untilKey ? ((d.until || {})[untilKey] ?? 0) : null;
+  // Following the role, the windows come from the role's preset each match.
+  if (d.roleMode === "auto") untilKey = null;
   return `<div class="ov-row"><label class="switch"><input type="checkbox" data-change="ov-panel" data-key="${key}" ${on ? "checked" : ""} /><span>${label} <span class="muted">(${note})</span></span></label>
     ${untilKey ? `<select class="input" id="ovUntil_${untilKey}" data-change="ov-until" data-key="${untilKey}" ${on ? "" : "disabled"}>${OV_UNTIL.map(([v, l]) => `<option value="${v}" ${v === until ? "selected" : ""}>${l}</option>`).join("")}</select>` : ""}</div>`;
 }
@@ -186,8 +190,12 @@ function overlayHtml() {
     </section>
     <section class="set">
       <h3>Reminders</h3>
-            <p class="muted">Each reminder stops when it stops mattering. Pick a role to set them all, then change any row.</p>
-      <div class="chips">${[["core", "Core"], ["support", "Support"], ["all", "Everything, whole game"]].map(([k, l]) => `<button class="chip ${ovPresetOf(o.dota) === k ? "on" : ""}" data-act="ov-preset" data-preset="${k}" type="button">${l}</button>`).join("")}</div>
+      <p class="muted">Each reminder stops when it stops mattering, and that depends on your role.</p>
+      <div class="chips"><button class="chip ${o.dota.roleMode === "auto" ? "on" : ""}" data-act="ov-role-auto" type="button">My role, each match</button>
+        ${[["core", "Always core"], ["support", "Always support"], ["all", "Everything, whole game"]].map(([k, l]) => `<button class="chip ${o.dota.roleMode !== "auto" && ovPresetOf(o.dota) === k ? "on" : ""}" data-act="ov-preset" data-preset="${k}" type="button">${l}</button>`).join("")}</div>
+      ${o.dota.roleMode === "auto"
+        ? `<p class="hint">Dota doesn't tell apps your role, so TheTracker works it out: from your last hits at 5:00 and 10:00, wards bought in the first minutes, your past games on the hero, and the hero's usual position. As a core the pull stops at 10:00, bounties at 12:00 and the lotus at 15:00; as a support all three run to 20:00. You can change it during a match on Overview.</p>`
+        : `<p class="hint">Pick a preset, then change any row.</p>`}
       <div class="ov-rows">
         ${ovRow(o, "stacks", "stack", "Camp pull", "counts down from :45 to the :52 pull")}
         ${ovRow(o, "bounty", "bounty", "Bounty runes", "every 4 min")}

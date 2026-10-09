@@ -133,6 +133,12 @@ type MatchState struct {
 	LastSeenAt  *string `json:"lastSeenAt"`
 	// From the built-in simulator. Never saved or synced.
 	Simulated bool `json:"simulated"`
+	// Wards or a Blood Grenade were bought before 5:00 (see role.go). Kept
+	// once seen: wards are placed, so the item itself goes.
+	SupportItems bool `json:"supportItems"`
+	// The role the player chose for this match: core | support, or empty
+	// to let the app work it out.
+	RoleChoice string `json:"roleChoice,omitempty"`
 }
 
 func newMatchState(matchID string, hero *string, startedAt string) *MatchState {

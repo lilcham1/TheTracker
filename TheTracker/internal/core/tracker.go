@@ -115,6 +115,22 @@ func (t *Tracker) SetGameType(gameType string) {
 	}
 }
 
+// SetRole fixes the player's role for this match (core | support), or lets
+// the app work it out again ("auto").
+func (t *Tracker) SetRole(role string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.current == nil || t.current.Ended {
+		return
+	}
+	switch role {
+	case "core", "support":
+		t.current.RoleChoice = role
+	case "auto":
+		t.current.RoleChoice = ""
+	}
+}
+
 func (t *Tracker) MarkRoshanDeath() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -350,6 +366,15 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *MatchSummary) {
 				continue
 			}
 			counts[strings.TrimPrefix(name, "item_")]++
+		}
+		if !m.SupportItems && clock < supportItemsBefore {
+			for name := range counts {
+				if supportItems[name] {
+					m.SupportItems = true
+					t.logf("Support items at %s: %s", FmtClock(clock), name)
+					break
+				}
+			}
 		}
 		for _, name := range sortedKeys(counts) {
 			if !IsKeyItem(name) {

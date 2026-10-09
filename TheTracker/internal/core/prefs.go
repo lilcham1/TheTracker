@@ -27,6 +27,37 @@ type DotaPanels struct {
 	// The lotus reminder comes back from 35:00, when the pools grow Great
 	// and Greater Lotuses.
 	LotusLate bool `json:"lotusLate"`
+	// "auto": the windows follow the role the app works out each match (the
+	// Core and Support presets); "fixed": Until as set.
+	RoleMode string `json:"roleMode"`
+}
+
+// The Core and Support windows, also in overlay.js and settings.js.
+var rolePresets = map[string]map[string]int{
+	"core":    {"stack": 10, "bounty": 12, "lotus": 15, "power": 0, "wisdom": 0},
+	"support": {"stack": 20, "bounty": 20, "lotus": 20, "power": 0, "wisdom": 0},
+}
+
+// settleRoleMode fills in RoleMode for a settings file from before it
+// existed: windows left at a role preset follow the role from now on;
+// hand-tuned ones stay as they are.
+func (d *DotaPanels) settleRoleMode() {
+	if d.RoleMode == "auto" || d.RoleMode == "fixed" {
+		return
+	}
+	d.RoleMode = "fixed"
+	for _, preset := range rolePresets {
+		same := true
+		for k, v := range preset {
+			if got, ok := d.Until[k]; ok && got != v || !ok && v != 0 {
+				same = false
+			}
+		}
+		if same {
+			d.RoleMode = "auto"
+			return
+		}
+	}
 }
 
 // The defaults: each reminder for as long as it usually matters.
@@ -164,6 +195,7 @@ func (o OverlaySettings) sanitized() OverlaySettings {
 		}
 	}
 	o.Dota.Until = until
+	o.Dota.settleRoleMode()
 	switch o.Corner {
 	case "top-left", "top-right", "bottom-left", "bottom-right":
 	default:
@@ -188,6 +220,7 @@ func parsePrefs(raw []byte) (Prefs, error) {
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return defaultPrefs(), err
 	}
+	p.Overlay.Dota.settleRoleMode()
 	if p.Builds == nil {
 		p.Builds = []Build{}
 	}
@@ -202,6 +235,7 @@ func parsePrefs(raw []byte) (Prefs, error) {
 func (s *Store) LoadPrefs() Prefs {
 	p := defaultPrefs()
 	s.readJSON("prefs.json", &p)
+	p.Overlay.Dota.settleRoleMode()
 	if p.Builds == nil {
 		p.Builds = []Build{}
 	}

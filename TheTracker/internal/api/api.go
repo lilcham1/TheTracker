@@ -126,6 +126,12 @@ func commands(a *core.App) map[string]command {
 			a.Tracker.SetEnabled(p.Enabled)
 			return a.Live(false), nil
 		}),
+		"set_live_role": in(func(p struct {
+			Role string `json:"role"`
+		}) (any, error) {
+			a.Tracker.SetRole(p.Role)
+			return a.Live(false), nil
+		}),
 		"set_live_game_type": in(func(p struct {
 			GameType string `json:"gameType"`
 		}) (any, error) {

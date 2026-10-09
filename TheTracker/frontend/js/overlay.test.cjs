@@ -123,4 +123,20 @@ assert.ok(counting("stack", t(30, 40), t(30, 52)).length === 7, "old settings ke
 ov.setSettings({ ...base, dota: { runes: false, lotus: true, stacks: true } });
 assert.deepStrictEqual(nowAt("bounty", 1, t(9)), [], "the old all-runes switch still turns runes off");
 
+// ---------- Following the role ----------
+ov.setSettings({ ...core, dota: { ...core.dota, roleMode: "auto", until: { stack: 0, bounty: 0, lotus: 0, power: 0, wisdom: 0 } } });
+ov.setRole("support");
+assert.ok(counting("stack", t(15, 40), t(15, 52)).length === 7, "a support still pulls at 15:52");
+assert.deepStrictEqual(counting("stack", t(20, 40), t(21, 0)), [], "...but not after 20:00");
+ov.setRole("core");
+assert.deepStrictEqual(counting("stack", t(10, 40), t(16, 0)), [], "a core stops pulling after 10:00");
+assert.deepStrictEqual(nowAt("bounty", t(13, 0), t(20, 0)), [], "a core stops taking bounties after 12:00");
+ov.setRole(null);
+assert.deepStrictEqual(counting("stack", t(10, 40), t(11, 0)), [], "no role known yet: the core windows");
+// Fixed mode ignores the role and uses the windows as set.
+ov.setSettings({ ...core, dota: { ...core.dota, roleMode: "fixed", until: { stack: 0, bounty: 0, lotus: 0, power: 0, wisdom: 0 } } });
+ov.setRole("core");
+assert.ok(counting("stack", t(30, 40), t(30, 52)).length === 7, "fixed windows ignore the role");
+ov.setRole(null);
+
 console.log("overlay timings ok");
