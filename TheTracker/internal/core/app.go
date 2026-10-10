@@ -145,6 +145,7 @@ func NewApp(dataDir string, shell Shell) *App {
 func (a *App) Start(manageDota bool) {
 	a.Store.MigrateLegacyDir()
 	a.Tracker.RestoreAfterRestart()
+	a.dropWatchedGames()
 	a.manageDota = manageDota
 	a.applyGames(a.Store.LoadPrefs().Games)
 	a.Cloud.Restore()
@@ -697,6 +698,23 @@ func Reveal(path string) error {
 		return errors.New("That file no longer exists.")
 	}
 	return exec.Command("explorer", "/select,"+path).Start()
+}
+
+// dropWatchedGames removes history entries that can only be watched games
+// saved before TheTracker could tell watching from playing: no hero, no last
+// hits, kills, deaths or items. A played match always has a hero.
+func (a *App) dropWatchedGames() {
+	_, _ = a.Store.UpdateHistory(func(h []MatchSummary) ([]MatchSummary, bool) {
+		kept := h[:0:0]
+		for _, m := range h {
+			watched := (m.HeroName == nil || *m.HeroName == "") && (m.LastHits == nil || *m.LastHits == 0) &&
+				m.Kills == 0 && m.TotalDeaths == 0 && len(m.KeyItems) == 0
+			if !watched {
+				kept = append(kept, m)
+			}
+		}
+		return kept, len(kept) != len(h)
+	})
 }
 
 // ---------- Updates ----------

@@ -45,6 +45,10 @@ type Tracker struct {
 	lastPayloadAt time.Time
 	// When Dota last posted while the player was in a match.
 	lastMatchPayloadAt time.Time
+	// A game the player is watching (spectating or a replay), and when Dota
+	// last posted about it. Never recorded.
+	watchingID string
+	watchingAt time.Time
 
 	// Called (outside the lock) with each match newly written to history.
 	OnSaved func(MatchSummary)
@@ -64,8 +68,11 @@ type LiveStatus struct {
 	// app started.
 	GsiAgeSecs *int64 `json:"gsiAgeSecs"`
 	// True while a match is running and Dota is still reporting on it.
-	Live bool     `json:"live"`
-	Log  []string `json:"log,omitempty"`
+	Live bool `json:"live"`
+	// True while the player is watching a game (spectating or a replay)
+	// rather than playing one.
+	Watching bool     `json:"watching"`
+	Log      []string `json:"log,omitempty"`
 }
 
 // matchFeedTimeout: Dota heartbeats every 30 seconds, so silence well past
@@ -76,6 +83,7 @@ func (t *Tracker) Status(withLog bool) LiveStatus {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	s := LiveStatus{Current: t.current.clone(), TrackingEnabled: t.enabled, Live: t.liveLocked()}
+	s.Watching = t.watchingID != "" && t.now().Sub(t.watchingAt) < matchFeedTimeout && !s.Live
 	if !t.lastPayloadAt.IsZero() {
 		s.GsiAgeSecs = ptr(int64(t.now().Sub(t.lastPayloadAt).Seconds()))
 	}
@@ -252,6 +260,24 @@ func idString(v any) (string, bool) {
 	return "", false
 }
 
+// watchingPayload tells a spectated game or a replay from the player's own
+// match. Playing, Dota describes the player directly (player.activity,
+// hero.name); watching, it lists every player grouped by team (team2,
+// team3) and says nothing about "you".
+func watchingPayload(player, hero jsonMap) bool {
+	for _, m := range []jsonMap{player, hero} {
+		if sub(m, "team2") != nil || sub(m, "team3") != nil {
+			return true
+		}
+	}
+	if player == nil && hero == nil {
+		return false
+	}
+	_, hasActivity := getStr(player, "activity")
+	_, hasHero := getStr(hero, "name")
+	return !hasActivity && !hasHero
+}
+
 // ---------- The update path ----------
 
 // HandleUpdate applies one GSI payload.
@@ -274,6 +300,18 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *MatchSummary) {
 	}
 
 	gmap, player, hero, items := sub(body, "map"), sub(body, "player"), sub(body, "hero"), sub(body, "items")
+
+	// Watching a game, not playing it: noted, never recorded.
+	if watchingPayload(player, hero) {
+		if id, ok := idString(gmap["matchid"]); ok && id != "0" {
+			if id != t.watchingID {
+				t.logf("Watching match %s (spectating or a replay): not recorded", id)
+			}
+			t.watchingID, t.watchingAt = id, now
+		}
+		return nil
+	}
+	t.watchingID = ""
 
 	if activity, ok := getStr(player, "activity"); ok && activity != "playing" {
 		return nil

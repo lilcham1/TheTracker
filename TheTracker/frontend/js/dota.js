@@ -419,6 +419,10 @@ function dotaLiveHtml() {
   const m = S.live && S.live.current;
   if (m && !(m.ended && D.dismissed === m.matchid)) return liveMatchHtml(m);
   const live = S.live || {};
+  if (live.watching) {
+    return `<div class="live-strip"><span class="live-dot off"></span>
+      <span class="grow"><b>Watching a game</b> <span class="muted">Spectating or a replay: it isn't recorded, and the overlay stays off.</span></span></div>`;
+  }
   const needs = liveNeedsSetup();
   const open = D.setupOpen === undefined ? needs : D.setupOpen;
   const status = needs ? "Dota isn't fully set up to send match data yet."

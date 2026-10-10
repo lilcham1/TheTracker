@@ -446,7 +446,7 @@ func commands(a *core.App) map[string]command {
 		}) (any, error) {
 			return ok, a.InstallUpdate(p.DuringMatch)
 		}),
-		"run_diagnostics":  none(func() (any, error) { return a.Diagnostics(), nil }),
+		"run_diagnostics": none(func() (any, error) { return a.Diagnostics(), nil }),
 		"open_url": in(func(p struct {
 			URL string `json:"url"`
 		}) (any, error) {
