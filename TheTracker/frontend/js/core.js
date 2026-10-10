@@ -807,19 +807,52 @@ act("dismiss-update", () => {
   renderBanners();
 });
 
-act("install-update", async () => {
-  if (S.live && S.live.live && !S.live.simulating) {
-    toast("A match is running. Update once it has finished, so it gets recorded.", "err");
-    return;
-  }
+async function installUpdate(duringMatch) {
   S.updating = true;
   renderBanners();
   rerender();
-  await attempt(() => invoke("install_update"));
+  await attempt(() => invoke("install_update", { duringMatch }));
   S.updating = false;
   renderBanners();
   rerender();
+}
+
+act("install-update", () => {
+  if (!(S.live && S.live.live && !S.live.simulating)) return installUpdate(false);
+  confirmBox({
+    title: "Update during your match?",
+    body: `<p>TheTracker closes for about ten seconds and reopens in the tray, without coming in front of the game.</p>
+      <p>Your match so far is kept and tracking carries on. Anything in those few seconds, like a death or an item, may be missed, and the overlay is gone until it's back.</p>`,
+    ok: "Update now",
+    then: () => installUpdate(true),
+  });
 });
+
+/// A small confirm box over the page. Escape or the backdrop cancels.
+function confirmBox({ title, body, ok, then }) {
+  document.querySelector(".confirm-back")?.remove();
+  const box = document.createElement("div");
+  box.className = "confirm-back";
+  box.innerHTML = `<div class="confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <h3 id="confirmTitle">${esc(title)}</h3>${body}
+    <div class="row end"><button class="btn ghost" data-confirm="no" type="button">Cancel</button><button class="btn" data-confirm="yes" type="button">${esc(ok)}</button></div></div>`;
+  const onKey = (e) => e.key === "Escape" && close();
+  const close = () => {
+    box.remove();
+    document.removeEventListener("keydown", onKey);
+  };
+  box.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-confirm]");
+    if (e.target === box || (b && b.dataset.confirm === "no")) close();
+    else if (b && b.dataset.confirm === "yes") {
+      close();
+      then();
+    }
+  });
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(box);
+  box.querySelector('[data-confirm="yes"]').focus();
+}
 
 async function checkForUpdate(quiet = true) {
   try {

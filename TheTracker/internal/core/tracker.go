@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -129,6 +130,59 @@ func (t *Tracker) SetRole(role string) {
 	case "auto":
 		t.current.RoleChoice = ""
 	}
+}
+
+// The match in progress is kept here across an update's restart.
+const restartFile = "live_match.json"
+
+// A kept match older than this is not picked up again: the restart it was
+// kept for didn't happen, or took too long to trust.
+const restartWithin = 10 * time.Minute
+
+type restartState struct {
+	SavedAt time.Time   `json:"savedAt"`
+	Match   *MatchState `json:"match"`
+}
+
+// SaveForRestart keeps the match in progress on disk, for the next start to
+// carry on with. Test matches are not kept.
+func (t *Tracker) SaveForRestart() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	m := t.current
+	if m == nil || m.Ended || m.Simulated {
+		return
+	}
+	_ = t.store.writeJSON(restartFile, restartState{SavedAt: t.now(), Match: m.clone()})
+	t.logf("Kept match %s for the restart", m.MatchID)
+}
+
+// RestoreAfterRestart picks up a match kept by SaveForRestart. The next
+// payload for the same match carries on from it; a different match id
+// finishes it like any match that stopped reporting.
+func (t *Tracker) RestoreAfterRestart() {
+	var st restartState
+	ok := t.store.readJSON(restartFile, &st)
+	_ = os.Remove(t.store.path(restartFile))
+	if !ok || st.Match == nil || t.now().Sub(st.SavedAt) > restartWithin || st.Match.Ended {
+		return
+	}
+	m := st.Match
+	if m.OwnedItemCounts == nil {
+		m.OwnedItemCounts = map[string]int{}
+	}
+	if m.Checkpoints == nil {
+		m.Checkpoints = map[int]*Checkpoint{}
+	}
+	for _, minute := range CheckpointMinutes {
+		if _, ok := m.Checkpoints[minute]; !ok {
+			m.Checkpoints[minute] = nil
+		}
+	}
+	t.mu.Lock()
+	t.current = m
+	t.logf("Carrying on with match %s after the update", m.MatchID)
+	t.mu.Unlock()
 }
 
 func (t *Tracker) MarkRoshanDeath() {

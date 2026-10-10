@@ -486,8 +486,12 @@ func (s *shell) SetAutostart(on bool) error {
 
 // InstallUpdate hands over to the installer and quits. /P runs it without
 // its wizard and /R makes it reopen the app when it is done.
-func (s *shell) InstallUpdate(installer string) error {
-	cmd := exec.Command(installer, "/P", "/R")
+func (s *shell) InstallUpdate(installer string, quiet bool) error {
+	args := []string{"/P", "/R"}
+	if quiet {
+		args = append(args, "/M")
+	}
+	cmd := exec.Command(installer, args...)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("Couldn't start the installer: %v", err)
 	}

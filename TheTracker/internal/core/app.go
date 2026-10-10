@@ -30,8 +30,10 @@ type Shell interface {
 	TrayAvailable() bool
 	AutostartEnabled() bool
 	SetAutostart(bool) error
-	// InstallUpdate runs the downloaded installer and quits the app.
-	InstallUpdate(installerPath string) error
+	// InstallUpdate runs the downloaded installer and quits the app. With
+	// quiet, the app comes back in the tray instead of in front (a match is
+	// on).
+	InstallUpdate(installerPath string, quiet bool) error
 	ShowMainWindow()
 	// Notify shows a desktop notification. Best effort: a PC that cannot
 	// show one simply does not.
@@ -69,7 +71,7 @@ func (n *NoShell) SetAutostart(on bool) error {
 	n.mu.Unlock()
 	return nil
 }
-func (n *NoShell) InstallUpdate(string) error {
+func (n *NoShell) InstallUpdate(string, bool) error {
 	return errors.New("Updates can only be installed from the desktop app.")
 }
 func (n *NoShell) ShowMainWindow() {}
@@ -142,6 +144,7 @@ func NewApp(dataDir string, shell Shell) *App {
 // rewrite the config in a real Dota install to point at a test listener.
 func (a *App) Start(manageDota bool) {
 	a.Store.MigrateLegacyDir()
+	a.Tracker.RestoreAfterRestart()
 	a.manageDota = manageDota
 	a.applyGames(a.Store.LoadPrefs().Games)
 	a.Cloud.Restore()
@@ -698,15 +701,23 @@ func Reveal(path string) error {
 
 // ---------- Updates ----------
 
-func (a *App) InstallUpdate() error {
-	if a.Tracker.IsLive() && !a.Simulating() {
-		return errors.New("A match is running. Update once it has finished, so it gets recorded.")
+// InstallUpdate downloads and runs the update. During a match it needs the
+// player's go-ahead (duringMatch); the match so far is then kept on disk and
+// picked up again when the new version starts, and the app reopens in the
+// tray so nothing lands in front of the game.
+func (a *App) InstallUpdate(duringMatch bool) error {
+	live := a.Tracker.IsLive() && !a.Simulating()
+	if live && !duringMatch {
+		return errors.New("A match is running. Confirm to update anyway.")
 	}
 	path, err := a.Updater.Download()
 	if err != nil {
 		return err
 	}
-	return a.Shell.InstallUpdate(path)
+	if live {
+		a.Tracker.SaveForRestart()
+	}
+	return a.Shell.InstallUpdate(path, live)
 }
 
 // SetAPIBases points the public-API clients somewhere else. For tests, which

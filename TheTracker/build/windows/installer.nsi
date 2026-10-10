@@ -8,6 +8,7 @@
 ;   /S  silent
 ;   /P  passive (no wizard) — what the in-app updater passes
 ;   /R  reopen TheTracker when done
+;   /M  ...in the tray, not in front (an update during a match)
 ;
 ; Built by build.sh, which passes VERSION and the paths.
 
@@ -73,6 +74,11 @@ Function .onInit
   ${GetOptions} $0 "/R" $1
   ${IfNot} ${Errors}
     StrCpy $Relaunch "1"
+  ${EndIf}
+  ClearErrors
+  ${GetOptions} $0 "/M" $1
+  ${IfNot} ${Errors}
+    StrCpy $Relaunch "2"
   ${EndIf}
 
   ; Always the per-user location, whatever an older install recorded.
@@ -144,6 +150,8 @@ Section "Install"
 
   ${If} $Relaunch == "1"
     Exec '"$INSTDIR\thetracker.exe"'
+  ${ElseIf} $Relaunch == "2"
+    Exec '"$INSTDIR\thetracker.exe" --minimized'
   ${EndIf}
 SectionEnd
 

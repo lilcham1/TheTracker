@@ -441,7 +441,11 @@ func commands(a *core.App) map[string]command {
 
 		// ----- App -----
 		"check_for_update": none(func() (any, error) { return a.Updater.Check() }),
-		"install_update":   none(func() (any, error) { return ok, a.InstallUpdate() }),
+		"install_update": in(func(p struct {
+			DuringMatch bool `json:"duringMatch"`
+		}) (any, error) {
+			return ok, a.InstallUpdate(p.DuringMatch)
+		}),
 		"run_diagnostics":  none(func() (any, error) { return a.Diagnostics(), nil }),
 		"open_url": in(func(p struct {
 			URL string `json:"url"`
