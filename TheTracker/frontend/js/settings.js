@@ -222,7 +222,7 @@ function overlayHtml() {
     <section class="set">
       <h3>Position and size</h3>
       <div class="field"><span>Corner</span><div class="corner-grid">${corners.map(([k, l]) => `<button class="chip ${o.corner === k ? "on" : ""}" data-act="ov-corner" data-corner="${k}" type="button">${l}</button>`).join("")}</div></div>
-      <label class="field"><span>Display</span><select class="input" data-change="ov-save" data-key="monitor">
+      <label class="field"><span>When Dota isn't open, show it on <span class="muted">(with Dota open it sits on the game's window, and only while the game is in front)</span></span><select class="input" data-change="ov-save" data-key="monitor">
         <option value="" ${o.monitor ? "" : "selected"}>The one TheTracker's window is on</option>
         ${monitors.map((m, i) => `<option value="${esc(m.name)}" ${o.monitor === m.name ? "selected" : ""}>${esc(monitorLabel(m, i))}</option>`).join("")}</select></label>
       <label class="field"><span>${/^bottom/.test(o.corner) ? "Raise it by" : "Lower it by"} <b id="ovOffsetVal">${o.offsetY || 0} px</b> <span class="muted">to clear the game's own buttons in that corner</span></span>

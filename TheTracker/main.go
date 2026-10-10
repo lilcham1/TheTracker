@@ -19,7 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -120,6 +120,7 @@ func main() {
 	}
 
 	go sh.selfTest()
+	go sh.followGame()
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
@@ -149,6 +150,14 @@ type shell struct {
 	// Desktop notifications, and whether Windows let them be set up.
 	notifier *notifications.NotificationService
 	notifyOK atomic.Bool
+	// Whether the overlay is meant to be up. It is drawn only while Dota
+	// (or TheTracker) is in front, so this and IsVisible can differ.
+	overlayWanted atomic.Bool
+	// Dota's area the overlay was last placed in.
+	placedMu sync.Mutex
+	placedIn application.Rect
+	// The self-test places the overlay itself.
+	selfTesting atomic.Bool
 }
 
 // notifyService starts the notification service without letting it stop the
@@ -341,21 +350,69 @@ func (s *shell) ShowOverlay() error {
 	if s.overlay == nil {
 		return errors.New("The overlay window is unavailable.")
 	}
+	s.overlayWanted.Store(true)
 	// Positioned before showing, so it never flashes in the wrong corner or
 	// on the wrong monitor on the way to the right one.
 	s.ApplyOverlay(s.backend.Store.LoadPrefs().Overlay)
+	if g, ok := findGame(); ok && !s.selfTesting.Load() && (g.minimized || !inFront(g.pid)) {
+		return nil // followGame shows it once Dota is in front
+	}
 	s.overlay.Show()
 	s.overlay.SetAlwaysOnTop(true)
 	return nil
 }
 
 func (s *shell) HideOverlay() {
+	s.overlayWanted.Store(false)
 	if s.overlay != nil {
 		s.overlay.Hide()
 	}
 }
 
-func (s *shell) OverlayVisible() bool { return s.overlay != nil && s.overlay.IsVisible() }
+// OverlayVisible says whether the overlay is on, even while it is tucked
+// away because another window is in front of the game.
+func (s *shell) OverlayVisible() bool { return s.overlay != nil && s.overlayWanted.Load() }
+
+// followGame keeps the overlay on Dota's window: placed inside it wherever
+// it is, and drawn only while the game (or TheTracker itself) is in front,
+// so it never floats over a browser or another app. Without Dota running
+// the overlay shows on the monitor from Settings, as before.
+func (s *shell) followGame() {
+	for range time.Tick(400 * time.Millisecond) {
+		if s.overlay == nil || !s.overlayWanted.Load() || s.selfTesting.Load() {
+			continue
+		}
+		g, ok := findGame()
+		show := !ok || (!g.minimized && inFront(g.pid))
+		if ok && show {
+			s.placedMu.Lock()
+			moved := g.area != s.placedIn
+			s.placedMu.Unlock()
+			if moved {
+				s.ApplyOverlay(s.backend.Store.LoadPrefs().Overlay)
+			}
+		}
+		drawn := s.overlay.IsVisible()
+		if show && !drawn {
+			s.overlay.Show()
+			s.overlay.SetAlwaysOnTop(true)
+		} else if !show && drawn {
+			s.overlay.Hide()
+		}
+	}
+}
+
+// scaleAt is the scale factor of the monitor a physical rectangle is on.
+func (s *shell) scaleAt(r application.Rect) float64 {
+	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
+	for _, sc := range s.app.Screen.GetAll() {
+		b := sc.PhysicalBounds
+		if cx >= b.X && cx < b.X+b.Width && cy >= b.Y && cy < b.Y+b.Height && sc.ScaleFactor > 0 {
+			return float64(sc.ScaleFactor)
+		}
+	}
+	return 1
+}
 
 // screenFor picks the overlay's display: the one chosen in settings, else
 // the one the main window is on, else the primary.
@@ -382,26 +439,22 @@ func (s *shell) ApplyOverlay(o core.OverlaySettings) {
 	}
 	s.overlay.SetIgnoreMouseEvents(o.ClickThrough)
 
+	// On Dota's window when the game is open, wherever it is.
+	if g, ok := findGame(); ok && !g.minimized && !s.selfTesting.Load() {
+		s.overlay.SetPhysicalBounds(placeOverlay(g.area, s.scaleAt(g.area), o))
+		s.placedMu.Lock()
+		s.placedIn = g.area
+		s.placedMu.Unlock()
+		return
+	}
 	sc := s.screenFor(o.Monitor)
 	if sc == nil {
 		return
 	}
-	w, h := int(float64(overlayW)*o.Scale), int(float64(overlayH)*o.Scale)
 	// Screen bounds are in the coordinates of the whole desktop, so the
 	// screen's own origin is part of every position; without it the window
 	// lands on the primary display whichever one was chosen.
-	b := sc.Bounds
-	// The offset moves it in from the top or bottom edge, never off the
-	// screen.
-	in := min(overlayMargin+o.OffsetY, max(overlayMargin, b.Height-h-overlayMargin))
-	x, y := b.X+overlayMargin, b.Y+in
-	if strings.HasSuffix(o.Corner, "right") {
-		x = b.X + b.Width - w - overlayMargin
-	}
-	if strings.HasPrefix(o.Corner, "bottom") {
-		y = b.Y + b.Height - h - in
-	}
-	s.overlay.SetBounds(application.Rect{X: x, Y: y, Width: w, Height: h})
+	s.overlay.SetPhysicalBounds(placeOverlay(sc.PhysicalBounds, float64(sc.ScaleFactor), o))
 }
 
 func (s *shell) Monitors() []core.Monitor {
@@ -532,6 +585,7 @@ func (s *shell) selfTest() {
 			_ = f.Close()
 		}
 	}
+	s.selfTesting.Store(true)
 	time.Sleep(6 * time.Second)
 	note("shell: tray=%v mainVisible=%v overlayVisible=%v autostart=%v monitors=%d notifications=%v", s.TrayAvailable(), s.main.IsVisible(), s.OverlayVisible(), s.AutostartEnabled(), len(s.Monitors()), s.notifyOK.Load())
 	for _, m := range s.Monitors() {
