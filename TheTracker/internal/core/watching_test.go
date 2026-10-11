@@ -62,3 +62,46 @@ func TestWatchedGamesDroppedFromHistory(t *testing.T) {
 		t.Fatalf("only the watched game goes: %+v", h)
 	}
 }
+
+// What spectating from the Watch tab actually sends: the player reported as
+// "playing", with no hero of their own. Its draft looks like a match of the
+// player's own until the clock starts.
+func TestSpectatingFromTheWatchTab(t *testing.T) {
+	a := newTestApp(t)
+	tr := a.Tracker
+	send := func(clock float64, state string) {
+		tr.HandleUpdate(jsonMap{
+			"map":    jsonMap{"matchid": "9040880304", "clock_time": clock, "game_state": state},
+			"player": jsonMap{"activity": "playing", "kills": 0.0, "last_hits": 0.0},
+			"hero":   jsonMap{},
+		})
+	}
+	send(-60, "DOTA_GAMERULES_STATE_PRE_GAME")
+	send(30, stateInProgress)
+	s := tr.Status(false)
+	if !s.Watching || s.Live || s.Current != nil {
+		t.Fatalf("spectating: watching, and the draft's match dropped: %+v", s)
+	}
+	send(1964, statePostGame)
+	if len(a.Store.LoadHistory()) != 0 {
+		t.Fatal("a spectated game must not be saved")
+	}
+
+	// The player's own match, hero picked before the horn, is tracked.
+	tr.HandleUpdate(jsonMap{
+		"map":    jsonMap{"matchid": "77", "clock_time": 30.0, "game_state": stateInProgress},
+		"player": jsonMap{"activity": "playing"},
+		"hero":   jsonMap{"name": "npc_dota_hero_drow_ranger", "alive": true},
+	})
+	if s := tr.Status(false); s.Watching || s.Current == nil || s.Current.MatchID != "77" {
+		t.Fatalf("own match: %+v", s)
+	}
+
+	// The game saved by mistake before is removed on the next start.
+	zero := int64(0)
+	a.Store.SaveHistory([]MatchSummary{{MatchID: "9040880304", Duration: "32:44", LastHits: &zero}})
+	a.dropWatchedGames()
+	if len(a.Store.LoadHistory()) != 0 {
+		t.Fatal("the spectated game saved earlier is removed")
+	}
+}

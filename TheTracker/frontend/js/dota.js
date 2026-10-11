@@ -220,7 +220,7 @@ const toneOfRate = (rate) => (!known(rate) ? "" : rate >= 50 ? "win" : "loss");
 
 view("overview", {
   game: "dota", nav: true, icon: "overview", title: "Overview",
-  sub: () => (S.live && S.live.live ? "Your match is live" : dotaLinked() ? "Your recent form and lifetime record" : "Connect Steam to see your matches"),
+  sub: () => (S.live && S.live.live ? "Your match is live" : S.live && S.live.watching ? "Watching a game" : dotaLinked() ? "Your recent form and lifetime record" : "Connect Steam to see your matches"),
   liveSlot: dotaLiveHtml,
   load(force) {
     refreshGsi();
@@ -417,12 +417,14 @@ function liveNeedsSetup() {
 /// rest of the page.
 function dotaLiveHtml() {
   const m = S.live && S.live.current;
-  if (m && !(m.ended && D.dismissed === m.matchid)) return liveMatchHtml(m);
   const live = S.live || {};
-  if (live.watching) {
+  // Watching comes first: the result card of the last match played can
+  // wait, and a game being watched must never look like the player's own.
+  if (live.watching && !live.live) {
     return `<div class="live-strip"><span class="live-dot off"></span>
-      <span class="grow"><b>Watching a game</b> <span class="muted">Spectating or a replay: it isn't recorded, and the overlay stays off.</span></span></div>`;
+      <span class="grow"><b>Watching a game</b> <span class="muted">Spectating or a replay: it isn't recorded, and the overlay and Game mode stay off.</span></span></div>`;
   }
+  if (m && !(m.ended && D.dismissed === m.matchid)) return liveMatchHtml(m);
   const needs = liveNeedsSetup();
   const open = D.setupOpen === undefined ? needs : D.setupOpen;
   const status = needs ? "Dota isn't fully set up to send match data yet."

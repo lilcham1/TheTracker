@@ -317,13 +317,16 @@ func watchingPayload(player, hero, gmap jsonMap) bool {
 	if player == nil && hero == nil {
 		return false
 	}
-	// A replay can come without the team blocks: a running clock and
-	// nothing about the player. (A match still loading has neither yet,
-	// but its clock hasn't started.)
-	_, hasActivity := getStr(player, "activity")
-	_, hasHero := getStr(hero, "name")
+	if team, _ := getStr(player, "team_name"); strings.EqualFold(team, "spectator") {
+		return true
+	}
+	// Spectating from the Watch tab, and replays, report the player as
+	// "playing" but with no hero of their own. A player always has picked by
+	// the horn, so a running clock with no hero is someone else's game.
+	// (Before the horn the two can't be told apart yet.)
+	name, _ := getStr(hero, "name")
 	clock, _ := getNum(gmap, "clock_time")
-	return !hasActivity && !hasHero && clock > 0
+	return name == "" && clock > 0
 }
 
 // ---------- The update path ----------
@@ -396,6 +399,10 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *pendingSave) {
 				t.logf("Watching match %s (spectating or a replay): not recorded", id)
 			}
 			t.watchingID, t.watchingAt = id, now
+			// Its draft looked like a match of the player's own; it isn't.
+			if m := t.current; m != nil && m.MatchID == id && !m.Ended && (m.HeroName == nil || *m.HeroName == "") {
+				t.current = nil
+			}
 		}
 		return nil
 	}
