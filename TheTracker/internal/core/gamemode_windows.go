@@ -84,18 +84,28 @@ func (windowsTasks) Install(onXML, offXML string) error {
 	if err := writeUTF16(off, offXML); err != nil {
 		return err
 	}
-	return runElevated(deleteLegacy() + `schtasks /create /tn "` + gameModeOnTask + `" /xml "` + on + `" /f && schtasks /create /tn "` + gameModeOffTask + `" /xml "` + off + `" /f`)
+	// The new tasks first, and the old ones deleted only once both exist:
+	// a failed setup must not leave the player with neither. What Windows
+	// says is kept, to show if something fails.
+	result := filepath.Join(dir, "result.txt")
+	err = runElevated(`/c (schtasks /create /tn "` + gameModeOnTask + `" /xml "` + on + `" /f && schtasks /create /tn "` + gameModeOffTask + `" /xml "` + off + `" /f) > "` + result + `" 2>&1 && (` + legacyDeletes() + `exit /b 0)`)
+	if err != nil {
+		if b, rerr := os.ReadFile(result); rerr == nil && len(strings.TrimSpace(string(b))) > 0 {
+			return fmt.Errorf("%v Windows said: %s", err, strings.TrimSpace(string(b)))
+		}
+	}
+	return err
 }
 
 func (windowsTasks) Remove() error {
 	// Quiet whichever are missing; the caller checks what is left.
-	return runElevated(deleteLegacy() + `schtasks /delete /tn "` + gameModeOnTask + `" /f >nul 2>&1 & schtasks /delete /tn "` + gameModeOffTask + `" /f >nul 2>&1 & exit /b 0`)
+	return runElevated(`/c ` + legacyDeletes() + `schtasks /delete /tn "` + gameModeOnTask + `" /f >nul 2>&1 & schtasks /delete /tn "` + gameModeOffTask + `" /f >nul 2>&1 & exit /b 0`)
 }
 
-// deleteLegacy starts a cmd.exe line that deletes 1.9.0's tasks, quietly
+// legacyDeletes is a cmd.exe sequence deleting 1.9.0's tasks, quietly
 // whether or not they exist.
-func deleteLegacy() string {
-	line := "/c "
+func legacyDeletes() string {
+	line := ""
 	for _, t := range gameModeLegacyTasks {
 		line += `schtasks /delete /tn "` + t + `" /f >nul 2>&1 & `
 	}
@@ -136,7 +146,10 @@ func runElevated(args string) error {
 		return fmt.Errorf("Couldn't ask Windows for approval: %v", err)
 	}
 	if info.process == 0 {
-		return errors.New("Windows didn't run the setup.")
+		// Nothing to wait on: give the approved command time to read its
+		// files before the caller deletes them.
+		time.Sleep(15 * time.Second)
+		return nil
 	}
 	defer windows.CloseHandle(info.process)
 	if _, err := windows.WaitForSingleObject(info.process, windows.INFINITE); err != nil {
