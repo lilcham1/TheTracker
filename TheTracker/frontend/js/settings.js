@@ -360,7 +360,10 @@ view("settings", {
     if (tab === "general") invoke("list_backups").then((b) => { SET.backups = b; rerender(); }).catch(() => {});
     if (tab === "about" && (!S.updateChecked || Date.now() - S.updateChecked > 60000)) checkForUpdate(true);
     if (tab === "account") pollSlow();
-    if (tab === "network") pollNet();
+    if (tab === "network") {
+      pollNet();
+      loadGameMode();
+    }
     return invoke("background_settings").then((bg) => { S.boot.background = bg; rerender(); }).catch(() => {});
   },
   render() {

@@ -101,8 +101,10 @@ type App struct {
 	Cloud    *Cloud
 	Updater  *Updater
 	// Ping, jitter and line use while a match runs.
-	Net   *NetCheck
-	Shell Shell
+	Net *NetCheck
+	// Slows background uploads during matches, once set up.
+	GameMode *GameMode
+	Shell    Shell
 
 	// Opens a link in the player's browser. Replaced in tests.
 	OpenURL func(string) error
@@ -132,6 +134,7 @@ func NewApp(dataDir string, shell Shell) *App {
 	a.Cloud = NewCloud(store)
 	a.Updater = NewUpdater()
 	a.Net = NewNetCheck(store)
+	a.GameMode = NewGameMode(store)
 	a.Tracker.OnSaved = func(m MatchSummary) {
 		a.Cloud.PushMatch(m)
 		a.notify(dotaNotification(m))
@@ -153,6 +156,8 @@ func (a *App) Start(manageDota bool) {
 	a.applyGames(a.Store.LoadPrefs().Games)
 	a.Cloud.Restore()
 	go a.overlayWatcher()
+	// Undo Game mode left on by a crash mid-match.
+	go a.GameMode.Off()
 	go a.netWatcher()
 	go a.backfillLoop()
 	go a.owWatch()
@@ -203,6 +208,7 @@ func (a *App) SetGames(g Games) (Prefs, error) {
 }
 
 func (a *App) Stop() {
+	_ = a.GameMode.Off()
 	a.StopSimulation()
 	a.Gsi.Stop()
 }
@@ -216,6 +222,11 @@ func (a *App) netWatcher() {
 		if live != wasLive {
 			wasLive = live
 			a.Net.SetLive(live)
+			if live {
+				_ = a.GameMode.On()
+			} else {
+				_ = a.GameMode.Off()
+			}
 		}
 	}
 }

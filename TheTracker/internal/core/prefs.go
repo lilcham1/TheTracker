@@ -146,6 +146,16 @@ type Prefs struct {
 	Goals     Goals           `json:"goals"`
 	Window    WindowState     `json:"window"`
 	Games     Games           `json:"games"`
+	Network   NetworkPrefs    `json:"network"`
+}
+
+// NetworkPrefs: Game mode (see gamemode.go).
+type NetworkPrefs struct {
+	// Set up and switched on: runs at every match.
+	GameMode bool `json:"gameMode"`
+	// Which kinds of programs it slows: sync | launchers | windowsUpdate |
+	// browsers.
+	Categories []string `json:"categories"`
 }
 
 func defaultOverlay() OverlaySettings {
@@ -162,6 +172,7 @@ func defaultPrefs() Prefs {
 		Overlay: defaultOverlay(),
 		General: GeneralPrefs{CloseToTray: true},
 		Games:   Games{Dota: true, Deadlock: true},
+		Network: NetworkPrefs{Categories: []string{"sync", "launchers", "windowsUpdate", "browsers"}},
 	}
 }
 

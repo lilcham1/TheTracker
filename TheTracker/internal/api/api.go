@@ -443,6 +443,26 @@ func commands(a *core.App) map[string]command {
 		// ----- App -----
 		"check_for_update": none(func() (any, error) { return a.Updater.Check() }),
 		"net_status":       none(func() (any, error) { return a.Net.Status(), nil }),
+		"game_mode": none(func() (any, error) {
+			return map[string]any{"status": a.GameMode.Status(), "catalogue": core.GameModeCatalogue()}, nil
+		}),
+		"game_mode_setup": in(func(p struct {
+			Categories []string `json:"categories"`
+		}) (any, error) {
+			if err := a.GameMode.Setup(p.Categories); err != nil {
+				return nil, err
+			}
+			if a.Tracker.IsLive() {
+				_ = a.GameMode.On()
+			}
+			return a.GameMode.Status(), nil
+		}),
+		"game_mode_remove": none(func() (any, error) {
+			if err := a.GameMode.Remove(); err != nil {
+				return nil, err
+			}
+			return a.GameMode.Status(), nil
+		}),
 		"net_test": none(func() (any, error) {
 			a.Net.Test(20 * time.Second)
 			return a.Net.Status(), nil

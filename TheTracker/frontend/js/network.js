@@ -43,6 +43,79 @@ function netBlockHtml() {
   return `<div class="sec-head"><h3>Connection</h3></div>${netHtml(S.net, { compact: true })}`;
 }
 
+// ---------- Game mode ----------
+
+const GM = { data: null, picked: null, busy: false, error: null };
+
+async function loadGameMode() {
+  try {
+    GM.data = await invoke("game_mode");
+  } catch (e) {
+    GM.error = e.message;
+  }
+  if (!GM.picked && GM.data) GM.picked = new Set(GM.data.status.categories.length ? GM.data.status.categories : GM.data.catalogue.map((c) => c.id));
+  rerender();
+}
+
+function gameModeHtml() {
+  if (!GM.data) return `<section class="set"><h3>Game mode</h3><p class="muted">Loading…</p></section>`;
+  const st = GM.data.status;
+  const set = st.state !== "not_set_up";
+  const saved = new Set(st.categories);
+  const changed = set && (GM.picked.size !== saved.size || [...GM.picked].some((c) => !saved.has(c)));
+  const stateLine = st.state === "on"
+    ? `<span class="check-dot ok"></span><b>On for this match</b> <span class="muted">${st.policies - 1} programs slowed, Dota marked priority${st.updatePaused ? ", Windows Update sharing paused" : ""}.</span>`
+    : set ? `<span class="check-dot idle"></span><b>Ready</b> <span class="muted">Switches on when a match starts and off when it ends.</span>`
+    : `<span class="check-dot idle"></span><b>Off</b>`;
+  return `<section class="set">
+      <h3>Game mode</h3>
+      <p class="muted">During a Dota match, slows other programs' <b>uploads</b> so the game's packets don't wait behind them, and marks Dota's traffic as priority. Undone when the match ends, and Windows clears it at every restart anyway. Windows can't slow downloads from your PC (Steam already pauses its own while you play), and the priority mark only helps if your router honours it. Discord and voice apps are never touched.</p>
+      <div class="net-head">${stateLine}</div>
+      <div class="gm-cats">${GM.data.catalogue.map((c) => `<label class="switch"><input type="checkbox" data-change="gm-cat" data-cat="${c.id}" ${GM.picked.has(c.id) ? "checked" : ""} ${GM.busy ? "disabled" : ""} />
+        <span>${esc(c.label)} <span class="muted">${c.mbps ? `(uploads capped at ${c.mbps} Mbit/s: ${esc(c.apps.join(", "))})` : "(paused for the match)"}</span></span></label>`).join("")}</div>
+      ${GM.error ? `<div class="note err">${esc(GM.error)}</div>` : ""}
+      <div class="row wrap">
+        ${!set ? `<button class="btn" data-act="gm-setup" type="button" ${GM.busy || !GM.picked.size ? "disabled" : ""}>${GM.busy ? "Waiting for Windows…" : "Turn on Game mode"}</button>` : ""}
+        ${set && changed ? `<button class="btn" data-act="gm-setup" type="button" ${GM.busy || !GM.picked.size ? "disabled" : ""}>${GM.busy ? "Waiting for Windows…" : "Save changes"}</button>` : ""}
+        ${set ? `<button class="btn ghost" data-act="gm-remove" type="button" ${GM.busy ? "disabled" : ""}>Turn off Game mode</button>` : ""}
+      </div>
+      <p class="hint">Windows asks for your approval once when you turn it on or change it. After that TheTracker switches it on and off by itself, with no prompts or windows over the game.</p>
+    </section>`;
+}
+
+onChange("gm-cat", (el) => {
+  if (el.checked) GM.picked.add(el.dataset.cat);
+  else GM.picked.delete(el.dataset.cat);
+  rerender();
+});
+act("gm-setup", async () => {
+  GM.busy = true;
+  GM.error = null;
+  rerender();
+  try {
+    const status = await invoke("game_mode_setup", { categories: [...GM.picked] });
+    GM.data.status = status;
+    toast("Game mode is on. It switches on by itself when your next match starts.");
+  } catch (e) {
+    GM.error = e.message;
+  }
+  GM.busy = false;
+  rerender();
+});
+act("gm-remove", async () => {
+  GM.busy = true;
+  GM.error = null;
+  rerender();
+  try {
+    GM.data.status = await invoke("game_mode_remove");
+    toast("Game mode is off and removed.");
+  } catch (e) {
+    GM.error = e.message;
+  }
+  GM.busy = false;
+  rerender();
+});
+
 function networkHtml() {
   const s = S.net;
   const testing = s && s.testUntil && s.testUntil * 1000 > Date.now();
@@ -61,7 +134,8 @@ function networkHtml() {
         <li>Steam already pauses its downloads while a game runs. Other launchers may not.</li>
         <li>If your router has QoS or "SQM", turning it on keeps game traffic quick even when the line is busy.</li>
       </ul>
-    </section>`;
+    </section>
+    ${gameModeHtml()}`;
 }
 
 async function pollNet() {
