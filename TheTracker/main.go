@@ -388,14 +388,15 @@ func (s *shell) drawLocked(show bool) {
 	s.drawn = show
 }
 
-// gameAllowsOverlay: without Dota the overlay shows as it always has; with
-// Dota, only while its window is in front (or TheTracker's own), never while
-// it is minimized or still building its window.
+// gameAllowsOverlay: only while Dota's window is the one in front, never
+// while it is minimized, still building its window, or behind another app
+// (TheTracker's own window included). Without Dota, only for a test match,
+// so the overlay can still be tried from Settings.
 func (s *shell) gameAllowsOverlay() bool {
 	g, state := findGame()
 	switch state {
 	case gameNone:
-		return true
+		return s.backend.Simulating()
 	case gameFound:
 		return !g.minimized && inFront(g.pid)
 	}
@@ -407,16 +408,16 @@ func (s *shell) gameAllowsOverlay() bool {
 func (s *shell) OverlayVisible() bool { return s.overlay != nil && s.overlayWanted.Load() }
 
 // followGame keeps the overlay on Dota's window: placed inside it wherever
-// it is, and drawn only while the game (or TheTracker itself) is in front,
-// so it never floats over a browser or another app. Without Dota running
-// the overlay shows on the monitor from Settings, as before.
+// it is, and drawn only while the game is the focused window, so it never
+// floats over a browser, TheTracker or another app. Without Dota running it
+// shows only for a test match, on the monitor from Settings.
 func (s *shell) followGame() {
 	for range time.Tick(400 * time.Millisecond) {
 		if s.overlay == nil || !s.overlayWanted.Load() || s.selfTesting.Load() {
 			continue
 		}
 		g, state := findGame()
-		show := state == gameNone || (state == gameFound && !g.minimized && inFront(g.pid))
+		show := (state == gameNone && s.backend.Simulating()) || (state == gameFound && !g.minimized && inFront(g.pid))
 		s.placedMu.Lock()
 		placed := s.placedIn
 		s.placedMu.Unlock()

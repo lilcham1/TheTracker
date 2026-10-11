@@ -4,7 +4,6 @@ package main
 // only shows while the game is in front.
 
 import (
-	"os"
 	"strings"
 	"sync"
 	"syscall"
@@ -146,8 +145,7 @@ func findGame() (gameWindow, gameState) {
 	return g, gameFound
 }
 
-// inFront reports whether the game, or one of TheTracker's own windows, is
-// the window in front.
+// inFront reports whether the game is the window in front.
 func inFront(gamePID uint32) bool {
 	hwnd, _, _ := procGetForegroundWindow.Call()
 	if hwnd == 0 {
@@ -155,5 +153,5 @@ func inFront(gamePID uint32) bool {
 	}
 	var pid uint32
 	procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
-	return pid == gamePID || pid == uint32(os.Getpid())
+	return pid == gamePID
 }
