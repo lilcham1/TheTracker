@@ -112,6 +112,7 @@ view("today", {
     const liveNow = S.live && S.live.live && games.includes("dota") ? ["Dota 2", "overview"] : CS.status && CS.status.live && games.includes("cs2") ? ["Counter-Strike 2", "cs-live"] : null;
 
     return `${liveNow ? `<button class="since" data-act="go" data-view="${liveNow[1]}" type="button"><span class="live-dot"></span><span class="since-main display">A ${liveNow[0]} match is running</span><span class="grow"></span><span class="link">Watch it live</span></button>` : ""}
+      <div id="netSlot" class="net-slot">${typeof netBlockHtml === "function" ? netBlockHtml() : ""}</div>
       <div class="row"><span class="grow"></span><button class="btn ghost small share-btn" data-act="share" data-kind="today" type="button">Share my week</button></div>
       ${statRow([
         { label: "Today", value: day.games ? `${day.games} game${day.games === 1 ? "" : "s"}` : "No games yet", sub: day.games ? `${day.won} won, ${day.lost} lost` : "Across every game you track" },

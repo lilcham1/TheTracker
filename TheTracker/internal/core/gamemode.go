@@ -50,13 +50,21 @@ var gameModeGroups = map[string]gameModeGroup{
 var gameModeOrder = []string{"sync", "launchers", "windowsUpdate", "browsers"}
 
 const (
-	gameModeOnTask  = `\TheTracker\GameMode\On`
-	gameModeOffTask = `\TheTracker\GameMode\Off`
+	gameModeOnTask  = `\TheTracker\GameMode2\On`
+	gameModeOffTask = `\TheTracker\GameMode2\Off`
 )
 
+// The tasks 1.9.1–1.9.4 registered: safe, but they mark only Dota's traffic
+// as priority. They keep working until Game mode is set up again.
+var gameModePrevOn, gameModePrevOff = `\TheTracker\GameMode\On`, `\TheTracker\GameMode\Off`
+
 // The tasks 1.9.0 registered, whose scripts wrote a status file into the
-// data folder. Setting Game mode up again deletes them.
-var gameModeLegacyTasks = []string{`\TheTracker\GameModeOn`, `\TheTracker\GameModeOff`}
+// data folder. Never run; setting Game mode up again deletes them.
+var gameModeUnsafeTasks = []string{`\TheTracker\GameModeOn`, `\TheTracker\GameModeOff`}
+
+// gameModeLegacyTasks is every older task, deleted once the current ones
+// exist.
+var gameModeLegacyTasks = append([]string{gameModePrevOn, gameModePrevOff}, gameModeUnsafeTasks...)
 
 func validGameModeCategories(cats []string) []string {
 	out := []string{}
@@ -94,7 +102,10 @@ func gameModeScripts(cats []string) (on, off string, slowed int) {
 			fmt.Fprintf(&b, "New-NetQosPolicy -Name 'TheTracker %d' -AppPathNameMatchCondition %s -ThrottleRateActionBitsPerSecond %d -PolicyStore ActiveStore | Out-Null\n", slowed, psQuote(app), g.Rate)
 		}
 	}
-	b.WriteString("New-NetQosPolicy -Name 'TheTracker Dota' -AppPathNameMatchCondition 'dota2.exe' -DSCPAction 46 -PolicyStore ActiveStore | Out-Null\n")
+	// Every game TheTracker knows is marked as priority traffic.
+	for i, game := range gamePriorityApps {
+		fmt.Fprintf(&b, "New-NetQosPolicy -Name 'TheTracker game %d' -AppPathNameMatchCondition %s -DSCPAction 46 -PolicyStore ActiveStore | Out-Null\n", i+1, psQuote(game))
+	}
 	if stopUpdate {
 		b.WriteString("Stop-Service -Name DoSvc -Force\n")
 	}
@@ -163,11 +174,31 @@ type gameModeTasks interface {
 
 type GameModeStatus struct {
 	// not_set_up | needs_update | ready | on
-	State        string   `json:"state"`
-	Categories   []string `json:"categories"`
-	Slowed       int      `json:"slowed"`
-	UpdatePaused bool     `json:"updatePaused"`
-	Error        string   `json:"error,omitempty"`
+	State      string   `json:"state"`
+	Categories []string `json:"categories"`
+	// Working, but set up by an earlier version that marks only Dota's
+	// traffic as priority: setting up again adds the other games.
+	UpdateAvailable bool   `json:"updateAvailable"`
+	Slowed          int    `json:"slowed"`
+	UpdatePaused    bool   `json:"updatePaused"`
+	Error           string `json:"error,omitempty"`
+}
+
+// gameModeTaskSet is which registered tasks there are.
+type gameModeTaskSet struct {
+	current, previous, unsafe bool
+}
+
+// usable is the On and Off tasks to run: the current ones, else the
+// previous version's (safe, Dota only). 1.9.0's are never run.
+func (t gameModeTaskSet) usable() (on, off string, ok bool) {
+	switch {
+	case t.current:
+		return gameModeOnTask, gameModeOffTask, true
+	case t.previous:
+		return gameModePrevOn, gameModePrevOff, true
+	}
+	return "", "", false
 }
 
 type GameMode struct {
@@ -181,10 +212,9 @@ type GameMode struct {
 	mu      sync.Mutex
 	on      bool
 	lastErr string
-	// Whether the tasks exist, asked of Windows at most once a minute.
-	installed   bool
-	legacy      bool
-	installedAt time.Time
+	// Which tasks exist, asked of Windows at most once a minute.
+	set   gameModeTaskSet
+	setAt time.Time
 }
 
 func NewGameMode(store *Store) *GameMode {
@@ -193,29 +223,31 @@ func NewGameMode(store *Store) *GameMode {
 
 func (g *GameMode) prefs() NetworkPrefs { return g.store.LoadPrefs().Network }
 
-// taskState says whether the current tasks exist, and whether 1.9.0's are
-// still there.
-func (g *GameMode) taskState() (installed, legacy bool) {
+func (g *GameMode) taskState() gameModeTaskSet {
 	g.mu.Lock()
-	if !g.installedAt.IsZero() && time.Since(g.installedAt) < time.Minute {
-		installed, legacy = g.installed, g.legacy
+	if !g.setAt.IsZero() && time.Since(g.setAt) < time.Minute {
+		set := g.set
 		g.mu.Unlock()
-		return
+		return set
 	}
 	g.mu.Unlock()
-	installed = g.tasks.Exists(gameModeOnTask) && g.tasks.Exists(gameModeOffTask)
-	for _, t := range gameModeLegacyTasks {
-		legacy = legacy || g.tasks.Exists(t)
+	var set gameModeTaskSet
+	set.current = g.tasks.Exists(gameModeOnTask) && g.tasks.Exists(gameModeOffTask)
+	if !set.current {
+		set.previous = g.tasks.Exists(gameModePrevOn) && g.tasks.Exists(gameModePrevOff)
+	}
+	for _, t := range gameModeUnsafeTasks {
+		set.unsafe = set.unsafe || g.tasks.Exists(t)
 	}
 	g.mu.Lock()
-	g.installed, g.legacy, g.installedAt = installed, legacy, time.Now()
+	g.set, g.setAt = set, time.Now()
 	g.mu.Unlock()
-	return
+	return set
 }
 
 func (g *GameMode) forgetTaskState() {
 	g.mu.Lock()
-	g.installedAt = time.Time{}
+	g.setAt = time.Time{}
 	g.mu.Unlock()
 }
 
@@ -232,8 +264,8 @@ func (g *GameMode) Setup(cats []string) error {
 	}
 	on, off, _ := gameModeScripts(cats)
 	defer g.forgetTaskState()
-	if err := g.tasks.Install(gameModeTaskXML("TheTracker Game mode: slows background uploads during a Dota match.", on, sid),
-		gameModeTaskXML("TheTracker Game mode: undoes it after the match.", off, sid)); err != nil {
+	if err := g.tasks.Install(gameModeTaskXML("TheTracker Game mode: slows background uploads while you play.", on, sid),
+		gameModeTaskXML("TheTracker Game mode: undoes it when you stop.", off, sid)); err != nil {
 		return err
 	}
 	g.store.UpdatePrefs(func(p *Prefs) { p.Network.GameMode, p.Network.Categories = true, cats })
@@ -244,12 +276,12 @@ func (g *GameMode) Setup(cats []string) error {
 func (g *GameMode) Remove() error {
 	_ = g.Off()
 	defer g.forgetTaskState()
-	if installed, legacy := g.taskState(); installed || legacy {
+	if set := g.taskState(); set.current || set.previous || set.unsafe {
 		if err := g.tasks.Remove(); err != nil {
 			return err
 		}
 		g.forgetTaskState()
-		if installed, legacy := g.taskState(); installed || legacy {
+		if set := g.taskState(); set.current || set.previous || set.unsafe {
 			return errors.New("Windows didn't remove Game mode's tasks. Try again.")
 		}
 	}
@@ -260,12 +292,17 @@ func (g *GameMode) Remove() error {
 	return nil
 }
 
-func (g *GameMode) run(task string, on bool) error {
+func (g *GameMode) run(on bool) error {
 	if !g.prefs().GameMode {
 		return nil
 	}
-	if installed, _ := g.taskState(); !installed {
+	onTask, offTask, ok := g.taskState().usable()
+	if !ok {
 		return nil
+	}
+	task := offTask
+	if on {
+		task = onTask
 	}
 	g.runMu.Lock()
 	err := g.tasks.Run(task)
@@ -281,17 +318,19 @@ func (g *GameMode) run(task string, on bool) error {
 	return err
 }
 
-func (g *GameMode) On() error  { return g.run(gameModeOnTask, true) }
-func (g *GameMode) Off() error { return g.run(gameModeOffTask, false) }
+func (g *GameMode) On() error  { return g.run(true) }
+func (g *GameMode) Off() error { return g.run(false) }
 
 func (g *GameMode) Status() GameModeStatus {
 	p := g.prefs()
 	s := GameModeStatus{State: "not_set_up", Categories: validGameModeCategories(p.Categories)}
-	installed, legacy := g.taskState()
+	set := g.taskState()
+	_, _, usable := set.usable()
 	switch {
-	case p.GameMode && installed:
+	case p.GameMode && usable:
 		s.State = "ready"
-	case p.GameMode && legacy:
+		s.UpdateAvailable = !set.current
+	case p.GameMode && set.unsafe:
 		s.State = "needs_update"
 	}
 	g.mu.Lock()

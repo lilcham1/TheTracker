@@ -147,25 +147,50 @@ func TestGameModeLifecycle(t *testing.T) {
 	}
 }
 
-func TestGameModeLegacyTasksNeedUpdate(t *testing.T) {
+func TestGameModeOlderTasks(t *testing.T) {
 	a := newTestApp(t)
-	// 1.9.0's tasks are registered; the current ones aren't yet.
-	f := &fakeTasks{sid: "S-1-5-21-9", exists: map[string]bool{gameModeLegacyTasks[0]: true, gameModeLegacyTasks[1]: true}}
-	g := a.GameMode
-	g.tasks = f
 	a.Store.UpdatePrefs(func(p *Prefs) { p.Network.GameMode = true })
 
+	// 1.9.0's tasks: never run, the player is asked to update.
+	f := &fakeTasks{sid: "S-1-5-21-9", exists: map[string]bool{gameModeUnsafeTasks[0]: true, gameModeUnsafeTasks[1]: true}}
+	g := a.GameMode
+	g.tasks = f
 	if s := g.Status(); s.State != "needs_update" {
-		t.Fatalf("old tasks need the one-time update: %+v", s)
+		t.Fatalf("1.9.0 tasks need the one-time update: %+v", s)
 	}
 	g.On()
 	if len(f.runs) != 0 {
-		t.Fatal("the old tasks are never run")
+		t.Fatal("1.9.0's tasks are never run")
 	}
+
+	// 1.9.1–1.9.4's tasks keep working (Dota only) until set up again.
+	f.exists = map[string]bool{gameModePrevOn: true, gameModePrevOff: true}
+	g.forgetTaskState()
+	if s := g.Status(); s.State != "ready" || !s.UpdateAvailable {
+		t.Fatalf("previous tasks still work, with an update offered: %+v", s)
+	}
+	g.On()
+	g.Off()
+	if strings.Join(f.runs, ",") != gameModePrevOn+","+gameModePrevOff {
+		t.Fatalf("previous tasks run: %v", f.runs)
+	}
+
+	// Setting up again replaces both kinds, and every game is prioritised.
 	if err := g.Setup([]string{"sync"}); err != nil {
 		t.Fatal(err)
 	}
-	if f.exists[gameModeLegacyTasks[0]] || g.Status().State != "ready" {
-		t.Fatalf("setting up again replaces them: %+v", f.exists)
+	for _, old := range gameModeLegacyTasks {
+		if f.exists[old] {
+			t.Fatalf("old task %s left behind", old)
+		}
+	}
+	if s := g.Status(); s.State != "ready" || s.UpdateAvailable {
+		t.Fatalf("current tasks: %+v", s)
+	}
+	script := decodeTask(t, f.on)
+	for _, game := range gamePriorityApps {
+		if !strings.Contains(script, "'"+game+"' -DSCPAction 46") {
+			t.Errorf("%s not prioritised", game)
+		}
 	}
 }

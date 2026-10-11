@@ -285,6 +285,7 @@ button.line:hover { background: var(--panel); }
 .live-head h2 { font-size: 26px; }
 .clock { font-size: 40px; font-variant-numeric: tabular-nums; }
 .live-slot:not(:empty) { margin-bottom: 18px; }
+.net-slot:not(:empty) { margin-bottom: 14px; }
 .net { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .net-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .check-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; align-self: center; }

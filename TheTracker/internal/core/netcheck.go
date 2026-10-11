@@ -42,8 +42,10 @@ type NetApp struct {
 }
 
 type NetStatus struct {
-	// Measuring right now (a match is live or a test is running).
+	// Measuring right now (a game is on or a test is running).
 	Active bool `json:"active"`
+	// The game being played, if any.
+	Game string `json:"game,omitempty"`
 	// Until when a test from Settings runs, unix seconds.
 	TestUntil  int64      `json:"testUntil,omitempty"`
 	Router     *PingStats `json:"router"`
@@ -80,6 +82,7 @@ type NetCheck struct {
 	lastAt     time.Time
 	// Measuring is on while live is set or until testUntil.
 	live      bool
+	game      string
 	testUntil time.Time
 	running   bool
 	// A relay pick is under way (it runs beside the measuring, never in it).
@@ -109,6 +112,13 @@ func (n *NetCheck) SetLive(on bool) {
 	if on {
 		n.start()
 	}
+}
+
+// SetGame records which game is being played, for the status.
+func (n *NetCheck) SetGame(game string) {
+	n.mu.Lock()
+	n.game = game
+	n.mu.Unlock()
 }
 
 // Test measures for the given time, from Settings.
@@ -412,7 +422,7 @@ func netVerdict(router, valve *PingStats, down, up float64, apps []NetApp) (stri
 func (n *NetCheck) Status() NetStatus {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	s := NetStatus{Active: n.wanted(), RouterIP: n.routerIP, ValveWhere: n.relayWhere,
+	s := NetStatus{Active: n.wanted(), Game: n.game, RouterIP: n.routerIP, ValveWhere: n.relayWhere,
 		Router: statsOf(n.router), Valve: statsOf(n.valve), DownMbps: round1(n.down), UpMbps: round1(n.up), Apps: n.apps}
 	if s.Apps == nil {
 		s.Apps = []NetApp{}

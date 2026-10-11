@@ -216,12 +216,15 @@ func (a *App) Stop() {
 	a.Gsi.Stop()
 }
 
-// netWatcher measures the connection for as long as a match runs.
+// netWatcher measures the connection, and runs Game mode, while the player
+// is in a game: a Dota match, or Deadlock, CS2 or Overwatch open.
 func (a *App) netWatcher() {
 	wasLive := false
 	for {
 		time.Sleep(2 * time.Second)
-		live := a.Tracker.IsLive()
+		game := a.activeGame()
+		live := game != ""
+		a.Net.SetGame(game)
 		if live != wasLive {
 			wasLive = live
 			a.Net.SetLive(live)

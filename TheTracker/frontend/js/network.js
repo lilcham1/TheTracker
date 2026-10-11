@@ -27,20 +27,20 @@ function netHtml(s, { compact = false } = {}) {
   if (!s) return "";
   const [tone, word] = NET_VERDICT[s.verdict] || NET_VERDICT.measuring;
   return `<div class="net ${compact ? "compact" : ""}">
-    <div class="net-head"><span class="check-dot ${tone}"></span><b>${word}</b><span class="muted"> ${esc(s.detail || "")}</span></div>
+    <div class="net-head"><span class="check-dot ${tone}"></span><b>${word}</b><span class="muted"> ${esc(s.detail || "")}</span>${s.game && !compact ? `<span class="muted"> · while you play ${esc(s.game)}</span>` : ""}</div>
     <div class="net-grid">
       ${pingCell("Your router", s.router, s.routerIp)}
-      ${pingCell("Valve", s.valve, s.valveWhere)}
+      ${pingCell(s.game === "Overwatch" ? "Internet (Valve server)" : "Valve", s.valve, s.valveWhere)}
       <div class="net-cell"><div class="stat-label">Line use now</div><div class="display">${s.downMbps.toFixed(1)} <span class="muted small">down</span></div><div class="muted">${s.upMbps.toFixed(1)} Mbit/s up</div></div>
     </div>
     ${!compact && s.apps.length ? `<p class="hint">Programs online now (open connections, not how much they use): ${s.apps.map((a) => `<b>${esc(a.name)}</b> ${a.connections}`).join(", ")}.</p>` : ""}
   </div>`;
 }
 
-/// On the live match panel.
+/// On the live match panel, and on Today while any game is being played.
 function netBlockHtml() {
   if (!S.net || !S.net.active) return "";
-  return `<div class="sec-head"><h3>Connection</h3></div>${netHtml(S.net, { compact: true })}`;
+  return `<div class="sec-head"><h3>Connection${S.net.game ? ` <span class="muted">· ${esc(S.net.game)}</span>` : ""}</h3></div>${netHtml(S.net, { compact: true })}`;
 }
 
 // ---------- Game mode ----------
@@ -62,16 +62,17 @@ function gameModeHtml() {
   const st = GM.data.status;
   const set = st.state !== "not_set_up";
   const saved = new Set(st.categories);
-  const needsUpdate = st.state === "needs_update";
+  const needsUpdate = st.state === "needs_update" || st.updateAvailable;
   const changed = set && (GM.picked.size !== saved.size || [...GM.picked].some((c) => !saved.has(c)));
   const stateLine = st.state === "on"
-    ? `<span class="check-dot ok"></span><b>On for this match</b> <span class="muted">${st.slowed} programs slowed, Dota marked priority${st.updatePaused ? ", Windows Update sharing paused" : ""}.</span>`
+    ? `<span class="check-dot ok"></span><b>On while you play</b> <span class="muted">${st.slowed} programs slowed, your game marked priority${st.updatePaused ? ", Windows Update sharing paused" : ""}.</span>`
     : needsUpdate ? `<span class="check-dot bad"></span><b>Needs a one-time update</b> <span class="muted">This version sets Game mode up a safer way. Press Update below; Windows asks once.</span>`
-    : set ? `<span class="check-dot idle"></span><b>Ready</b> <span class="muted">Switches on when a match starts and off when it ends.</span>`
+    : st.state === "ready" && st.updateAvailable ? `<span class="check-dot ok"></span><b>Ready</b> <span class="muted">Working for Dota. Press Update to also prioritise Deadlock, CS2 and Overwatch; Windows asks once.</span>`
+    : set ? `<span class="check-dot idle"></span><b>Ready</b> <span class="muted">Switches on when you start playing and off when you stop.</span>`
     : `<span class="check-dot idle"></span><b>Off</b>`;
   return `<section class="set">
       <h3>Game mode</h3>
-      <p class="muted">During a Dota match, slows other programs' <b>uploads</b> so the game's packets don't wait behind them, and marks Dota's traffic as priority. Undone when the match ends, and Windows clears it at every restart anyway. Windows can't slow downloads from your PC (Steam already pauses its own while you play), and the priority mark only helps if your router honours it. Discord and voice apps are never touched.</p>
+      <p class="muted">While you play (a Dota match, or Deadlock, CS2 or Overwatch open), slows other programs' <b>uploads</b> so the game's packets don't wait behind them, and marks your games' traffic as priority. Undone when you stop playing, and Windows clears it at every restart anyway. Windows can't slow downloads from your PC (Steam already pauses its own while you play), and the priority mark only helps if your router honours it. Discord and voice apps are never touched.</p>
       <div class="net-head">${stateLine}</div>
       <div class="gm-cats">${GM.data.catalogue.map((c) => `<label class="switch"><input type="checkbox" data-change="gm-cat" data-cat="${c.id}" ${GM.picked.has(c.id) ? "checked" : ""} ${GM.busy ? "disabled" : ""} />
         <span>${esc(c.label)} <span class="muted">${c.mbps ? `(uploads capped at ${c.mbps} Mbit/s: ${esc(c.apps.join(", "))})` : "(paused for the match)"}</span></span></label>`).join("")}</div>
@@ -136,7 +137,7 @@ function netBoxHtml() {
 function networkHtml() {
   return `<section class="set">
       <h3>Connection</h3>
-      <p class="muted">While a Dota match runs, TheTracker pings your router and Valve's nearest server once a second and watches how busy your line is, then says where any lag comes from: your Wi-Fi or home network, your internet provider, or other programs using the line. It only measures; nothing on your PC is changed. It also shows on Overview during a match.</p>
+      <p class="muted">While you play (a Dota match, or Deadlock, CS2 or Overwatch open), TheTracker pings your router and Valve's nearest server once a second and watches how busy your line is, then says where any lag comes from: your Wi-Fi or home network, your internet provider, or other programs using the line. It only measures; nothing on your PC is changed. It shows on Today while you play, and on Dota's Overview during a match.</p>
       <div id="netBox">${netBoxHtml()}</div>
     </section>
     <section class="set">
@@ -164,6 +165,8 @@ async function pollNet() {
   }
   if (S.view === "overview") {
     if (VIEWS.overview.liveSlot) setHtml($("#liveSlot"), VIEWS.overview.liveSlot());
+  } else if (S.view === "today") {
+    setHtml($("#netSlot"), netBlockHtml());
   } else if (S.view === "settings" && S.params.tab === "network") setHtml($("#netBox"), netBoxHtml());
 }
 
@@ -176,7 +179,7 @@ act("net-test", async () => {
 // Poll only while something shows it.
 setInterval(() => {
   if (document.visibilityState !== "visible") return;
-  const onOverview = S.view === "overview" && S.live && S.live.live;
+  const onOverview = (S.view === "overview" && S.live && S.live.live) || S.view === "today";
   const onSettings = S.view === "settings" && S.params.tab === "network";
   if (onOverview || onSettings) pollNet();
 }, 2000);
