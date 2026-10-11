@@ -45,6 +45,9 @@ type Tracker struct {
 	lastPayloadAt time.Time
 	// When Dota last posted while the player was in a match.
 	lastMatchPayloadAt time.Time
+	// When a match kept across an update was picked up again, until Dota
+	// reports on it; zero otherwise.
+	restoredAt time.Time
 	// A game the player is watching (spectating or a replay), and when Dota
 	// last posted about it. Never recorded.
 	watchingID string
@@ -205,8 +208,33 @@ func (t *Tracker) RestoreAfterRestart() {
 	}
 	t.mu.Lock()
 	t.current = m
+	t.restoredAt = t.now()
 	t.logf("Carrying on with match %s after the update", m.MatchID)
 	t.mu.Unlock()
+}
+
+// How long a match kept across an update waits for Dota to report on it
+// again before it is saved as it stood.
+const restoredWait = 10 * time.Minute
+
+// ExpireRestored saves a match kept across an update that Dota never
+// reported on again (it ended while the app was restarting), as an
+// incomplete match if it got far enough. Otherwise it would only be saved
+// when the next match starts, and lost if the app closed before then.
+func (t *Tracker) ExpireRestored() {
+	t.mu.Lock()
+	var pending *pendingSave
+	if m := t.current; !t.restoredAt.IsZero() && t.now().Sub(t.restoredAt) > restoredWait {
+		t.restoredAt = time.Time{}
+		if m != nil && !m.Ended && m.ReachedGame && m.LastClockTime >= minIncompleteClock {
+			pending = t.finalizeLocked(true)
+		}
+	}
+	hook := t.OnSaved
+	t.mu.Unlock()
+	if saved := t.persist(pending); saved != nil && hook != nil {
+		hook(*saved)
+	}
 }
 
 func (t *Tracker) MarkRoshanDeath() {
@@ -383,6 +411,7 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *pendingSave) {
 		return nil
 	}
 	t.lastMatchPayloadAt = now
+	t.restoredAt = time.Time{}
 
 	var heroName *string
 	if n, ok := getStr(hero, "name"); ok {

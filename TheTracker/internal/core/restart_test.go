@@ -52,3 +52,42 @@ func TestOldKeptMatchIgnored(t *testing.T) {
 		t.Fatal("a match kept an hour ago is not picked up")
 	}
 }
+
+func TestKeptMatchSavedWhenDotaNeverComesBack(t *testing.T) {
+	a := newTestApp(t)
+	send := func(tr *Tracker, clock float64) {
+		tr.HandleUpdate(jsonMap{
+			"map":    jsonMap{"matchid": "888", "clock_time": clock, "game_state": stateInProgress},
+			"player": jsonMap{"activity": "playing", "last_hits": 30.0},
+			"hero":   jsonMap{"name": "npc_dota_hero_axe", "alive": true},
+		})
+	}
+	send(a.Tracker, 600)
+	a.Tracker.SaveForRestart()
+
+	b := NewTracker(a.Store)
+	b.RestoreAfterRestart()
+	b.ExpireRestored()
+	if len(a.Store.LoadHistory()) != 0 {
+		t.Fatal("too early to give up on the match")
+	}
+	later := time.Now().Add(restoredWait + time.Minute)
+	b.now = func() time.Time { return later }
+	b.ExpireRestored()
+	h := a.Store.LoadHistory()
+	if len(h) != 1 || h[0].MatchID != "888" || !h[0].Incomplete {
+		t.Fatalf("the kept match is saved as incomplete: %+v", h)
+	}
+
+	// A match Dota reports on again is left to finish normally.
+	c := NewTracker(a.Store)
+	send(a.Tracker, 700)
+	a.Tracker.SaveForRestart()
+	c.RestoreAfterRestart()
+	send(c, 710)
+	c.now = func() time.Time { return later }
+	c.ExpireRestored()
+	if m := c.Status(false).Current; m == nil || m.Ended {
+		t.Fatal("a match still reporting must not be cut short")
+	}
+}

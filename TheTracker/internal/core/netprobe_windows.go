@@ -21,6 +21,7 @@ var (
 	procIcmpCloseHandle     = iphlpapi.NewProc("IcmpCloseHandle")
 	procIcmpSendEcho        = iphlpapi.NewProc("IcmpSendEcho")
 	procGetExtendedTcpTable = iphlpapi.NewProc("GetExtendedTcpTable")
+	procGetBestInterface    = iphlpapi.NewProc("GetBestInterface")
 )
 
 type windowsProbe struct{}
@@ -95,21 +96,34 @@ func (p windowsProbe) Gateway() (string, error) {
 	return "", errors.New("no default gateway")
 }
 
-// LineBytes adds up the bytes received and sent by the adapters with a
-// gateway.
+// The adapter the internet goes through last time, so a switch (Wi-Fi to
+// cable, a VPN coming up) reads as a new start rather than a burst.
+var lineIf struct {
+	sync.Mutex
+	index uint32
+}
+
+// LineBytes is the bytes received and sent by the adapter Windows sends
+// internet traffic through. Only that one: with a VPN, the VPN adapter and
+// the real one carry the same traffic, and adding them counted it twice.
 func (p windowsProbe) LineBytes() (in, out uint64, err error) {
-	list, err := p.adapters()
-	if err != nil {
+	var index uint32
+	// 1.1.1.1 stands for "the internet": only the route to it is looked up.
+	if r, _, _ := procGetBestInterface.Call(uintptr(1|1<<8|1<<16|1<<24), uintptr(unsafe.Pointer(&index))); r != 0 {
+		return 0, 0, errors.New("no route to the internet")
+	}
+	lineIf.Lock()
+	changed := lineIf.index != 0 && lineIf.index != index
+	lineIf.index = index
+	lineIf.Unlock()
+	if changed {
+		return 0, 0, errors.New("the internet adapter changed")
+	}
+	row := windows.MibIfRow2{InterfaceIndex: index}
+	if err := windows.GetIfEntry2Ex(0, &row); err != nil {
 		return 0, 0, err
 	}
-	for _, a := range list {
-		row := windows.MibIfRow2{InterfaceIndex: a.IfIndex}
-		if windows.GetIfEntry2Ex(0, &row) == nil {
-			in += row.InOctets
-			out += row.OutOctets
-		}
-	}
-	return in, out, nil
+	return row.InOctets, row.OutOctets, nil
 }
 
 // Connections counts each program's open TCP connections to the internet

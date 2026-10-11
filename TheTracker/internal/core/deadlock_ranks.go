@@ -56,6 +56,13 @@ func (d *Deadlock) RanksFor(ids []uint64) map[uint64]DeadlockRank {
 	out := map[uint64]DeadlockRank{}
 	want := []string{}
 	liveRanks.mu.Lock()
+	// Ranks older than their ten minutes are dropped, so the memo holds
+	// only who was recently live instead of everyone ever seen.
+	for id, s := range liveRanks.seen {
+		if time.Since(s.at) >= 10*time.Minute {
+			delete(liveRanks.seen, id)
+		}
+	}
 	for _, id := range ids {
 		if s, ok := liveRanks.seen[id]; ok && time.Since(s.at) < 10*time.Minute {
 			if s.rank != nil {

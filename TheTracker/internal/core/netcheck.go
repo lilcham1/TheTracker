@@ -226,6 +226,9 @@ func (n *NetCheck) measure() {
 			}
 		}
 		n.lastIn, n.lastOut, n.lastAt = in, out, now
+	} else {
+		// No reading, or a different adapter: start over from the next one.
+		n.lastAt = time.Time{}
 	}
 	n.apps = topApps(apps, 6)
 }

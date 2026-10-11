@@ -241,6 +241,7 @@ func (a *App) overlayWatcher() {
 	wasLive := false
 	for {
 		time.Sleep(2 * time.Second)
+		a.Tracker.ExpireRestored()
 		live := a.Tracker.IsLive()
 		if live == wasLive {
 			continue

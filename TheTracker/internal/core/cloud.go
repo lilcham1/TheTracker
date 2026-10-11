@@ -70,6 +70,14 @@ type Cloud struct {
 	token        string // short-lived JWT; never leaves the backend
 	refreshToken string
 	status       SyncStatus
+	// Closed once the startup refresh has finished; sync waits for it so
+	// matches queued at launch aren't turned away as signed out.
+	restored chan struct{}
+
+	// One refresh at a time: two at once would spend the same refresh token
+	// twice, and with rotating tokens the second is refused, signing the
+	// player out.
+	refreshMu sync.Mutex
 
 	jobs chan syncJob
 }
@@ -248,10 +256,19 @@ func (c *Cloud) SetLocalIdentity(id SteamIdentity, note string) {
 // refresh trades the stored refresh token for a fresh JWT.
 func (c *Cloud) refresh() error {
 	c.mu.Lock()
+	seen := c.refreshToken
+	c.mu.Unlock()
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	c.mu.Lock()
 	rt := c.refreshToken
 	c.mu.Unlock()
 	if rt == "" {
 		return errors.New("Not signed in")
+	}
+	// Another refresh finished while this one waited: its token is fresh.
+	if rt != seen {
+		return nil
 	}
 	token, newRefresh, err := c.exchange(map[string]any{"refreshToken": rt})
 	if err != nil {
@@ -290,9 +307,16 @@ func (c *Cloud) Restore() {
 		c.refreshToken = *s.RefreshToken
 	}
 	hasSession := c.refreshToken != ""
+	if hasSession {
+		c.restored = make(chan struct{})
+	}
+	done := c.restored
 	c.mu.Unlock()
 	if hasSession {
-		go func() { _ = c.refresh() }()
+		go func() {
+			_ = c.refresh()
+			close(done)
+		}()
 	}
 }
 
@@ -369,6 +393,15 @@ func isAuthError(msg string) bool {
 
 func (c *Cloud) worker() {
 	for job := range c.jobs {
+		c.mu.Lock()
+		restored := c.restored
+		c.mu.Unlock()
+		if restored != nil {
+			select {
+			case <-restored:
+			case <-time.After(30 * time.Second):
+			}
+		}
 		queued := max(len(job.matches), 1)
 		settle := func(s *SyncStatus) { s.Pending = max(s.Pending-queued, 0) }
 
