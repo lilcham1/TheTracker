@@ -85,6 +85,11 @@ type Gsi struct {
 	store   *Store
 	tracker *Tracker
 
+	// The token Dota sends with every post, read once: Dota posts several
+	// times a second.
+	tokMu sync.Mutex
+	tok   string
+
 	mu     sync.Mutex
 	port   int
 	err    string
@@ -107,13 +112,20 @@ func NewGsi(store *Store, tracker *Tracker) *Gsi {
 func (g *Gsi) Token() string { return g.token() }
 
 func (g *Gsi) token() string {
+	g.tokMu.Lock()
+	defer g.tokMu.Unlock()
+	if g.tok != "" {
+		return g.tok
+	}
 	if raw, err := os.ReadFile(g.store.path("gsi_token.txt")); err == nil {
 		if t := strings.TrimSpace(string(raw)); t != "" {
+			g.tok = t
 			return t
 		}
 	}
 	t := randomToken(16)
 	_ = g.store.writeFile("gsi_token.txt", []byte(t))
+	g.tok = t
 	return t
 }
 

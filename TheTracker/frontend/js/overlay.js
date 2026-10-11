@@ -231,10 +231,27 @@ function frame(clock, gameType) {
 }
 
 let lastHtml = "";
+let lastShape = "";
+const OFFSET_RE = /stroke-dashoffset="([\d.]+)"/g;
+const SECS_RE = /<span class="secs">(\d+)<\/span>/g;
+
+/// Draws a frame. When only the rings' progress and the seconds changed
+/// (most ticks), those are updated in place: rebuilding the rings four
+/// times a second reloaded their pictures and restarted the "Now" pulse.
 function paint(html) {
   if (html === lastHtml) return;
   lastHtml = html;
-  document.getElementById("chips").innerHTML = html;
+  const box = document.getElementById("chips");
+  const shape = html.replace(OFFSET_RE, "").replace(SECS_RE, "");
+  if (shape === lastShape && box.firstChild) {
+    const offsets = [...html.matchAll(OFFSET_RE)].map((m) => m[1]);
+    const secs = [...html.matchAll(SECS_RE)].map((m) => m[1]);
+    box.querySelectorAll(".arc .fill").forEach((el, i) => offsets[i] !== undefined && el.setAttribute("stroke-dashoffset", offsets[i]));
+    box.querySelectorAll(".secs").forEach((el, i) => secs[i] !== undefined && (el.textContent = secs[i]));
+    return;
+  }
+  lastShape = shape;
+  box.innerHTML = html;
 }
 
 function applySettings() {
@@ -249,24 +266,36 @@ function applySettings() {
 // clock is carried forward locally, never more than a second ahead, so a
 // paused game does not run on.
 let lastClock = null;
-async function tick() {
-  let live;
+// The match as last read: polled once a second during a match and every
+// three seconds otherwise; the countdowns are drawn four times a second from
+// it, carrying the clock forward in between.
+let liveMatch = null;
+
+async function poll() {
   try {
-    live = await call("get_live");
+    const live = await call("get_live");
+    const m = live.current;
+    // The draft and strategy time report a clock too; countdowns there would
+    // be to events in a game that has not started.
+    if (!live.live || !m || !m.inProgress || m.lastClockTime <= 0) {
+      liveMatch = null;
+      lastClock = null;
+    } else {
+      liveMatch = m;
+      liveRole = live.role ? live.role.role : null;
+      if (!lastClock || lastClock.value !== m.lastClockTime) lastClock = { value: m.lastClockTime, at: performance.now() };
+    }
   } catch (_) {
-    return paint("");
+    liveMatch = null;
   }
-  const m = live.current;
-  // The draft and strategy time report a clock too; countdowns there would
-  // be to events in a game that has not started.
-  if (!live.live || !m || !m.inProgress || m.lastClockTime <= 0) {
-    lastClock = null;
-    return paint("");
-  }
-  liveRole = live.role ? live.role.role : null;
-  if (!lastClock || lastClock.value !== m.lastClockTime) lastClock = { value: m.lastClockTime, at: performance.now() };
+  draw();
+  setTimeout(poll, liveMatch ? 1000 : 3000);
+}
+
+function draw() {
+  if (!liveMatch || !lastClock) return paint("");
   const ahead = Math.min(1, (performance.now() - lastClock.at) / 1000);
-  paint(frame(m.lastClockTime + ahead, m.gameType));
+  paint(frame(lastClock.value + ahead, liveMatch.gameType));
 }
 
 // ?preview draws a fixed sample instead of following the match: Settings
@@ -302,7 +331,8 @@ if (typeof document !== "undefined") {
     paintPreview();
   } else {
     setInterval(loadSettings, 2500);
-    setInterval(tick, 250);
+    poll();
+    setInterval(() => liveMatch && draw(), 250);
   }
 }
 if (typeof module !== "undefined") module.exports = { upcoming, nextUp, schedule, untilNext, sinceLast, chipHtml, labelFor, artFor, frame, KINDS, setSettings: (s) => (settings = s), setRole: (r) => (liveRole = r) };

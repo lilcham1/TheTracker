@@ -67,7 +67,8 @@ func guessRole(m *MatchState, hint roleHint) LiveRole {
 func heroRoleHint(hero string, history []MatchSummary, meta *DotaMeta) roleHint {
 	games, support := 0, 0
 	for _, h := range history {
-		if h.HeroName == nil || *h.HeroName != hero {
+		// Turbo farms faster, so its last hits would read as a core's.
+		if h.HeroName == nil || *h.HeroName != hero || h.GameType == "turbo" {
 			continue
 		}
 		if cp := h.Checkpoints[10]; cp != nil {
@@ -115,26 +116,36 @@ type roleHints struct {
 
 func (a *App) roleHintFor(hero string) roleHint {
 	a.hints.mu.Lock()
-	defer a.hints.mu.Unlock()
 	if a.hints.hero == hero && time.Now().Before(a.hints.until) {
-		return a.hints.hint
+		h := a.hints.hint
+		a.hints.mu.Unlock()
+		return h
 	}
+	askMeta := time.Since(a.hints.metaAsked) > 10*time.Minute
+	a.hints.mu.Unlock()
+
+	// The files are read without the lock held: the live feed asks for the
+	// role several times a second and must not queue behind a history read.
 	var meta DotaMeta
 	var metaPtr *DotaMeta
 	if _, ok := a.Store.ReadCacheStale("od_meta", &meta); ok {
 		metaPtr = &meta
-	} else if time.Since(a.hints.metaAsked) > 10*time.Minute {
+	}
+	hint := heroRoleHint(hero, a.Store.LoadHistory(), metaPtr)
+
+	a.hints.mu.Lock()
+	defer a.hints.mu.Unlock()
+	if metaPtr == nil && askMeta {
 		// Fetched in the background for the next ask; the live feed never
 		// waits on the network.
 		a.hints.metaAsked = time.Now()
 		go a.Dota.Meta(false)
 	}
-	a.hints.hero, a.hints.until = hero, time.Now().Add(time.Minute)
+	a.hints.hero, a.hints.hint, a.hints.until = hero, hint, time.Now().Add(time.Minute)
 	if metaPtr == nil {
-		a.hints.until = time.Now().Add(5 * time.Second)
+		a.hints.until = time.Now().Add(15 * time.Second)
 	}
-	a.hints.hint = heroRoleHint(hero, a.Store.LoadHistory(), metaPtr)
-	return a.hints.hint
+	return hint
 }
 
 // liveRole is the role for the match on screen, or nil without one.

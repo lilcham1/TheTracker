@@ -11,6 +11,10 @@ package core
 // they only ever name the programs below: they can't be made to run
 // anything else. The policies go in Windows' active store, which is emptied
 // at every restart, so nothing can stay behind.
+//
+// The tasks write nothing to disk: a system task writing into a folder the
+// player's account controls could be pointed somewhere else, so the app
+// keeps track of what it switched itself.
 
 import (
 	"encoding/base64"
@@ -19,6 +23,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf16"
 )
 
@@ -45,10 +50,13 @@ var gameModeGroups = map[string]gameModeGroup{
 var gameModeOrder = []string{"sync", "launchers", "windowsUpdate", "browsers"}
 
 const (
-	gameModeOnTask     = `\TheTracker\GameModeOn`
-	gameModeOffTask    = `\TheTracker\GameModeOff`
-	gameModeStatusFile = "game_mode.json"
+	gameModeOnTask  = `\TheTracker\GameMode\On`
+	gameModeOffTask = `\TheTracker\GameMode\Off`
 )
+
+// The tasks 1.9.0 registered, whose scripts wrote a status file into the
+// data folder. Setting Game mode up again deletes them.
+var gameModeLegacyTasks = []string{`\TheTracker\GameModeOn`, `\TheTracker\GameModeOff`}
 
 func validGameModeCategories(cats []string) []string {
 	out := []string{}
@@ -63,26 +71,17 @@ func validGameModeCategories(cats []string) []string {
 	return out
 }
 
-// psQuote quotes a string for PowerShell. Only catalogue names and the data
-// folder (checked for quotes first) ever reach it.
+// psQuote quotes a string for PowerShell. Only catalogue names reach it.
 func psQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
 const gameModeRemoveAll = `Get-NetQosPolicy -PolicyStore ActiveStore | Where-Object { $_.Name -like 'TheTracker*' } | Remove-NetQosPolicy -PolicyStore ActiveStore -Confirm:$false`
 
-// The task writes what it did where the app can read it: reading network
-// policies back needs admin rights the app doesn't have.
-func gameModeStatusLine(dir, state string) string {
-	return `$c = @(Get-NetQosPolicy -PolicyStore ActiveStore | Where-Object { $_.Name -like 'TheTracker*' }).Count
-$d = [string](Get-Service -Name DoSvc).Status
-Set-Content -LiteralPath ` + psQuote(dir+`\`+gameModeStatusFile) + ` -Encoding ascii -Value ('{"state":"` + state + `","policies":' + $c + ',"doSvc":"' + $d + '","at":"' + (Get-Date).ToUniversalTime().ToString('o') + '"}')`
-}
-
-// gameModeScripts builds the On and Off scripts for the chosen categories.
-func gameModeScripts(cats []string, dataDir string) (on, off string) {
+// gameModeScripts builds the On and Off scripts for the chosen categories,
+// and says how many programs On slows.
+func gameModeScripts(cats []string) (on, off string, slowed int) {
 	var b strings.Builder
 	b.WriteString("$ErrorActionPreference = 'SilentlyContinue'\n")
 	b.WriteString(gameModeRemoveAll + "\n")
-	n := 0
 	stopUpdate := false
 	for _, c := range validGameModeCategories(cats) {
 		if c == "windowsUpdate" {
@@ -91,17 +90,16 @@ func gameModeScripts(cats []string, dataDir string) (on, off string) {
 		}
 		g := gameModeGroups[c]
 		for _, app := range g.Apps {
-			n++
-			fmt.Fprintf(&b, "New-NetQosPolicy -Name 'TheTracker %d' -AppPathNameMatchCondition %s -ThrottleRateActionBitsPerSecond %d -PolicyStore ActiveStore | Out-Null\n", n, psQuote(app), g.Rate)
+			slowed++
+			fmt.Fprintf(&b, "New-NetQosPolicy -Name 'TheTracker %d' -AppPathNameMatchCondition %s -ThrottleRateActionBitsPerSecond %d -PolicyStore ActiveStore | Out-Null\n", slowed, psQuote(app), g.Rate)
 		}
 	}
 	b.WriteString("New-NetQosPolicy -Name 'TheTracker Dota' -AppPathNameMatchCondition 'dota2.exe' -DSCPAction 46 -PolicyStore ActiveStore | Out-Null\n")
 	if stopUpdate {
 		b.WriteString("Stop-Service -Name DoSvc -Force\n")
 	}
-	b.WriteString(gameModeStatusLine(dataDir, "on") + "\n")
-	off = "$ErrorActionPreference = 'SilentlyContinue'\n" + gameModeRemoveAll + "\n" + gameModeStatusLine(dataDir, "off") + "\n"
-	return b.String(), off
+	off = "$ErrorActionPreference = 'SilentlyContinue'\n" + gameModeRemoveAll + "\n"
+	return b.String(), off, slowed
 }
 
 // encodePS is PowerShell's -EncodedCommand form: base64 of UTF-16LE.
@@ -152,20 +150,23 @@ func gameModeTaskXML(desc, script, sid string) string {
 // gameModeTasks is the Windows side: registering the tasks (with the
 // player's approval) and starting them.
 type gameModeTasks interface {
-	Installed() bool
+	// Exists says whether a task is registered.
+	Exists(task string) bool
+	// Install registers both tasks and deletes the legacy ones.
 	Install(onXML, offXML string) error
+	// Remove deletes every Game mode task, legacy ones included.
 	Remove() error
+	// Run starts a task and waits for it to finish.
 	Run(task string) error
 	UserSID() (string, error)
 }
 
 type GameModeStatus struct {
-	// not_set_up | ready | on
+	// not_set_up | needs_update | ready | on
 	State        string   `json:"state"`
 	Categories   []string `json:"categories"`
-	Policies     int      `json:"policies"`
+	Slowed       int      `json:"slowed"`
 	UpdatePaused bool     `json:"updatePaused"`
-	At           string   `json:"at,omitempty"`
 	Error        string   `json:"error,omitempty"`
 }
 
@@ -173,8 +174,17 @@ type GameMode struct {
 	tasks gameModeTasks
 	store *Store
 
+	// One switch at a time: On and Off are separate tasks, and an Off still
+	// running when On starts would remove what On just set.
+	runMu sync.Mutex
+
 	mu      sync.Mutex
+	on      bool
 	lastErr string
+	// Whether the tasks exist, asked of Windows at most once a minute.
+	installed   bool
+	legacy      bool
+	installedAt time.Time
 }
 
 func NewGameMode(store *Store) *GameMode {
@@ -183,6 +193,32 @@ func NewGameMode(store *Store) *GameMode {
 
 func (g *GameMode) prefs() NetworkPrefs { return g.store.LoadPrefs().Network }
 
+// taskState says whether the current tasks exist, and whether 1.9.0's are
+// still there.
+func (g *GameMode) taskState() (installed, legacy bool) {
+	g.mu.Lock()
+	if !g.installedAt.IsZero() && time.Since(g.installedAt) < time.Minute {
+		installed, legacy = g.installed, g.legacy
+		g.mu.Unlock()
+		return
+	}
+	g.mu.Unlock()
+	installed = g.tasks.Exists(gameModeOnTask) && g.tasks.Exists(gameModeOffTask)
+	for _, t := range gameModeLegacyTasks {
+		legacy = legacy || g.tasks.Exists(t)
+	}
+	g.mu.Lock()
+	g.installed, g.legacy, g.installedAt = installed, legacy, time.Now()
+	g.mu.Unlock()
+	return
+}
+
+func (g *GameMode) forgetTaskState() {
+	g.mu.Lock()
+	g.installedAt = time.Time{}
+	g.mu.Unlock()
+}
+
 // Setup registers the tasks for the chosen categories. Windows asks the
 // player for approval.
 func (g *GameMode) Setup(cats []string) error {
@@ -190,15 +226,12 @@ func (g *GameMode) Setup(cats []string) error {
 	if len(cats) == 0 {
 		return errors.New("Pick at least one kind of program to slow down.")
 	}
-	dir := g.store.Dir
-	if strings.ContainsAny(dir, `'"<>&`) {
-		return errors.New("TheTracker's data folder has a character Game mode can't use.")
-	}
 	sid, err := g.tasks.UserSID()
 	if err != nil {
 		return err
 	}
-	on, off := gameModeScripts(cats, dir)
+	on, off, _ := gameModeScripts(cats)
+	defer g.forgetTaskState()
 	if err := g.tasks.Install(gameModeTaskXML("TheTracker Game mode: slows background uploads during a Dota match.", on, sid),
 		gameModeTaskXML("TheTracker Game mode: undoes it after the match.", off, sid)); err != nil {
 		return err
@@ -210,58 +243,67 @@ func (g *GameMode) Setup(cats []string) error {
 // Remove undoes everything: the policies, then the tasks.
 func (g *GameMode) Remove() error {
 	_ = g.Off()
-	if g.tasks.Installed() {
+	defer g.forgetTaskState()
+	if installed, legacy := g.taskState(); installed || legacy {
 		if err := g.tasks.Remove(); err != nil {
 			return err
 		}
+		g.forgetTaskState()
+		if installed, legacy := g.taskState(); installed || legacy {
+			return errors.New("Windows didn't remove Game mode's tasks. Try again.")
+		}
 	}
 	g.store.UpdatePrefs(func(p *Prefs) { p.Network.GameMode = false })
+	g.mu.Lock()
+	g.on = false
+	g.mu.Unlock()
 	return nil
 }
 
-func (g *GameMode) run(task string) error {
-	if !g.prefs().GameMode || !g.tasks.Installed() {
+func (g *GameMode) run(task string, on bool) error {
+	if !g.prefs().GameMode {
 		return nil
 	}
+	if installed, _ := g.taskState(); !installed {
+		return nil
+	}
+	g.runMu.Lock()
 	err := g.tasks.Run(task)
+	g.runMu.Unlock()
 	g.mu.Lock()
 	g.lastErr = ""
 	if err != nil {
 		g.lastErr = err.Error()
+	} else {
+		g.on = on
 	}
 	g.mu.Unlock()
 	return err
 }
 
-func (g *GameMode) On() error  { return g.run(gameModeOnTask) }
-func (g *GameMode) Off() error { return g.run(gameModeOffTask) }
+func (g *GameMode) On() error  { return g.run(gameModeOnTask, true) }
+func (g *GameMode) Off() error { return g.run(gameModeOffTask, false) }
 
 func (g *GameMode) Status() GameModeStatus {
 	p := g.prefs()
-	s := GameModeStatus{State: "not_set_up", Categories: p.Categories}
-	if s.Categories == nil {
-		s.Categories = []string{}
-	}
-	if !p.GameMode || !g.tasks.Installed() {
-		return s
-	}
-	s.State = "ready"
-	var file struct {
-		State    string `json:"state"`
-		Policies int    `json:"policies"`
-		DoSvc    string `json:"doSvc"`
-		At       string `json:"at"`
-	}
-	if g.store.readJSON(gameModeStatusFile, &file) {
-		s.Policies, s.At = file.Policies, file.At
-		if file.State == "on" && file.Policies > 0 {
-			s.State = "on"
-			s.UpdatePaused = strings.EqualFold(file.DoSvc, "Stopped")
-		}
+	s := GameModeStatus{State: "not_set_up", Categories: validGameModeCategories(p.Categories)}
+	installed, legacy := g.taskState()
+	switch {
+	case p.GameMode && installed:
+		s.State = "ready"
+	case p.GameMode && legacy:
+		s.State = "needs_update"
 	}
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	s.Error = g.lastErr
-	g.mu.Unlock()
+	if s.State == "ready" && g.on {
+		s.State = "on"
+		_, _, s.Slowed = gameModeScripts(s.Categories)
+		for _, c := range s.Categories {
+			s.UpdatePaused = s.UpdatePaused || c == "windowsUpdate"
+		}
+	}
 	return s
 }
 

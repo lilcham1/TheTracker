@@ -156,9 +156,12 @@ func (a *App) Start(manageDota bool) {
 	a.applyGames(a.Store.LoadPrefs().Games)
 	a.Cloud.Restore()
 	go a.overlayWatcher()
-	// Undo Game mode left on by a crash mid-match.
-	go a.GameMode.Off()
-	go a.netWatcher()
+	// Undo Game mode left on by a crash mid-match, before the watcher can
+	// switch it on for a match already running.
+	go func() {
+		_ = a.GameMode.Off()
+		a.netWatcher()
+	}()
 	go a.backfillLoop()
 	go a.owWatch()
 }
@@ -286,11 +289,15 @@ type LiveView struct {
 func (a *App) Live(withLog bool) LiveView {
 	v := LiveView{LiveStatus: a.Tracker.Status(withLog), Simulating: a.Simulating(), Goals: []GoalResult{}}
 	v.ServerError = a.Gsi.ListenerError()
-	if m := v.Current; m != nil {
+	// An ended match keeps its summary; goals and role only matter while
+	// it runs, and this is asked several times a second.
+	if m := v.Current; m != nil && !m.Ended {
 		g := a.Store.LoadPrefs().Goals
 		snap := buildSummary(m, false, time.Now())
 		v.Goals = EvaluateGoals(g, &snap)
 		v.Role = a.liveRole(m)
+	} else if m != nil && m.Summary != nil {
+		v.Goals = EvaluateGoals(a.Store.LoadPrefs().Goals, m.Summary)
 	}
 	return v
 }
@@ -321,6 +328,14 @@ func (a *App) StartSimulation(seconds int) error {
 
 	stop := make(chan struct{})
 	a.simMu.Lock()
+	// Another start that raced this one: stop its run too.
+	if old := a.simStop; old != nil {
+		select {
+		case <-old:
+		default:
+			close(old)
+		}
+	}
 	a.simStop = stop
 	a.simMu.Unlock()
 
@@ -372,15 +387,19 @@ func (a *App) StartSimulation(seconds int) error {
 }
 
 func (a *App) StopSimulation() {
+	// Checked and closed under the lock: two callers at once (the button and
+	// a games change) must not both close it.
 	a.simMu.Lock()
 	stop := a.simStop
-	a.simMu.Unlock()
 	if stop != nil {
 		select {
 		case <-stop:
 		default:
 			close(stop)
 		}
+	}
+	a.simMu.Unlock()
+	if stop != nil {
 		// Wait for the goroutine to post the end of the match, so the next
 		// call sees a settled tracker.
 		for i := 0; i < 40 && a.Simulating(); i++ {
@@ -752,7 +771,7 @@ func (a *App) dropWatchedGames() {
 // picked up again when the new version starts, and the app reopens in the
 // tray so nothing lands in front of the game.
 func (a *App) InstallUpdate(duringMatch bool) error {
-	live := a.Tracker.IsLive() && !a.Simulating()
+	live := a.Tracker.InMatch()
 	if live && !duringMatch {
 		return errors.New("A match is running. Confirm to update anyway.")
 	}

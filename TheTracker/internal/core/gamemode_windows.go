@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	"unicode/utf16"
 	"unsafe"
 
@@ -37,15 +38,24 @@ func (windowsTasks) UserSID() (string, error) {
 	return u.User.Sid.String(), nil
 }
 
-func (windowsTasks) Installed() bool {
-	return hidden("schtasks.exe", "/query", "/tn", gameModeOnTask).Run() == nil &&
-		hidden("schtasks.exe", "/query", "/tn", gameModeOffTask).Run() == nil
+func (windowsTasks) Exists(task string) bool {
+	return hidden("schtasks.exe", "/query", "/tn", task).Run() == nil
 }
 
+// Run starts a task and waits until it has finished, so an Off can't still
+// be running when the next On starts.
 func (windowsTasks) Run(task string) error {
 	out, err := hidden("schtasks.exe", "/run", "/tn", task).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("Windows wouldn't start Game mode's task: %s", strings.TrimSpace(string(out)))
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(400 * time.Millisecond)
+		out, err := hidden("schtasks.exe", "/query", "/tn", task, "/fo", "csv", "/nh").Output()
+		if err != nil || !strings.Contains(string(out), "Running") {
+			return nil
+		}
 	}
 	return nil
 }
@@ -74,11 +84,22 @@ func (windowsTasks) Install(onXML, offXML string) error {
 	if err := writeUTF16(off, offXML); err != nil {
 		return err
 	}
-	return runElevated(`/c schtasks /create /tn "` + gameModeOnTask + `" /xml "` + on + `" /f && schtasks /create /tn "` + gameModeOffTask + `" /xml "` + off + `" /f`)
+	return runElevated(deleteLegacy() + `schtasks /create /tn "` + gameModeOnTask + `" /xml "` + on + `" /f && schtasks /create /tn "` + gameModeOffTask + `" /xml "` + off + `" /f`)
 }
 
 func (windowsTasks) Remove() error {
-	return runElevated(`/c schtasks /delete /tn "` + gameModeOnTask + `" /f & schtasks /delete /tn "` + gameModeOffTask + `" /f`)
+	// Quiet whichever are missing; the caller checks what is left.
+	return runElevated(deleteLegacy() + `schtasks /delete /tn "` + gameModeOnTask + `" /f >nul 2>&1 & schtasks /delete /tn "` + gameModeOffTask + `" /f >nul 2>&1 & exit /b 0`)
+}
+
+// deleteLegacy starts a cmd.exe line that deletes 1.9.0's tasks, quietly
+// whether or not they exist.
+func deleteLegacy() string {
+	line := "/c "
+	for _, t := range gameModeLegacyTasks {
+		line += `schtasks /delete /tn "` + t + `" /f >nul 2>&1 & `
+	}
+	return line
 }
 
 // runElevated runs cmd.exe with the given arguments after Windows' approval

@@ -271,7 +271,7 @@ view("overview", {
     const ins = (dInsights.data && dInsights.data.insights) || [];
     const local = rows.filter((m) => m.local).length;
 
-    const heroLine = (h) => `<button class="line" data-act="go" data-view="heroes" data-params='${JSON.stringify({ hero: h.slug })}' type="button">
+    const heroLine = (h) => `<button class="line" data-act="go" data-view="heroes" data-params='${esc(JSON.stringify({ hero: h.slug }))}' type="button">
       ${heroImgHtml(h.slug)}<span class="grow"><b>${esc(h.name)}</b><span class="muted"> ${h.played} games</span></span>
       <span class="num ${toneOfRate(h.rate)}">${pct(h.rate)}</span></button>`;
 
@@ -911,7 +911,7 @@ view("heroes", {
 
     return `${staleNote(dHist)}<div class="table-wrap"><table class="table">
       <thead><tr>${th("name", "Hero", false)}${th("recent", `Last ${timeline().length}`)}<th class="num">Recent win rate</th><th class="num">Recent KDA</th>${th("games", "All-time games")}${th("rate", "All-time win rate")}${th("last", "Last played")}<th>Form</th></tr></thead>
-      <tbody>${list.map((h) => `<tr class="click" data-act="go" data-view="heroes" data-params='${JSON.stringify({ hero: h.slug })}'>
+      <tbody>${list.map((h) => `<tr class="click" data-act="go" data-view="heroes" data-params='${esc(JSON.stringify({ hero: h.slug }))}'>
         <td><span class="cell">${heroImgHtml(h.slug)}<b>${esc(h.name)}</b>${fav === h.slug ? `<span class="star" title="On your overview">${icon("star")}</span>` : ""}</span></td>
         <td class="num">${h.recent || "–"}</td><td class="num ${toneOfRate(h.recentRate)}">${h.r && h.r.games ? pct(h.recentRate) : "–"}</td><td class="num">${h.r ? dash(h.r.kda, (v) => v.toFixed(2)) : "–"}</td>
         <td class="num">${h.l ? h.l.games : "–"}</td><td class="num ${h.l ? toneOfRate(h.l.winRate) : ""}">${h.l ? pct(h.l.winRate) : "–"}</td><td class="num muted">${ago(h.last)}</td>
@@ -1059,7 +1059,7 @@ view("sessions", {
           <label>Deaths per game, at most <input class="input tiny" id="goalDeaths" type="number" min="0" max="50" value="${g.maxDeaths || ""}" placeholder="off" /></label>
           <label>Gold per minute, at least <input class="input tiny" id="goalGpm" type="number" min="0" max="2000" value="${g.minGpm || ""}" placeholder="off" /></label>
           <button class="btn small" data-act="goals-save" type="button">Save goals</button>
-          <p class="hint">Leave one empty to switch it off. Progress shows on the Live page during a match and against every session.</p></div>`
+          <p class="hint">Leave one empty to switch it off. Progress shows on Overview during a match and against every session.</p></div>`
         : anyGoal && d ? `<div class="goals">${d.goals.map((p) => `<div class="goal ${!p.counted ? "idle" : p.met * 2 >= p.counted ? "ok" : "bad"}"><span class="dot"></span><span>${esc(p.label)} <b>${p.target}</b></span><span class="num">${p.counted ? `met in ${p.met} of ${p.counted}` : "no games yet"}</span></div>`).join("")}</div>`
         : `<p class="muted">Pick a target for last hits, deaths or gold per minute and TheTracker scores every game against it.</p>`}`;
 

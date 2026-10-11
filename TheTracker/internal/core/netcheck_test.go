@@ -76,6 +76,10 @@ func TestNetCheckMeasures(t *testing.T) {
 	n := a.Net
 	n.probe, n.steam = probe, &service{Name: "Steam", Base: f.srv.URL, Attempts: 1}
 
+	n.pickRelay()
+	n.mu.Lock()
+	n.relayAt = time.Now() // picked; no second pick in the loop below
+	n.mu.Unlock()
 	for i := 0; i < 6; i++ {
 		n.measure()
 		n.mu.Lock()

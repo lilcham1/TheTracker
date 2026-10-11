@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"log"
 	"sync"
 	"time"
 )
@@ -249,7 +250,9 @@ func parsePrefs(raw []byte) (Prefs, error) {
 
 func (s *Store) LoadPrefs() Prefs {
 	p := defaultPrefs()
-	s.readJSON("prefs.json", &p)
+	if raw := s.readPrefsRaw(); raw != nil {
+		_ = json.Unmarshal(raw, &p)
+	}
 	p.Overlay.Dota.settleRoleMode()
 	if p.Builds == nil {
 		p.Builds = []Build{}
@@ -269,7 +272,9 @@ func (s *Store) UpdatePrefs(change func(*Prefs)) Prefs {
 	defer prefsMu.Unlock()
 	p := s.LoadPrefs()
 	change(&p)
-	_ = s.writeJSON("prefs.json", p)
+	if err := s.writeJSON("prefs.json", p); err != nil {
+		log.Printf("saving settings: %v", err)
+	}
 	return p
 }
 

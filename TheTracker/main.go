@@ -153,9 +153,15 @@ type shell struct {
 	// Whether the overlay is meant to be up. It is drawn only while Dota
 	// (or TheTracker) is in front, so this and IsVisible can differ.
 	overlayWanted atomic.Bool
-	// Dota's area the overlay was last placed in.
+	// Dota's area the overlay was last placed in (empty when placed on a
+	// monitor).
 	placedMu sync.Mutex
 	placedIn application.Rect
+	// Show and hide decisions are made one at a time, and whether the
+	// overlay is drawn is tracked here rather than asked of the window on
+	// every tick (a call through the UI thread).
+	overlayMu sync.Mutex
+	drawn     bool
 	// The self-test places the overlay itself.
 	selfTesting atomic.Bool
 }
@@ -350,23 +356,50 @@ func (s *shell) ShowOverlay() error {
 	if s.overlay == nil {
 		return errors.New("The overlay window is unavailable.")
 	}
+	s.overlayMu.Lock()
+	defer s.overlayMu.Unlock()
 	s.overlayWanted.Store(true)
 	// Positioned before showing, so it never flashes in the wrong corner or
 	// on the wrong monitor on the way to the right one.
 	s.ApplyOverlay(s.backend.Store.LoadPrefs().Overlay)
-	if g, ok := findGame(); ok && !s.selfTesting.Load() && (g.minimized || !inFront(g.pid)) {
-		return nil // followGame shows it once Dota is in front
-	}
-	s.overlay.Show()
-	s.overlay.SetAlwaysOnTop(true)
+	if s.selfTesting.Load() || s.gameAllowsOverlay() {
+		s.drawLocked(true)
+	} // otherwise followGame shows it once Dota is in front
 	return nil
 }
 
 func (s *shell) HideOverlay() {
+	s.overlayMu.Lock()
+	defer s.overlayMu.Unlock()
 	s.overlayWanted.Store(false)
 	if s.overlay != nil {
+		s.drawLocked(false)
+	}
+}
+
+// drawLocked shows or hides the overlay window. overlayMu is held.
+func (s *shell) drawLocked(show bool) {
+	if show {
+		s.overlay.Show()
+		s.overlay.SetAlwaysOnTop(true)
+	} else {
 		s.overlay.Hide()
 	}
+	s.drawn = show
+}
+
+// gameAllowsOverlay: without Dota the overlay shows as it always has; with
+// Dota, only while its window is in front (or TheTracker's own), never while
+// it is minimized or still building its window.
+func (s *shell) gameAllowsOverlay() bool {
+	g, state := findGame()
+	switch state {
+	case gameNone:
+		return true
+	case gameFound:
+		return !g.minimized && inFront(g.pid)
+	}
+	return false
 }
 
 // OverlayVisible says whether the overlay is on, even while it is tucked
@@ -382,23 +415,26 @@ func (s *shell) followGame() {
 		if s.overlay == nil || !s.overlayWanted.Load() || s.selfTesting.Load() {
 			continue
 		}
-		g, ok := findGame()
-		show := !ok || (!g.minimized && inFront(g.pid))
-		if ok && show {
-			s.placedMu.Lock()
-			moved := g.area != s.placedIn
-			s.placedMu.Unlock()
-			if moved {
+		g, state := findGame()
+		show := state == gameNone || (state == gameFound && !g.minimized && inFront(g.pid))
+		s.placedMu.Lock()
+		placed := s.placedIn
+		s.placedMu.Unlock()
+		// Re-placed when Dota's window moved, or when Dota closed and the
+		// overlay still sits where its window was.
+		replace := (state == gameFound && show && g.area != placed) || (state == gameNone && placed != application.Rect{})
+
+		s.overlayMu.Lock()
+		// Hidden by HideOverlay since the top of the loop: leave it hidden.
+		if s.overlayWanted.Load() {
+			if replace {
 				s.ApplyOverlay(s.backend.Store.LoadPrefs().Overlay)
 			}
+			if show != s.drawn {
+				s.drawLocked(show)
+			}
 		}
-		drawn := s.overlay.IsVisible()
-		if show && !drawn {
-			s.overlay.Show()
-			s.overlay.SetAlwaysOnTop(true)
-		} else if !show && drawn {
-			s.overlay.Hide()
-		}
+		s.overlayMu.Unlock()
 	}
 }
 
@@ -440,7 +476,7 @@ func (s *shell) ApplyOverlay(o core.OverlaySettings) {
 	s.overlay.SetIgnoreMouseEvents(o.ClickThrough)
 
 	// On Dota's window when the game is open, wherever it is.
-	if g, ok := findGame(); ok && !g.minimized && !s.selfTesting.Load() {
+	if g, state := findGame(); state == gameFound && !g.minimized && !s.selfTesting.Load() {
 		s.overlay.SetPhysicalBounds(placeOverlay(g.area, s.scaleAt(g.area), o))
 		s.placedMu.Lock()
 		s.placedIn = g.area
@@ -455,6 +491,9 @@ func (s *shell) ApplyOverlay(o core.OverlaySettings) {
 	// screen's own origin is part of every position; without it the window
 	// lands on the primary display whichever one was chosen.
 	s.overlay.SetPhysicalBounds(placeOverlay(sc.PhysicalBounds, float64(sc.ScaleFactor), o))
+	s.placedMu.Lock()
+	s.placedIn = application.Rect{}
+	s.placedMu.Unlock()
 }
 
 func (s *shell) Monitors() []core.Monitor {

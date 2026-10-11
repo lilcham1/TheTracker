@@ -82,6 +82,8 @@ type NetCheck struct {
 	live      bool
 	testUntil time.Time
 	running   bool
+	// A relay pick is under way (it runs beside the measuring, never in it).
+	picking bool
 }
 
 func NewNetCheck(store *Store) *NetCheck {
@@ -137,16 +139,14 @@ func (n *NetCheck) start() {
 }
 
 func (n *NetCheck) loop() {
-	defer func() {
-		n.mu.Lock()
-		n.running = false
-		n.mu.Unlock()
-	}()
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	for {
+		// Stopping is decided and recorded in one step, so a start in
+		// between can't find the loop "running" when it is about to end.
 		n.mu.Lock()
 		if !n.wanted() {
+			n.running = false
 			n.mu.Unlock()
 			return
 		}
@@ -159,7 +159,12 @@ func (n *NetCheck) loop() {
 // measure takes one sample of everything.
 func (n *NetCheck) measure() {
 	n.mu.Lock()
-	needRelay := n.relayIP == "" || time.Since(n.relayAt) > time.Hour
+	// relayAt holds back a retry after a failed pick (15 s) and a re-pick
+	// after a good one (an hour).
+	needRelay := !n.picking && time.Since(n.relayAt) > time.Hour
+	if needRelay {
+		n.picking = true
+	}
 	routerIP := n.routerIP
 	n.mu.Unlock()
 	if routerIP == "" {
@@ -168,7 +173,14 @@ func (n *NetCheck) measure() {
 		}
 	}
 	if needRelay {
-		n.pickRelay()
+		// The relay list can take seconds to fetch, or fail offline; the
+		// router keeps being measured meanwhile.
+		go func() {
+			n.pickRelay()
+			n.mu.Lock()
+			n.picking = false
+			n.mu.Unlock()
+		}()
 	}
 	n.mu.Lock()
 	relayIP, relayIP2 := n.relayIP, n.relayIP2

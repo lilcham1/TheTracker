@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -174,8 +175,25 @@ func (windowsProbe) Connections() map[string]int {
 	return out
 }
 
-// processNames maps process ids to program names.
+// Program names by process id, refreshed every ten seconds: the connection
+// list is read every second, and a new program is rare.
+var procNames struct {
+	sync.Mutex
+	names map[uint32]string
+	at    time.Time
+}
+
 func processNames() map[uint32]string {
+	procNames.Lock()
+	defer procNames.Unlock()
+	if procNames.names != nil && time.Since(procNames.at) < 10*time.Second {
+		return procNames.names
+	}
+	procNames.names, procNames.at = readProcessNames(), time.Now()
+	return procNames.names
+}
+
+func readProcessNames() map[uint32]string {
 	out := map[uint32]string{}
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {

@@ -353,6 +353,8 @@ function aboutHtml() {
 
 view("settings", {
   game: null, title: "Settings", live: true,
+  // Only the test-match button follows the live data.
+  liveKey: (live) => !!live.simulating,
   sub: () => "",
   load() {
     const tab = S.params.tab || "general";

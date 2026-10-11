@@ -30,6 +30,13 @@ type Store struct {
 	// loop and the UI all read-modify-write it; unguarded, two of them could
 	// interleave and one update would be lost.
 	historyMu sync.Mutex
+
+	// prefs.json as last read, and the file's size and time then. The
+	// overlay asks for the settings several times a second; reading the file
+	// each time also kept it open often enough to make saving it fail.
+	prefsMu    sync.Mutex
+	prefsRaw   []byte
+	prefsStamp string
 }
 
 // DefaultDataDir is where data has always lived, so an install upgraded from
@@ -85,7 +92,42 @@ func (s *Store) writeFile(name string, raw []byte) error {
 	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, full)
+	// Windows refuses to replace a file another reader has open at that
+	// moment; that passes in milliseconds.
+	err := os.Rename(tmp, full)
+	for i := 0; err != nil && i < 8; i++ {
+		time.Sleep(25 * time.Millisecond)
+		err = os.Rename(tmp, full)
+	}
+	return err
+}
+
+// fileStamp is a file's size and change time, without opening it.
+func fileStamp(path string) string {
+	st, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d:%d", st.Size(), st.ModTime().UnixNano())
+}
+
+// readPrefsRaw returns prefs.json's bytes, read again only when the file
+// changed (a save, or a restored backup).
+func (s *Store) readPrefsRaw() []byte {
+	full := s.path("prefs.json")
+	stamp := fileStamp(full)
+	s.prefsMu.Lock()
+	defer s.prefsMu.Unlock()
+	if stamp != "" && stamp == s.prefsStamp {
+		return s.prefsRaw
+	}
+	raw, err := os.ReadFile(full)
+	if err != nil {
+		s.prefsRaw, s.prefsStamp = nil, ""
+		return nil
+	}
+	s.prefsRaw, s.prefsStamp = raw, stamp
+	return raw
 }
 
 // ---------- History ----------

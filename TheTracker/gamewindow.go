@@ -87,9 +87,20 @@ func processID(exe string) uint32 {
 	return 0
 }
 
-// findGame returns Dota's window, if Dota is running with one. A lost
-// window is looked for again at most every two seconds.
-func findGame() (gameWindow, bool) {
+// What is known about Dota right now.
+type gameState int
+
+const (
+	gameNone    gameState = iota // not running
+	gameLoading                  // running, its window not found (yet)
+	gameFound                    // running, window known
+)
+
+// findGame returns Dota's window and whether Dota runs at all. A lost window
+// is looked for again at most every two seconds; in between, a Dota that was
+// running still counts as running, so the overlay doesn't pop up over other
+// apps while the game builds its window.
+func findGame() (gameWindow, gameState) {
 	dota.mu.Lock()
 	defer dota.mu.Unlock()
 	if dota.hwnd != 0 {
@@ -99,26 +110,30 @@ func findGame() (gameWindow, bool) {
 	}
 	if dota.hwnd == 0 {
 		if time.Since(dota.lookedAt) < 2*time.Second {
-			return gameWindow{}, false
+			if dota.pid != 0 {
+				return gameWindow{pid: dota.pid}, gameLoading
+			}
+			return gameWindow{}, gameNone
 		}
 		dota.lookedAt = time.Now()
 		pid := processID(gameExe)
+		dota.pid = pid
 		if pid == 0 {
-			return gameWindow{}, false
+			return gameWindow{}, gameNone
 		}
 		enumMu.Lock()
 		enumPID, enumBest, enumArea = pid, 0, 0
 		procEnumWindows.Call(enumWindow, 0)
-		dota.hwnd, dota.pid = enumBest, pid
+		dota.hwnd = enumBest
 		enumMu.Unlock()
 		if dota.hwnd == 0 {
-			return gameWindow{}, false
+			return gameWindow{pid: pid}, gameLoading
 		}
 	}
 	g := gameWindow{pid: dota.pid}
 	if v, _, _ := procIsIconic.Call(dota.hwnd); v != 0 {
 		g.minimized = true
-		return g, true
+		return g, gameFound
 	}
 	var r windows.Rect
 	procGetClientRect.Call(dota.hwnd, uintptr(unsafe.Pointer(&r)))
@@ -128,7 +143,7 @@ func findGame() (gameWindow, bool) {
 	if g.area.Width < 200 || g.area.Height < 200 {
 		g.minimized = true
 	}
-	return g, true
+	return g, gameFound
 }
 
 // inFront reports whether the game, or one of TheTracker's own windows, is

@@ -60,7 +60,7 @@ view("meta", {
       return typeof av === "string" ? av.localeCompare(bv) * dir : (av - bv) * dir;
     });
     const th = (key, label, num = true) => `<th class="${num ? "num" : ""} ${META.sort === key ? "sorted" : ""}"><button data-act="meta-sort" data-key="${key}" type="button">${label}${META.sort === key ? (META.dir === "asc" ? " ▲" : " ▼") : ""}</button></th>`;
-    const mover = (h, extra) => `<button class="line" data-act="go" data-view="heroes" data-params='${JSON.stringify({ hero: h.slug })}' type="button">${heroImgHtml(h.slug)}<span class="grow"><b>${esc(h.name)}</b></span><span class="num">${pct(h.winRate, 1)}</span>${extra}</button>`;
+    const mover = (h, extra) => `<button class="line" data-act="go" data-view="heroes" data-params='${esc(JSON.stringify({ hero: h.slug }))}' type="button">${heroImgHtml(h.slug)}<span class="grow"><b>${esc(h.name)}</b></span><span class="num">${pct(h.winRate, 1)}</span>${extra}</button>`;
 
     return `${staleNote(dMeta)}
       <div class="cols three">
@@ -75,7 +75,7 @@ view("meta", {
       </div>
       <div class="table-wrap"><table class="table">
         <thead><tr>${th("name", "Hero", false)}${th("winRate", "Win rate")}<th></th>${th("pickRate", "Picked in")}${th("trend", "Trend")}${th("highWinRate", "Divine and above")}${th("turboWinRate", "Turbo")}${th("proPicks", "Pro picks")}${th("proBans", "Pro bans")}</tr></thead>
-        <tbody>${rows.map((h) => `<tr class="click" data-act="go" data-view="heroes" data-params='${JSON.stringify({ hero: h.slug })}'>
+        <tbody>${rows.map((h) => `<tr class="click" data-act="go" data-view="heroes" data-params='${esc(JSON.stringify({ hero: h.slug }))}'>
           <td><span class="cell">${heroImgHtml(h.slug)}<span><b>${esc(h.name)}</b><span class="sub">${esc(positionLabel(h.position))}</span></span></span></td>
           <td class="num display ${toneOfRate(h.winRate)}">${pct(h.winRate, 1)}</td><td>${rateBar(h.winRate)}</td>
           <td class="num">${pct(h.pickRate, 1)}</td><td class="num">${trendHtml(h.trend)}</td>

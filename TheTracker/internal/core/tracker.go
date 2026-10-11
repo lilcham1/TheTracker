@@ -69,6 +69,9 @@ type LiveStatus struct {
 	GsiAgeSecs *int64 `json:"gsiAgeSecs"`
 	// True while a match is running and Dota is still reporting on it.
 	Live bool `json:"live"`
+	// True from the draft to the end of a real match while Dota is still
+	// reporting on it: an update then needs the player's go-ahead.
+	InMatch bool `json:"inMatch"`
 	// True while the player is watching a game (spectating or a replay)
 	// rather than playing one.
 	Watching bool     `json:"watching"`
@@ -82,7 +85,7 @@ const matchFeedTimeout = 45 * time.Second
 func (t *Tracker) Status(withLog bool) LiveStatus {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	s := LiveStatus{Current: t.current.clone(), TrackingEnabled: t.enabled, Live: t.liveLocked()}
+	s := LiveStatus{Current: t.current.clone(), TrackingEnabled: t.enabled, Live: t.liveLocked(), InMatch: t.inMatchLocked()}
 	s.Watching = t.watchingID != "" && t.now().Sub(t.watchingAt) < matchFeedTimeout && !s.Live
 	if !t.lastPayloadAt.IsZero() {
 		s.GsiAgeSecs = ptr(int64(t.now().Sub(t.lastPayloadAt).Seconds()))
@@ -101,6 +104,19 @@ func (t *Tracker) liveLocked() bool {
 	// Leaving a game early sends the player to the menu, whose payloads are
 	// ignored — so InProgress alone would stay true until the next match.
 	return !t.lastMatchPayloadAt.IsZero() && t.now().Sub(t.lastMatchPayloadAt) < matchFeedTimeout
+}
+
+// inMatchLocked: a real match, draft included, that Dota is still reporting.
+func (t *Tracker) inMatchLocked() bool {
+	m := t.current
+	return m != nil && !m.Ended && !m.Simulated && !t.lastMatchPayloadAt.IsZero() && t.now().Sub(t.lastMatchPayloadAt) < matchFeedTimeout
+}
+
+// InMatch reports whether the player is in a real match, from the draft on.
+func (t *Tracker) InMatch() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.inMatchLocked()
 }
 
 // IsLive reports whether a match is running right now; it drives the overlay.
@@ -264,7 +280,7 @@ func idString(v any) (string, bool) {
 // match. Playing, Dota describes the player directly (player.activity,
 // hero.name); watching, it lists every player grouped by team (team2,
 // team3) and says nothing about "you".
-func watchingPayload(player, hero jsonMap) bool {
+func watchingPayload(player, hero, gmap jsonMap) bool {
 	for _, m := range []jsonMap{player, hero} {
 		if sub(m, "team2") != nil || sub(m, "team3") != nil {
 			return true
@@ -273,26 +289,70 @@ func watchingPayload(player, hero jsonMap) bool {
 	if player == nil && hero == nil {
 		return false
 	}
+	// A replay can come without the team blocks: a running clock and
+	// nothing about the player. (A match still loading has neither yet,
+	// but its clock hasn't started.)
 	_, hasActivity := getStr(player, "activity")
 	_, hasHero := getStr(hero, "name")
-	return !hasActivity && !hasHero
+	clock, _ := getNum(gmap, "clock_time")
+	return !hasActivity && !hasHero && clock > 0
 }
 
 // ---------- The update path ----------
 
-// HandleUpdate applies one GSI payload.
+// HandleUpdate applies one GSI payload. A match that ended is written to
+// history after the lock is released: the write reads and rewrites the
+// whole history file, and the overlay and the live page must not wait on it.
 func (t *Tracker) HandleUpdate(body jsonMap) {
-	var saved *MatchSummary
 	t.mu.Lock()
-	saved = t.handleLocked(body)
+	pending := t.handleLocked(body)
 	hook := t.OnSaved
 	t.mu.Unlock()
-	if saved != nil && hook != nil {
+	if saved := t.persist(pending); saved != nil && hook != nil {
 		hook(*saved)
 	}
 }
 
-func (t *Tracker) handleLocked(body jsonMap) (saved *MatchSummary) {
+// pendingSave is a match that has ended and still has to be written.
+type pendingSave struct {
+	match   *MatchState
+	summary MatchSummary
+}
+
+// persist writes an ended match to history and returns it if this call is
+// what saved it.
+func (t *Tracker) persist(p *pendingSave) *MatchSummary {
+	if p == nil || p.match.Simulated || t.store == nil {
+		return nil
+	}
+	var saved *MatchSummary
+	final := p.summary
+	t.store.UpdateHistory(func(h []MatchSummary) ([]MatchSummary, bool) {
+		// The same match can reach this twice: restart the app on the
+		// post-game screen and the new instance sees POST_GAME for a match
+		// the old one already saved. The first record is the complete one.
+		for _, existing := range h {
+			if existing.MatchID == p.match.MatchID {
+				final = existing
+				return h, false
+			}
+		}
+		h = append(h, p.summary)
+		RecomputeComparisons(h)
+		final = h[len(h)-1]
+		saved = &final
+		return h, true
+	})
+	// The result card shows the comparison with other games.
+	t.mu.Lock()
+	if t.current == p.match {
+		p.match.Summary = &final
+	}
+	t.mu.Unlock()
+	return saved
+}
+
+func (t *Tracker) handleLocked(body jsonMap) (saved *pendingSave) {
 	now := t.now()
 	t.lastPayloadAt = now
 	if !t.enabled {
@@ -302,7 +362,7 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *MatchSummary) {
 	gmap, player, hero, items := sub(body, "map"), sub(body, "player"), sub(body, "hero"), sub(body, "items")
 
 	// Watching a game, not playing it: noted, never recorded.
-	if watchingPayload(player, hero) {
+	if watchingPayload(player, hero, gmap) {
 		if id, ok := idString(gmap["matchid"]); ok && id != "0" {
 			if id != t.watchingID {
 				t.logf("Watching match %s (spectating or a replay): not recorded", id)
@@ -311,7 +371,9 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *MatchSummary) {
 		}
 		return nil
 	}
-	t.watchingID = ""
+	if activity, _ := getStr(player, "activity"); activity == "playing" {
+		t.watchingID = ""
+	}
 
 	if activity, ok := getStr(player, "activity"); ok && activity != "playing" {
 		return nil
@@ -488,40 +550,17 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *MatchSummary) {
 	return saved
 }
 
-// finalizeLocked ends the current match and writes it to history. It returns
-// the summary only if this call is what saved it.
-func (t *Tracker) finalizeLocked(incomplete bool) *MatchSummary {
+// finalizeLocked ends the current match. The caller writes the returned
+// match to history once the lock is released (see persist).
+func (t *Tracker) finalizeLocked(incomplete bool) *pendingSave {
 	m := t.current
 	if m == nil || m.Ended {
 		return nil
 	}
 	summary := buildSummary(m, incomplete, t.now())
-
-	var saved *MatchSummary
-	final := summary
-	if !m.Simulated && t.store != nil {
-		t.store.UpdateHistory(func(h []MatchSummary) ([]MatchSummary, bool) {
-			// The same match can reach this twice: restart the app on the
-			// post-game screen and the new instance sees POST_GAME for a
-			// match the old one already saved. The first record is the
-			// complete one.
-			for _, existing := range h {
-				if existing.MatchID == m.MatchID {
-					final = existing
-					return h, false
-				}
-			}
-			h = append(h, summary)
-			RecomputeComparisons(h)
-			final = h[len(h)-1]
-			saved = &final
-			return h, true
-		})
-	}
-
 	m.Ended = true
 	m.InProgress = false
-	m.Summary = &final
+	m.Summary = &summary
 
 	result := "result unknown"
 	if m.Won != nil {
@@ -535,7 +574,7 @@ func (t *Tracker) finalizeLocked(incomplete bool) *MatchSummary {
 		how = ", saved as incomplete: Dota never reported the end"
 	}
 	t.logf("Match %s ended (%s)%s. %d deaths, %dg lost", m.MatchID, result, how, len(m.Deaths), m.totalGoldLost())
-	return saved
+	return &pendingSave{match: m, summary: summary}
 }
 
 func buildSummary(m *MatchState, incomplete bool, now time.Time) MatchSummary {

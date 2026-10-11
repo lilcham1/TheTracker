@@ -33,6 +33,7 @@ async function csLoad() {
   rerender();
 }
 
+let csNavLive = false;
 async function csPoll() {
   if (!S.boot || !S.boot.prefs.games.cs2) return;
   try {
@@ -40,8 +41,14 @@ async function csPoll() {
     CS.status = await invoke("cs2_status");
     const now = CS.status.current && CS.status.current.ended;
     if (now && !before) CS.history = await invoke("cs2_history");
-    if (S.view === "cs-live" || (now && !before && (S.view === "today" || VIEWS[S.view].game === "cs2"))) rerender();
-    renderNav();
+    if (S.view === "cs-live" || (now && !before && (S.view === "today" || (VIEWS[S.view] && VIEWS[S.view].game === "cs2")))) rerender();
+    // The sidebar shows whether CS2 is live; rebuilding it every second lost
+    // clicks and focus.
+    const live = !!(CS.status && CS.status.live);
+    if (live !== csNavLive) {
+      csNavLive = live;
+      renderNav();
+    }
   } catch (_) {
     /* next tick */
   }

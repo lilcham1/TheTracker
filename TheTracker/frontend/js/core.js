@@ -290,7 +290,6 @@ const ICONS = {
   live: '<circle cx="12" cy="12" r="3.2"/><path d="M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
   matches: '<path d="M4 6h16M4 12h16M4 18h10"/>',
   heroes: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
-  draft: '<path d="M4 4h7v7H4zM13 13h7v7h-7zM13 4h7v7h-7zM4 13h7v7H4z"/>',
   meta: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   builds: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4z"/>',
   sessions: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -350,16 +349,21 @@ function resource(name, cmd, { args = () => ({}), ttl = 120000 } = {}) {
       r.loading = true;
       r.error = null;
       r.pendingKey = key;
+      // Only the latest request may settle the resource: an older reply
+      // arriving last would show data for the wrong filter.
+      const seq = (r.seq = (r.seq || 0) + 1);
       r.pending = invoke(cmd, force ? { ...a, force: true } : a)
         .then((data) => {
+          if (seq !== r.seq) return;
           r.data = data;
           r.key = key;
           r.at = Date.now();
         })
         .catch((e) => {
-          r.error = e.message || String(e);
+          if (seq === r.seq) r.error = e.message || String(e);
         })
         .finally(() => {
+          if (seq !== r.seq) return;
           r.loading = false;
           r.pending = null;
           rerender();
@@ -698,35 +702,59 @@ function applyLive(live) {
   // Only pages that show live data are redrawn on a tick, and only when
   // something they show has changed. A page with a live slot redraws just
   // that slot (and its subtitle).
+  // A page can say what it actually shows of the live data (liveKey), so a
+  // clock ticking elsewhere doesn't redraw it.
   const v = VIEWS[S.view];
   if (v && (v.live || v.liveSlot)) {
-    const sig = JSON.stringify(live);
+    const sig = v.liveKey ? JSON.stringify(v.liveKey(live)) : JSON.stringify(live);
     if (sig !== liveSig) {
       liveSig = sig;
       const slot = v.liveSlot && $("#liveSlot");
       if (slot) {
-        slot.innerHTML = v.liveSlot();
+        setHtml(slot, v.liveSlot());
         if (typeof v.sub === "function") $("#viewSub").textContent = v.sub() || "";
       } else rerender();
     }
   }
 }
 
+/// Replaces an element's content only when it differs, so an open panel,
+/// a text selection or a click in progress survives a tick that changed
+/// nothing on screen.
+function setHtml(el, html) {
+  if (!el || el.__html === html) return false;
+  el.innerHTML = html;
+  el.__html = html;
+  return true;
+}
+
+// One request at a time per poll: a slow reply must not be overtaken by the
+// next one and then land on top of newer data.
+let livePolling = false;
 async function pollLive() {
+  if (livePolling) return;
+  livePolling = true;
   try {
     applyLive(await invoke("get_live"));
   } catch (_) {
     /* the next tick will try again */
+  } finally {
+    livePolling = false;
   }
 }
 
+let slowPolling = false;
 async function pollSlow() {
+  if (slowPolling) return;
+  slowPolling = true;
   try {
     S.sync = await invoke("sync_status");
     S.overlayVisible = await invoke("overlay_visible");
     paintTop();
   } catch (_) {
     /* cosmetic */
+  } finally {
+    slowPolling = false;
   }
 }
 
@@ -818,7 +846,7 @@ async function installUpdate(duringMatch) {
 }
 
 act("install-update", () => {
-  if (!(S.live && S.live.live && !S.live.simulating)) return installUpdate(false);
+  if (!(S.live && (S.live.inMatch || (S.live.live && !S.live.simulating)))) return installUpdate(false);
   confirmBox({
     title: "Update during your match?",
     body: `<p>TheTracker closes for about ten seconds and reopens in the tray, without coming in front of the game.</p>
@@ -830,7 +858,8 @@ act("install-update", () => {
 
 /// A small confirm box over the page. Escape or the backdrop cancels.
 function confirmBox({ title, body, ok, then }) {
-  document.querySelector(".confirm-back")?.remove();
+  const old = document.querySelector(".confirm-back");
+  if (old && old.__close) old.__close();
   const box = document.createElement("div");
   box.className = "confirm-back";
   box.innerHTML = `<div class="confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
@@ -841,6 +870,7 @@ function confirmBox({ title, body, ok, then }) {
     box.remove();
     document.removeEventListener("keydown", onKey);
   };
+  box.__close = close;
   box.addEventListener("click", (e) => {
     const b = e.target.closest("[data-confirm]");
     if (e.target === box || (b && b.dataset.confirm === "no")) close();
