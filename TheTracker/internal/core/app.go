@@ -100,7 +100,9 @@ type App struct {
 	Ow       *Overwatch
 	Cloud    *Cloud
 	Updater  *Updater
-	Shell    Shell
+	// Ping, jitter and line use while a match runs.
+	Net   *NetCheck
+	Shell Shell
 
 	// Opens a link in the player's browser. Replaced in tests.
 	OpenURL func(string) error
@@ -129,6 +131,7 @@ func NewApp(dataDir string, shell Shell) *App {
 	a.Gsi.OnCs2 = a.Cs2.HandleUpdate
 	a.Cloud = NewCloud(store)
 	a.Updater = NewUpdater()
+	a.Net = NewNetCheck(store)
 	a.Tracker.OnSaved = func(m MatchSummary) {
 		a.Cloud.PushMatch(m)
 		a.notify(dotaNotification(m))
@@ -150,6 +153,7 @@ func (a *App) Start(manageDota bool) {
 	a.applyGames(a.Store.LoadPrefs().Games)
 	a.Cloud.Restore()
 	go a.overlayWatcher()
+	go a.netWatcher()
 	go a.backfillLoop()
 	go a.owWatch()
 }
@@ -201,6 +205,19 @@ func (a *App) SetGames(g Games) (Prefs, error) {
 func (a *App) Stop() {
 	a.StopSimulation()
 	a.Gsi.Stop()
+}
+
+// netWatcher measures the connection for as long as a match runs.
+func (a *App) netWatcher() {
+	wasLive := false
+	for {
+		time.Sleep(2 * time.Second)
+		live := a.Tracker.IsLive()
+		if live != wasLive {
+			wasLive = live
+			a.Net.SetLive(live)
+		}
+	}
 }
 
 // overlayWatcher opens the overlay when a match starts and closes it when

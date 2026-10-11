@@ -5,7 +5,7 @@ const SET = {
   diag: null, diagRunning: false, backups: null, backupPath: null, restoreArmed: null,
 };
 
-const SETTINGS_TABS = [["general", "General"], ["overlay", "Overlay"], ["account", "Account"], ["about", "About and updates"]];
+const SETTINGS_TABS = [["general", "General"], ["overlay", "Overlay"], ["network", "Connection"], ["account", "Account"], ["about", "About and updates"]];
 
 act("settings-tab", (el) => go("settings", { tab: el.dataset.tab }));
 
@@ -360,11 +360,12 @@ view("settings", {
     if (tab === "general") invoke("list_backups").then((b) => { SET.backups = b; rerender(); }).catch(() => {});
     if (tab === "about" && (!S.updateChecked || Date.now() - S.updateChecked > 60000)) checkForUpdate(true);
     if (tab === "account") pollSlow();
+    if (tab === "network") pollNet();
     return invoke("background_settings").then((bg) => { S.boot.background = bg; rerender(); }).catch(() => {});
   },
   render() {
     const tab = S.params.tab || "general";
-    const body = { general: generalHtml, overlay: overlayHtml, account: accountHtml, about: aboutHtml }[tab] || generalHtml;
+    const body = { general: generalHtml, overlay: overlayHtml, network: networkHtml, account: accountHtml, about: aboutHtml }[tab] || generalHtml;
     return `<div class="tabs" role="tablist">${SETTINGS_TABS.map(([k, l]) => `<button class="tab ${tab === k ? "on" : ""}" data-act="settings-tab" data-tab="${k}" role="tab" aria-selected="${tab === k}" type="button">${l}</button>`).join("")}</div>
       <div class="settings">${body()}</div>`;
   },

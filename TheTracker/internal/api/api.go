@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"thetracker/internal/core"
 )
@@ -441,6 +442,11 @@ func commands(a *core.App) map[string]command {
 
 		// ----- App -----
 		"check_for_update": none(func() (any, error) { return a.Updater.Check() }),
+		"net_status":       none(func() (any, error) { return a.Net.Status(), nil }),
+		"net_test": none(func() (any, error) {
+			a.Net.Test(20 * time.Second)
+			return a.Net.Status(), nil
+		}),
 		"install_update": in(func(p struct {
 			DuringMatch bool `json:"duringMatch"`
 		}) (any, error) {

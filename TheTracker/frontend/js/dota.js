@@ -599,6 +599,7 @@ function liveMatchHtml(m) {
       { label: "Gold lost to deaths", value: fmtNum(m.deaths.reduce((a, d) => a + (d.goldLost || 0), 0)), sub: known(m.gold) ? `${fmtNum(m.gold)} unspent now` : "" },
     ])}
     ${goalsHtml(live.goals)}
+    ${netBlockHtml()}
 
     <div class="cols">
       <section>
