@@ -323,7 +323,16 @@ func (a *App) Simulating() bool {
 // the camp pull from 3:45 to 3:52, the bounty and water runes into 4:00, and
 // the next pull from 4:45. Run faster, a seven-second warning was gone in
 // under two.
-func (a *App) StartSimulation(seconds int) error {
+func (a *App) StartSimulation(seconds int) error { return a.startSimulation(seconds, 12, 24) }
+
+// StartDeathTest plays a short test match where the hero dies after three
+// seconds, with a Black King Bar and the ultimate ready, so the "why you
+// died" card can be seen at once.
+func (a *App) StartDeathTest() error { return a.startSimulation(30, 3, 15) }
+
+// startSimulation runs a test match of the given length whose hero is dead
+// from second deadFrom to deadTo.
+func (a *App) startSimulation(seconds, deadFrom, deadTo int) error {
 	if a.Tracker.IsLive() && !a.Simulating() {
 		return errors.New("A real match is running. The simulator would interrupt it.")
 	}
@@ -356,6 +365,8 @@ func (a *App) StartSimulation(seconds int) error {
 			},
 			"hero": jsonMap{"name": "npc_dota_hero_juggernaut", "alive": alive, "level": float64(min(1+int(clock)/75, 30)),
 				"respawn_seconds": respawn, "buyback_cost": 600.0},
+			// An ultimate ready, so the death below can say so too.
+			"abilities": jsonMap{"ability3": jsonMap{"name": "juggernaut_omni_slash", "ultimate": true, "level": 1.0, "cooldown": 0.0, "can_cast": true}},
 			// A Black King Bar ready and gold unspent, so the death below
 			// shows what "why you died" says.
 			"items": jsonMap{
@@ -374,13 +385,13 @@ func (a *App) StartSimulation(seconds int) error {
 		for i := 0; i < seconds; i++ {
 			// One death partway through, so the gold-lost figures move and
 			// the overlay shows why.
-			dead := i >= 12 && i < 24
+			dead := i >= deadFrom && i < deadTo
 			respawn = 0
 			if dead {
-				respawn = float64(24 - i)
+				respawn = float64(deadTo - i)
 			}
 			gold := 2400
-			if i >= 12 {
+			if i >= deadFrom {
 				gold = 1700
 			}
 			send(clock, stateInProgress, !dead, gold, "none")
