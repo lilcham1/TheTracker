@@ -226,7 +226,7 @@ function statRow(entries) {
     .map(
       (e) => `<div class="stat">
         <div class="stat-label">${e.label}</div>
-        <div class="stat-value ${e.tone || ""}">${e.value}</div>
+        <div class="stat-value ${e.tone || ""}" data-count>${e.value}</div>
         ${e.sub ? `<div class="stat-sub">${e.sub}</div>` : ""}
         ${e.extra || ""}
       </div>`
@@ -503,6 +503,7 @@ function go(id, params = {}) {
     LAST_VIEW[v.game] = id;
   }
   lastHtml = null;
+  S.navAt = Date.now();
   renderNav();
   $("#viewTitle").textContent = v.title;
   rerender();
@@ -552,6 +553,7 @@ function rerender() {
     page.innerHTML = html;
     lastHtml = html;
     paintIcons(page);
+    afterRender(page);
     page.scrollTop = scroll;
     for (const [id, value] of typed) {
       const el = document.getElementById(id);
@@ -569,6 +571,99 @@ function rerender() {
       }
     }
   }, 0);
+}
+
+// ---------- Motion ----------
+//
+// Keyed to arriving at a page (go() sets S.navAt), never to a redraw from a
+// live tick or a filter: those must not make the page jump.
+
+const NAV_FRESH_MS = 800;
+
+function afterRender(page) {
+  const arriving = Date.now() - (S.navAt || 0) < NAV_FRESH_MS;
+  if (arriving && !page.classList.contains("enter")) {
+    page.classList.add("enter");
+    setTimeout(() => page.classList.remove("enter"), 900);
+  }
+  if (arriving) countUp(page);
+  slideTabs(page);
+}
+
+/// Numbers count up from zero the first time a page shows them. Only plain
+/// figures (1,234 · 52% · 3.21); times and k/M shorthand stay as they are.
+function countUp(root) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  root.querySelectorAll("[data-count]:not([data-counted])").forEach((el) => {
+    el.dataset.counted = "1";
+    const text = el.textContent.trim();
+    const m = /^([-+]?)(\d[\d,]*)(\.\d+)?(%?)$/.exec(text);
+    if (!m) return;
+    const sign = m[1], intPart = m[2], frac = m[3] || "", pct = m[4];
+    const target = Number(intPart.replace(/,/g, "") + frac);
+    if (!Number.isFinite(target) || target === 0) return;
+    const grouped = intPart.includes(",");
+    const decimals = frac ? frac.length - 1 : 0;
+    const fmt = (v) => {
+      const fixed = v.toFixed(decimals);
+      const [i, f] = fixed.split(".");
+      const ii = grouped ? Number(i).toLocaleString("en-US") : i;
+      return sign + ii + (f ? "." + f : "") + pct;
+    };
+    const start = performance.now(), dur = 450;
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = fmt(target * eased);
+      if (t < 1 && el.isConnected) requestAnimationFrame(step);
+      else el.textContent = text;
+    };
+    el.textContent = fmt(0);
+    requestAnimationFrame(step);
+    setTimeout(() => { if (el.isConnected) el.textContent = text; }, dur + 80);
+  });
+}
+
+/// One bar under the open tab, sliding there from where it was last.
+const tabInk = new Map();
+function slideTabs(root) {
+  root.querySelectorAll(".page-tabs, .tabs").forEach((bar) => {
+    const on = bar.querySelector(".on");
+    if (!on) return;
+    const key = bar.className + "|" + bar.querySelector("button")?.textContent;
+    let ink = bar.querySelector(".ink");
+    if (!ink) {
+      ink = document.createElement("i");
+      ink.className = "ink";
+      bar.appendChild(ink);
+    }
+    const to = { left: on.offsetLeft, width: on.offsetWidth };
+    const from = tabInk.get(key);
+    if (from && (from.left !== to.left || from.width !== to.width)) {
+      ink.style.transition = "none";
+      ink.style.left = from.left + "px";
+      ink.style.width = from.width + "px";
+      void ink.offsetWidth;
+      ink.style.transition = "";
+    }
+    ink.style.left = to.left + "px";
+    ink.style.width = to.width + "px";
+    tabInk.set(key, to);
+  });
+}
+
+/// The match running now, at the foot of the sidebar. Only the clock changes
+/// each second, so only the clock is rewritten.
+function paintSideLive(live) {
+  const box = $("#sideLive");
+  if (!box) return;
+  const m = live && live.current;
+  const on = !!(live && live.live && m && m.inProgress && !live.watching && S.boot && S.boot.prefs.games.dota && typeof heroName === "function");
+  if (!on) return void setHtml(box, "");
+  const html = `<button class="side-live" data-act="go" data-view="overview" type="button" title="Open the live match">${heroImgHtml(m.heroName, "portrait small")}<span class="grow"><b>${esc(heroName(m.heroName))}</b><span class="sub">Match running</span></span><span class="num clock-sm"></span></button>`;
+  setHtml(box, html);
+  const clock = box.querySelector(".clock-sm");
+  if (clock) clock.textContent = fmtClock(m.lastClockTime);
 }
 
 // ---------- Actions ----------
@@ -715,6 +810,7 @@ function applyLive(live) {
   const wasLive = S.live && S.live.live;
   S.live = live;
   paintTop();
+  paintSideLive(live);
   if (!!wasLive !== !!live.live) renderNav();
 
   // A match just ended: the session list has a new entry.

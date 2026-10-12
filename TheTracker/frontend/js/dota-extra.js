@@ -69,7 +69,7 @@ view("meta", {
         <section><div class="sec-head"><h3>Most picked</h3></div><div class="lines">${contested.map((h) => mover(h, `<span class="muted when">${pct(h.pickRate)} of games</span>`)).join("")}</div></section>
       </div>
       <div class="filters">
-        <div class="chips"><button class="chip ${META.position === "all" ? "on" : ""}" data-act="meta-set" data-axis="position" data-value="all" type="button">All roles</button>
+        <div class="chips seg"><button class="chip ${META.position === "all" ? "on" : ""}" data-act="meta-set" data-axis="position" data-value="all" type="button">All roles</button>
           ${POSITIONS.map(([k, l]) => `<button class="chip ${META.position === k ? "on" : ""}" data-act="meta-set" data-axis="position" data-value="${k}" type="button">${l} (${d.heroes.filter((h) => h.position === k).length})</button>`).join("")}</div>
         <div class="row"><input class="input" id="metaQuery" type="search" placeholder="Find a hero" value="${esc(META.query)}" data-input="meta-query" /><span class="grow"></span><span class="muted">${rows.length} heroes</span></div>
       </div>

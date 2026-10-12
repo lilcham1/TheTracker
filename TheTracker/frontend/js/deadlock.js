@@ -412,7 +412,7 @@ view("dl-matches", {
 
     return `${staleNote(dlOverview)}
       <div class="filters"><div class="row">
-        <div class="chips">${chip("all", "Any result")}${chip("win", "Wins")}${chip("loss", "Losses")}</div>
+        <div class="chips seg">${chip("all", "Any result")}${chip("win", "Wins")}${chip("loss", "Losses")}</div>
         <input class="input" id="dlHero" type="search" placeholder="Filter by hero" value="${esc(DL.heroQuery)}" data-input="dl-hero" />
         <label class="muted" for="dlLimit">Show last</label>
         <select class="input" id="dlLimit" data-change="dl-limit">${[50, 100, 200, 500].map((n) => `<option value="${n}" ${DL.limit === n ? "selected" : ""}>${n}</option>`).join("")}</select>
@@ -546,7 +546,7 @@ view("dl-meta", {
            <td class="num">${pct(h.pickRate, 1)}</td><td class="num">${h.kda.toFixed(2)}</td><td class="num">${souls(h.avgSouls)}</td><td class="num">${fmtNum(h.avgDamage)}</td></tr>`).join("")}</tbody>`;
 
     return `${staleNote(dlMeta)}
-      <div class="filters"><div class="row"><div class="chips">${tab("heroes", `Heroes (${d.heroes.length})`)}${tab("items", `Items (${d.items.length})`)}</div>
+      <div class="filters"><div class="row"><div class="chips seg">${tab("heroes", `Heroes (${d.heroes.length})`)}${tab("items", `Items (${d.items.length})`)}</div>
         <input class="input" id="dlMetaQuery" type="search" placeholder="${items ? "Find an item" : "Find a hero"}" value="${esc(DL.metaQuery)}" data-input="dlmeta-query" /></div></div>
       ${rows.length ? `<div class="table-wrap"><table class="table">${table}</table></div>` : emptyState(items ? "No item data right now" : "Nothing matches that", items ? "The Deadlock API didn't return item statistics. Try Refresh in a minute." : "")}
       <details class="about"><summary>About this data</summary><p>Computed from the community Deadlock API's public statistics. ${items ? "Popularity is how often an item is bought compared with the most-bought item." : "Picked in is the share of matches the hero appears in."}</p></details>`;

@@ -757,8 +757,8 @@ view("matches", {
 
     return `${staleNote(dHist)}
       <div class="filters">
-        <div class="chips">${chip("mode", "all", "All modes")}${[...modes].sort((a, b) => a[1].localeCompare(b[1])).map(([k, n]) => chip("mode", k, n)).join("")}</div>
-        <div class="chips">${chip("queue", "all", "Any queue")}${chip("queue", "ranked", `Ranked (${rows.filter((m) => m.ranked === true).length})`)}${chip("queue", "unranked", `Unranked (${rows.filter((m) => m.ranked === false).length})`)}
+        <div class="chips seg">${chip("mode", "all", "All modes")}${[...modes].sort((a, b) => a[1].localeCompare(b[1])).map(([k, n]) => chip("mode", k, n)).join("")}</div>
+        <div class="chips seg">${chip("queue", "all", "Any queue")}${chip("queue", "ranked", `Ranked (${rows.filter((m) => m.ranked === true).length})`)}${chip("queue", "unranked", `Unranked (${rows.filter((m) => m.ranked === false).length})`)}
           <span class="sep"></span>${chip("result", "all", "Any result")}${chip("result", "win", "Wins")}${chip("result", "loss", "Losses")}</div>
         <div class="row">
           <input class="input" id="matchHero" type="search" placeholder="Filter by hero" value="${esc(D.heroQuery)}" data-input="match-hero" />
