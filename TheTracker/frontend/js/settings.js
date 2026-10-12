@@ -87,6 +87,7 @@ function generalHtml() {
     <section class="set">
       <h3>Running in the background</h3>
       <p class="muted">TheTracker records a match only while it's running. If it's closed when you play, that game never reaches your Sessions.</p>
+      <label class="switch"><input type="checkbox" data-change="track-toggle" ${!S.live || S.live.trackingEnabled !== false ? "checked" : ""} /><span>Record my matches <span class="muted">(switch off to play without saving anything)</span></span></label>
       <label class="switch"><input type="checkbox" data-change="bg-start" ${bg.startWithWindows ? "checked" : ""} /><span>Start with Windows <span class="muted">(opens in the tray, not on screen)</span></span></label>
       <label class="switch"><input type="checkbox" data-change="bg-tray" ${bg.closeToTray ? "checked" : ""} ${bg.trayAvailable ? "" : "disabled"} /><span>Keep running in the tray when I close the window</span></label>
       <label class="switch"><input type="checkbox" data-change="bg-notify" ${bg.notify ? "checked" : ""} /><span>Tell me when a match has been saved <span class="muted">(a Windows notification, for Dota 2 and CS2)</span></span></label>
@@ -142,6 +143,10 @@ const OV_PRESETS = {
 act("ov-role-auto", () => saveOverlay({ dota: { roleMode: "auto" } }));
 act("ov-preset", (el) => saveOverlay({ dota: { roleMode: "fixed", until: { ...OV_PRESETS[el.dataset.preset] }, runes: true, bounty: true, water: true, power: true, wisdom: true, lotus: true, stacks: true, lotusLate: true } }));
 act("ov-corner", (el) => saveOverlay({ corner: el.dataset.corner }));
+onChange("track-toggle", async (el) => {
+  const live = await attempt(() => invoke("set_tracking", { enabled: el.checked }));
+  if (live) applyLive(live);
+});
 act("ov-death-test", async () => {
   if (await attempt(() => invoke("death_test_start"))) {
     await attempt(() => invoke("overlay_show"));

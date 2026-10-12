@@ -384,7 +384,7 @@ function liveSetupHtml() {
   else if (known(live.gsiAgeSecs)) rows.push(setupRow(null, "Dota is closed", `Last heard from Dota ${agoSecs(live.gsiAgeSecs)}.`));
   else if (g.installed) rows.push(setupRow(null, "Nothing from Dota yet", "Expected while Dota is closed. If Dota is open, restart it: it only reads the config when it starts."));
 
-  if (live.trackingEnabled === false) rows.push(setupRow(false, "Recording is paused", "Matches won't be saved until you press Paused in the top bar to resume."));
+  if (live.trackingEnabled === false) rows.push(setupRow(false, "Recording is paused", "Matches won't be saved until you resume: Recording paused at the top, or Settings, General."));
 
   const bg = S.boot.background;
   return `<div class="panel narrow live-setup">

@@ -605,14 +605,8 @@ act("open-url", (el) => attempt(() => invoke("open_url", { url: el.dataset.url }
 
 act("refresh", async () => {
   const v = VIEWS[S.view];
-  const btn = $("#refreshBtn");
-  btn.classList.add("busy");
-  try {
-    if (v && v.load) await v.load(true);
-    else rerender();
-  } finally {
-    btn.classList.remove("busy");
-  }
+  if (v && v.load) await v.load(true);
+  else rerender();
 });
 
 act("toggle-tracking", async () => {
@@ -647,6 +641,9 @@ function paintTop() {
   const live = S.live;
   const dota = $("#dotaPill");
   const connected = dotaConnected();
+  // Only while Dota runs (or the live feed is broken): "not running" said
+  // nothing worth a place at the top of every page.
+  dota.hidden = !(S.boot && S.boot.prefs.games.dota && (connected || (live && live.serverError)));
   dota.classList.toggle("ok", connected);
   dota.classList.toggle("bad", !!(live && live.serverError));
   $("#dotaPillText").textContent = live && live.serverError ? "Live feed down" : connected ? "Dota connected" : "Dota not running";
@@ -659,14 +656,13 @@ function paintTop() {
         ? `Dota isn't sending data. Last heard ${heard}.`
         : "Nothing from Dota since TheTracker started. Click for details.";
 
-  const track = $("#trackPill");
-  const on = !live || live.trackingEnabled;
-  track.classList.toggle("ok", on);
-  track.classList.toggle("warn", !on);
-  $("#trackPillText").textContent = on ? "Recording" : "Paused";
-  track.setAttribute("aria-pressed", String(on));
+  // Recording is the normal state; only a pause is worth showing.
+  $("#trackPill").hidden = !live || live.trackingEnabled !== false;
 
-  $("#overlayPill").classList.toggle("ok", !!S.overlayVisible);
+  // The overlay button while Dota runs, or while the overlay is up.
+  const overlay = $("#overlayPill");
+  overlay.hidden = !(connected || S.overlayVisible);
+  overlay.classList.toggle("ok", !!S.overlayVisible);
 
   const sync = S.sync;
   const line = $("#syncLine");
