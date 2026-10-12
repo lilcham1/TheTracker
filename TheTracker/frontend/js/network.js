@@ -1,5 +1,5 @@
 // Connection: ping to the router and to Valve, line use and programs online,
-// measured while a match runs or during a short test from Settings. It only
+// measured while a game is open or during a short test from Settings. It only
 // measures; nothing on the PC is changed.
 
 S.net = null;
@@ -72,7 +72,7 @@ function gameModeHtml() {
     : `<span class="check-dot idle"></span><b>Off</b>`;
   return `<section class="set">
       <h3>Game mode</h3>
-      <p class="muted">While you play (a Dota match, or Deadlock, CS2 or Overwatch open), slows other programs' <b>uploads</b> so the game's packets don't wait behind them, and marks your games' traffic as priority. Undone when you stop playing, and Windows clears it at every restart anyway. Windows can't slow downloads from your PC (Steam already pauses its own while you play), and the priority mark only helps if your router honours it. Discord and voice apps are never touched.</p>
+      <p class="muted">From the moment a game is open (Dota 2, Deadlock, CS2 or Overwatch), slows other programs' <b>uploads</b> so the game's packets don't wait behind them, and marks your games' traffic as priority. Undone when you stop playing, and Windows clears it at every restart anyway. Windows can't slow downloads from your PC (Steam already pauses its own while you play), and the priority mark only helps if your router honours it. Discord and voice apps are never touched.</p>
       <div class="net-head">${stateLine}</div>
       <div class="gm-cats">${GM.data.catalogue.map((c) => `<label class="switch"><input type="checkbox" data-change="gm-cat" data-cat="${c.id}" ${GM.picked.has(c.id) ? "checked" : ""} ${GM.busy ? "disabled" : ""} />
         <span>${esc(c.label)} <span class="muted">${c.mbps ? `(uploads capped at ${c.mbps} Mbit/s: ${esc(c.apps.join(", "))})` : "(paused for the match)"}</span></span></label>`).join("")}</div>
@@ -137,7 +137,7 @@ function netBoxHtml() {
 function networkHtml() {
   return `<section class="set">
       <h3>Connection</h3>
-      <p class="muted">While you play (a Dota match, or Deadlock, CS2 or Overwatch open), TheTracker pings your router and Valve's nearest server once a second and watches how busy your line is, then says where any lag comes from: your Wi-Fi or home network, your internet provider, or other programs using the line. It only measures; nothing on your PC is changed. It shows on Today while you play, and on Dota's Overview during a match.</p>
+      <p class="muted">From the moment a game is open (Dota 2, Deadlock, CS2 or Overwatch), TheTracker pings your router and Valve's nearest server once a second and watches how busy your line is, then says where any lag comes from: your Wi-Fi or home network, your internet provider, or other programs using the line. It only measures; nothing on your PC is changed. It shows on Today while you play, and on Dota's Overview during a match.</p>
       <div id="netBox">${netBoxHtml()}</div>
     </section>
     <section class="set">

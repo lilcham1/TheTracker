@@ -1,14 +1,16 @@
 package core
 
 // Which game the player is in right now, for the connection check and Game
-// mode, which work the same for every game. Dota counts from the moment a
-// match runs (its live feed says so); the others have no feed TheTracker can
-// read for that, so they count while the game is open.
+// mode, which work the same for every game: a game counts from the moment
+// its program is open, so the check and the priority mark are on before the
+// first match starts. Dota also counts while its live feed says a match
+// runs, which covers the moment between a restart and the process scan.
 
 import "strings"
 
 // gameProcesses are each game's program, without ".exe".
 var gameProcesses = []struct{ id, name, process string }{
+	{"dota", "Dota 2", "dota2"},
 	{"deadlock", "Deadlock", "project8"},
 	{"cs2", "Counter-Strike 2", "cs2"},
 	{"overwatch", "Overwatch", "Overwatch"},
@@ -27,7 +29,7 @@ func (a *App) activeGame() string {
 	if games.Dota && a.Tracker.IsLive() {
 		return "Dota 2"
 	}
-	on := map[string]bool{"deadlock": games.Deadlock, "cs2": games.CS2, "overwatch": games.Overwatch}
+	on := map[string]bool{"dota": games.Dota, "deadlock": games.Deadlock, "cs2": games.CS2, "overwatch": games.Overwatch}
 	var running map[uint32]string
 	for _, g := range gameProcesses {
 		if !on[g.id] {

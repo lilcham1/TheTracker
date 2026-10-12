@@ -25,11 +25,13 @@ func TestActiveGame(t *testing.T) {
 	if g := a.activeGame(); g != "Overwatch" {
 		t.Fatalf("Overwatch open: %q", g)
 	}
-	// Dota counts only during a match, not with the game merely open.
+	// Dota counts from launch, like the others, and during a match even
+	// before the process scan sees it.
 	running = map[uint32]string{13: "dota2"}
-	if g := a.activeGame(); g != "" {
-		t.Fatalf("Dota open without a match: %q", g)
+	if g := a.activeGame(); g != "Dota 2" {
+		t.Fatalf("Dota open: %q", g)
 	}
+	running = map[uint32]string{}
 	a.Tracker.HandleUpdate(jsonMap{
 		"map":    jsonMap{"matchid": "5", "clock_time": 100.0, "game_state": stateInProgress},
 		"player": jsonMap{"activity": "playing"},
