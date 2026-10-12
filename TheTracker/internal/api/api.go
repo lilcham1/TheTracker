@@ -58,6 +58,7 @@ type Boot struct {
 	DotaLink   core.Link               `json:"dotaLink"`
 	DlLink     core.Link               `json:"deadlockLink"`
 	OwLink     core.OwLink             `json:"overwatchLink"`
+	PubgLink   core.PubgLink           `json:"pubgLink"`
 	Auth       core.AuthState          `json:"auth"`
 	Background core.BackgroundSettings `json:"background"`
 	Gsi        core.GsiStatus          `json:"gsi"`
@@ -126,7 +127,7 @@ func commands(a *core.App) map[string]command {
 		"boot": none(func() (any, error) {
 			return Boot{
 				Version: core.Version, Prefs: s.LoadPrefs(), Profile: s.LoadProfile(),
-				DotaLink: s.LoadLink("dota"), DlLink: s.LoadLink("deadlock"), OwLink: a.Ow.Link(), Auth: a.Cloud.Auth(),
+				DotaLink: s.LoadLink("dota"), DlLink: s.LoadLink("deadlock"), OwLink: a.Ow.Link(), PubgLink: a.Pubg.Link(), Auth: a.Cloud.Auth(),
 				Background: a.Background(), Gsi: a.Gsi.Status(), Overlay: a.Shell.OverlayVisible(),
 				DataDir: s.Dir, ExportDir: core.ExportDir(), Coach: a.CoachUnlocked(),
 			}, nil
@@ -376,6 +377,22 @@ func commands(a *core.App) map[string]command {
 			return l, a.Ow.SetLink(l)
 		}),
 		"ow_unlink": none(func() (any, error) { return core.OwLink{}, a.Ow.SetLink(core.OwLink{}) }),
+
+		// ----- PUBG -----
+		"pubg_search": in(func(p struct {
+			Name  string `json:"name"`
+			Shard string `json:"shard"`
+		}) (any, error) {
+			return a.Pubg.Search(p.Name, p.Shard)
+		}),
+		"pubg_link": in(func(l core.PubgLink) (any, error) {
+			if l.AccountID == "" {
+				return nil, errors.New("That account has no id.")
+			}
+			return l, a.Pubg.SetLink(l)
+		}),
+		"pubg_unlink":   none(func() (any, error) { return core.PubgLink{}, a.Pubg.SetLink(core.PubgLink{}) }),
+		"pubg_overview": in(func(p forceArg) (any, error) { return a.Pubg.Overview(p.Force) }),
 		"ow_meta": in(func(p struct {
 			Mode     string `json:"mode"`
 			Region   string `json:"region"`

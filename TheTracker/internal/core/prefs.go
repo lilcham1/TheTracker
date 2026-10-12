@@ -128,6 +128,7 @@ type Games struct {
 	Deadlock  bool `json:"deadlock"`
 	CS2       bool `json:"cs2"`
 	Overwatch bool `json:"overwatch"`
+	PUBG      bool `json:"pubg"`
 	// False until the player has answered the first-run question.
 	Chosen bool `json:"chosen"`
 }

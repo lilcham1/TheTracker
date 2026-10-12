@@ -419,7 +419,7 @@ function gate(r, loadingText) {
 // ---------- Views and navigation ----------
 
 const VIEWS = {};
-const NAV = { dota: [], deadlock: [], cs2: [], overwatch: [] };
+const NAV = { dota: [], deadlock: [], cs2: [], overwatch: [], pubg: [] };
 
 /// Registers a page. `render` returns HTML for the current state; `load`
 /// starts whatever it needs and is called on entry and on Refresh.
@@ -479,8 +479,9 @@ const GAMES = {
   deadlock: { label: "Deadlock", home: "dl-overview" },
   cs2: { label: "CS2", home: "cs-overview" },
   overwatch: { label: "Overwatch", home: "ow-overview" },
+  pubg: { label: "PUBG", home: "pg-overview" },
 };
-const LAST_VIEW = { dota: "overview", deadlock: "dl-overview", cs2: "cs-overview", overwatch: "ow-overview" };
+const LAST_VIEW = { dota: "overview", deadlock: "dl-overview", cs2: "cs-overview", overwatch: "ow-overview", pubg: "pg-overview" };
 
 function enabledGames() {
   const g = (S.boot && S.boot.prefs.games) || {};

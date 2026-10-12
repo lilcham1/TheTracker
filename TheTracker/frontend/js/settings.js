@@ -8,7 +8,7 @@ const SET = {
 // One settings page for the whole app: what applies everywhere, then a
 // section for each game that is switched on.
 const SETTINGS_TABS = [["general", "General"], ["network", "Connection"], ["account", "Account"], ["about", "About and updates"]];
-const SETTINGS_GAME_TABS = [["dota", "Dota 2"], ["deadlock", "Deadlock"], ["cs2", "Counter-Strike 2"], ["overwatch", "Overwatch"]];
+const SETTINGS_GAME_TABS = [["dota", "Dota 2"], ["deadlock", "Deadlock"], ["cs2", "Counter-Strike 2"], ["overwatch", "Overwatch"], ["pubg", "PUBG"]];
 // Older links name the tab that used to hold the overlay.
 const SETTINGS_ALIASES = { overlay: "dota" };
 
@@ -88,6 +88,7 @@ function generalHtml() {
       ${gameRow("deadlock", "Deadlock", "match history and meta")}
       ${gameRow("cs2", "Counter-Strike 2", "live tracking of your own matches")}
       ${gameRow("overwatch", "Overwatch", "career stats and progress from your public profile")}
+      ${gameRow("pubg", "PUBG", "matches, placements and season stats from PUBG's official API")}
     </section>
     <section class="set">
       <h3>Running in the background</h3>
@@ -477,7 +478,7 @@ view("settings", {
     const tab = settingsTab();
     const body = {
       general: generalHtml, network: networkHtml, account: accountHtml, about: aboutHtml,
-      dota: dotaSettingsHtml, deadlock: deadlockSettingsHtml, cs2: cs2SettingsHtml, overwatch: overwatchSettingsHtml,
+      dota: dotaSettingsHtml, deadlock: deadlockSettingsHtml, cs2: cs2SettingsHtml, overwatch: overwatchSettingsHtml, pubg: pgSettingsHtml,
     }[tab] || generalHtml;
     const tabBtn = ([k, l]) => `<button class="tab ${tab === k ? "on" : ""}" data-act="settings-tab" data-tab="${k}" role="tab" aria-selected="${tab === k}" type="button">${l}</button>`;
     const games = SETTINGS_GAME_TABS.filter(([k]) => S.boot.prefs.games[k]);

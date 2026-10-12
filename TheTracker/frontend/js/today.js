@@ -4,7 +4,7 @@
 
 const owProgressAll = resource("owProgressAll", "ow_progress", { args: () => ({ mode: "all" }), ttl: 60000 });
 
-const GAME_NAMES = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2", overwatch: "Overwatch" };
+const GAME_NAMES = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2", overwatch: "Overwatch", pubg: "PUBG" };
 
 function dayStart(daysAgo = 0) {
   const d = new Date();
@@ -29,6 +29,11 @@ function todayFeed(game) {
     if (!dlLinked()) return "Connect Steam to see your Deadlock matches.";
     if (!dlOverview.data) return dlOverview.error ? [] : null;
     return dlOverview.data.matches.map((m) => ({ t: m.startTime + m.durationSeconds, won: m.outcome === "win" ? true : m.outcome === "loss" ? false : null, title: m.heroName, detail: `${m.kills}/${m.deaths}/${m.assists}` }));
+  }
+  if (game === "pubg") {
+    if (!pgLinked()) return "Connect your PUBG account to see your matches.";
+    if (!pgOverview.data) return pgOverview.error ? [] : null;
+    return pgOverview.data.matches.filter((m) => !m.custom).map((m) => ({ t: m.startTime + m.duration, won: null, place: m.place, top10: m.place <= 10, title: `${m.map} #${m.place}/${m.teams}`, detail: `${m.kills} kills, ${Math.round(m.damage)} damage` }));
   }
   if (game === "cs2") {
     return [...CS.history].reverse().map((m) => ({ t: Date.parse(m.date) / 1000, won: csWon(m), title: `${csMapName(m.map)} ${m.myScore} : ${m.theirScore}`, detail: `${m.kills}/${m.deaths}/${m.assists}` }));
@@ -59,6 +64,23 @@ function todayTotals(game) {
 }
 
 function todayCardBody(game) {
+  if (game === "pubg") {
+    const rows = todayFeed(game);
+    if (typeof rows === "string") return `<p class="muted">${rows}</p>`;
+    if (rows === null) return `<p class="muted">Loading…</p>`;
+    if (!rows.length) return `<p class="muted">No matches in the last 14 days.</p>`;
+    const span = (since) => {
+      const rs = rows.filter((r) => r.t >= since);
+      return { n: rs.length, dinners: rs.filter((r) => r.place === 1).length, top10: rs.filter((r) => r.top10).length, best: rs.length ? Math.min(...rs.map((r) => r.place)) : null };
+    };
+    const day = span(dayStart()), week = span(dayStart(6)), last = rows[0];
+    const line = (s) => (s.n ? `${s.n} match${s.n === 1 ? "" : "es"}` : `<span class="muted">–</span>`);
+    return `<div class="today-nums">
+        <div><span class="muted">Today</span><b class="display">${line(day)}</b><span class="muted">${day.n ? `best #${day.best}` : ""}</span></div>
+        <div><span class="muted">Last 7 days</span><b class="display">${line(week)}</b><span class="muted">${week.n ? `${week.dinners} dinner${week.dinners === 1 ? "" : "s"}, ${week.top10} top 10` : ""}</span></div>
+      </div>
+      <p class="today-last">Last: <b>${esc(last.title)}</b> ${esc(last.detail)}, ${ago(last.t)}</p>`;
+  }
   if (game === "overwatch") {
     if (!owLinked()) return `<p class="muted">Connect your Battle.net profile to follow your Overwatch career.</p>`;
     const p = owProgressAll.data;
@@ -102,6 +124,7 @@ view("today", {
     if (g.deadlock && dlLinked()) dlOverview.load(force);
     if (g.cs2) csLoad();
     if (g.overwatch && owLinked()) owOverview.load(force).then(() => owProgressAll.load(true));
+    if (g.pubg && pgLinked()) pgOverview.load(force);
     // What to work on: built from the last ten matches, cached for a while.
     if (g.dota && dotaLinked()) workOnRes.dota.load();
     if (g.deadlock && dlLinked()) workOnRes.deadlock.load();

@@ -98,6 +98,7 @@ type App struct {
 	Deadlock *Deadlock
 	Cs2      *Cs2
 	Ow       *Overwatch
+	Pubg     *Pubg
 	Cloud    *Cloud
 	Updater  *Updater
 	// Ping, jitter and line use while a match runs.
@@ -132,6 +133,7 @@ func NewApp(dataDir string, shell Shell) *App {
 	a.Ow = NewOverwatch(store)
 	a.Gsi.OnCs2 = a.Cs2.HandleUpdate
 	a.Cloud = NewCloud(store)
+	a.Pubg = NewPubg(store, a.Cloud)
 	a.Updater = NewUpdater()
 	a.Net = NewNetCheck(store)
 	a.GameMode = NewGameMode(store)
@@ -202,7 +204,7 @@ func (a *App) applyGames(g Games) {
 // SetGames records which games the player uses and applies it at once. At
 // least one stays on: an app with no game has nothing to show.
 func (a *App) SetGames(g Games) (Prefs, error) {
-	if !g.Dota && !g.Deadlock && !g.CS2 && !g.Overwatch {
+	if !g.Dota && !g.Deadlock && !g.CS2 && !g.Overwatch && !g.PUBG {
 		return a.Store.LoadPrefs(), errors.New("Keep at least one game switched on.")
 	}
 	g.Chosen = true
@@ -218,7 +220,7 @@ func (a *App) Stop() {
 }
 
 // netWatcher measures the connection, and runs Game mode, while the player
-// is in a game: a Dota match, or Deadlock, CS2 or Overwatch open.
+// is in a game: Dota 2, Deadlock, CS2, Overwatch or PUBG open.
 func (a *App) netWatcher() {
 	wasLive := false
 	for {

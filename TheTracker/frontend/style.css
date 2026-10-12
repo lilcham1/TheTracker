@@ -873,3 +873,15 @@ kbd { border-radius: 3px; }
 .coach-praise { display: flex; gap: 8px; align-items: baseline; margin-top: 10px; color: var(--text-2); }
 .coach-note { color: var(--text); }
 .rev-facts { margin-top: 8px; }
+
+/* PUBG: the game's own amber. */
+.shell[data-game="pubg"] { --accent: #f2a900; --accent-ink: #1c1400; --accent-soft: rgba(242, 169, 0, .14); }
+.game-card[data-theme="pubg"] { --card: #f2a900; }
+.today-card[data-theme="pubg"] { --card: #f2a900; }
+.pg-rank { min-width: 74px; white-space: nowrap; font-family: var(--display); font-variant-numeric: tabular-nums; }
+.pg-place { font-size: 18px; font-weight: 700; }
+.pg-place.win { color: var(--accent); }
+.pg-place.top { color: var(--text); }
+.pg-detail { margin: 2px 0 8px 14px; padding: 10px 14px; border-left: 2px solid var(--accent-soft); }
+.pg-detail .mini tr.me td { color: var(--accent); }
+.pg-detail p { margin-top: 8px; }

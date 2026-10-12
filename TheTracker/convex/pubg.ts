@@ -1,0 +1,58 @@
+import { action } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { v } from "convex/values";
+
+/**
+ * PUBG's official API, for the app's PUBG pages. PUBG requires its key to
+ * stay on a server ("your API key should never be stored client side"), so
+ * the call is made here with the key the deployment's owner sets once:
+ *
+ *   npx convex env set --prod PUBG_API_KEY <key from developer.pubg.com>
+ *
+ * Only the reads the app needs pass through (player lookup, seasons, season
+ * and ranked stats, matches), and the rate-limited ones are cached, since a
+ * free key allows 10 requests a minute for everyone together. Without the
+ * key the action answers { ok: false, reason: "not_set_up" }.
+ */
+
+const SHARD = "(steam|kakao|psn|xbox|console)";
+const ACCOUNT = "account\\.[0-9a-f]{32}";
+// Path pattern, and how long its answer is kept (seconds; 0: not kept).
+const ROUTES: [RegExp, number][] = [
+  [new RegExp(`^/shards/${SHARD}/players\\?filter\\[playerNames\\]=[^&#]{1,64}$`), 300],
+  [new RegExp(`^/shards/${SHARD}/players/${ACCOUNT}$`), 120],
+  [new RegExp(`^/shards/${SHARD}/seasons$`), 86400],
+  [new RegExp(`^/shards/${SHARD}/players/${ACCOUNT}/seasons/(division\\.[a-z0-9.\\-]{1,60}|lifetime)(/ranked)?$`), 600],
+  // Matches aren't rate-limited and never change; the app keeps them itself.
+  [new RegExp(`^/shards/${SHARD}/matches/[0-9a-f\\-]{36}$`), 0],
+];
+
+type Result = { ok: true; data: unknown } | { ok: false; reason: string };
+
+export const get = action({
+  args: { path: v.string() },
+  handler: async (ctx, { path }): Promise<Result> => {
+    const route = ROUTES.find(([re]) => re.test(path));
+    if (!route) return { ok: false, reason: "not_allowed" };
+    const key = process.env.PUBG_API_KEY;
+    if (!key) return { ok: false, reason: "not_set_up" };
+    const ttl = route[1];
+    const cacheKey = `pubg:${path}`;
+    if (ttl > 0) {
+      const cached = await ctx.runQuery(internal.twitch.getKv, { key: cacheKey });
+      if (cached && cached.expires > Date.now()) return { ok: true, data: JSON.parse(cached.value) };
+    }
+    const r = await fetch(`https://api.pubg.com${path}`, {
+      headers: { Authorization: `Bearer ${key}`, Accept: "application/vnd.api+json" },
+    });
+    if (r.status === 404) return { ok: false, reason: "not_found" };
+    if (r.status === 429) return { ok: false, reason: "rate_limited" };
+    if (r.status === 401) return { ok: false, reason: "bad_key" };
+    if (!r.ok) return { ok: false, reason: `http_${r.status}` };
+    const data = await r.json();
+    if (ttl > 0) {
+      await ctx.runMutation(internal.twitch.setKv, { key: cacheKey, value: JSON.stringify(data), expires: Date.now() + ttl * 1000 });
+    }
+    return { ok: true, data };
+  },
+});

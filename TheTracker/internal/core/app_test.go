@@ -200,7 +200,9 @@ type fakeConvex struct {
 	// What the Twitch streams function answers; nil means the deployment
 	// predates it.
 	twitch map[string]any
-	srv    *httptest.Server
+	// What pubg:get answers, by path; nil means the deployment predates it.
+	pubg map[string]any
+	srv  *httptest.Server
 }
 
 func newFakeConvex(t *testing.T) *fakeConvex {
@@ -212,7 +214,7 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 		f.mu.Lock()
 		f.calls = append(f.calls, body)
 		f.tokens = append(f.tokens, r.Header.Get("Authorization"))
-		expire, steamMode, twitch := f.expireJWT, f.steamMode, f.twitch
+		expire, steamMode, twitch, pubg := f.expireJWT, f.steamMode, f.twitch, f.pubg
 		f.mu.Unlock()
 
 		reply := func(v any) { json.NewEncoder(w).Encode(map[string]any{"status": "success", "value": v}) }
@@ -246,6 +248,17 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 			}
 			reply(map[string]any{"tokens": map[string]any{"token": "jwt-1", "refreshToken": "refresh-1"}})
 
+		case "pubg:get":
+			if pubg == nil {
+				fail("[Request ID: 1] Server Error")
+				return
+			}
+			path, _ := args["path"].(string)
+			if v, ok := pubg[path]; ok {
+				reply(map[string]any{"ok": true, "data": v})
+				return
+			}
+			reply(map[string]any{"ok": false, "reason": "not_found"})
 		case "twitch:deadlockStreams", "twitch:streams":
 			if twitch == nil {
 				fail("Could not find public function for 'twitch:deadlockStreams'")
