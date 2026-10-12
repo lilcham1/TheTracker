@@ -6,7 +6,7 @@
 const PRESETS = {};
 
 function presetState(game) {
-  if (!PRESETS[game]) PRESETS[game] = { data: null, error: null, loading: false, busy: false, skip: new Set(), open: new Set(), showSame: new Set(), showSameKeys: false };
+  if (!PRESETS[game]) PRESETS[game] = { data: null, error: null, loading: false, busy: false, skip: new Set(), open: new Set(), showSame: new Set(), showSameKeys: false, layout: "" };
   return PRESETS[game];
 }
 
@@ -17,7 +17,8 @@ async function loadPreset(game, force = false) {
   p.loading = true;
   p.error = null;
   try {
-    p.data = await invoke("presets_preview", { game });
+    p.data = await invoke("presets_preview", { game, layout: p.layout });
+    p.layout = p.data.layout;
   } catch (e) {
     p.error = e.message || String(e);
   }
@@ -29,6 +30,16 @@ const PRESET_GROUPS = ["Video", "Audio", "Gameplay", "Visibility"];
 const PRESET_GROUP_LABEL = { Video: "Video", Audio: "Audio", Gameplay: "Gameplay", Visibility: "Visibility & accessibility" };
 const PRESET_GAME = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2" };
 const HOTKEY_VIEW = { dota: "hotkeys", deadlock: "dl-hotkeys", cs2: "cs-hotkeys" };
+const PRESET_INTRO = {
+  dota: "What the pros run: borderless at native resolution with the effects stripped (ambient occlusion, bloom, fog, tree wind and anti-aliasing off, textures high, shadows medium), a fast camera (Yatoro 6193, Miracle 7572), camera zoom and screen shake off, teleports and channels that need a Stop to cancel, music off, an extra-large minimap with hero icons on Alt.",
+  deadlock: "What the pros run: fullscreen, anti-aliasing, both ambient occlusions, blur, blooms, area lights and depth of field off (MikaelS, Lefaa), fog low, shadows medium so enemies still cast them, field of view 90, zoom and vertical scaling 1, hold to zoom and crouch, reduced camera shake and flashing.",
+  cs2: "What the pros run: fullscreen, V-sync and FSR off, HDR quality, global shadows high with dynamic shadows on everything, model, shader and particle detail low, ambient occlusion off (ZywOo, donk, NiKo, m0NESY, ropz, b1t), the 68 / 2.5 / 0 / -1.5 viewmodel all six share, donk's crosshair, the centred rotating radar every listed pro keeps, and the guide's audio mix with music and round stingers off.",
+};
+const PRESET_SOURCES = {
+  dota: "Sources: prosettings.net Dota 2 pro list and options guide; gamingcfg.com configs (Yatoro, miCKe, Puppey, Topson, Miracle-); hawk.live and winio.ai on Yatoro; cyberscore.live and esports.gg option guides; a shared pro autoexec for the minimap size.",
+  deadlock: "Sources: prosettings.net player pages (MikaelS, Lefaa, Hydration, Surefour, Recrent) and options guide; Dexerto and BLAST settings guides; deadlocklabs.gg crosshairs.",
+  cs2: "Sources: prosettings.net player pages (ZywOo, donk, NiKo, m0NESY, ropz) and options guide; white.market's six-player video table; favade.org radar reference.",
+};
 
 const isHotkey = (l) => l.group === "Hotkeys";
 
@@ -60,6 +71,13 @@ function presetBackupText(d) {
 
 // ---------- Settings card: video, audio, gameplay, visibility ----------
 
+/// Who the value comes from, as a small chip.
+function srcChip(source) {
+  if (!source) return "";
+  const mine = source === "my pick";
+  return `<span class="ptag src ${mine ? "mine" : ""}" title="${mine ? "No pro data found for this line; this app's own judgement" : "Who uses this value"}">${esc(source)}</span>`;
+}
+
 function presetValueText(v) {
   return v === "" ? "—" : v;
 }
@@ -70,7 +88,7 @@ function presetLineHtml(game, l, p) {
   const target = l.remove ? `<span class="muted">removed</span>` : `<code>${esc(presetValueText(l.value))}</code>`;
   return `<label class="switch preset-line ${l.changed ? "" : "same"}">
     <input type="checkbox" data-change="preset-line" data-game="${game}" data-id="${esc(l.id)}" ${on ? "checked" : ""} ${p.busy || !l.changed ? "disabled" : ""} />
-    <span class="grow"><span>${esc(l.label)}</span>${l.note ? `<span class="muted"> ${esc(l.note)}</span>` : ""}${l.present ? "" : `<span class="ptag">new</span>`}</span>
+    <span class="grow"><span>${esc(l.label)}</span>${srcChip(l.source)}${l.note ? `<span class="muted"> ${esc(l.note)}</span>` : ""}${l.present ? "" : `<span class="ptag">new</span>`}</span>
     <span class="preset-vals">${l.changed ? `${current} <span class="muted">→</span> ${target}` : `<span class="muted">already ${target}</span>`}</span>
   </label>`;
 }
@@ -98,7 +116,7 @@ function presetGroupHtml(game, group, lines, p) {
 function presetsHtml(game) {
   const p = presetState(game);
   const name = PRESET_GAME[game] || game;
-  const intro = `<p class="muted">The settings the competitive players use, tuned for comfort and visibility: a clean picture with the effects that hide things turned off, game sounds over music, and the client behaviour pros rely on. Every line is shown against what you have now, so you can untick anything you'd rather keep. Your files are backed up first and one click puts them back. The keyboard layout is on the <button class="link" data-act="go" data-view="${HOTKEY_VIEW[game]}" type="button">Hotkeys</button> page.</p>`;
+  const intro = `<p class="muted">${PRESET_INTRO[game]} Each line names who uses the value: a pro's published settings, the settings guides, or <span class="ptag src mine">my pick</span> where no pro data was found. Every line is shown against what you have now, so you can untick anything you'd rather keep. Your files are backed up first and one click puts them back. The keyboard layout is on the <button class="link" data-act="go" data-view="${HOTKEY_VIEW[game]}" type="button">Hotkeys</button> page.</p>`;
   if (!p.data && !p.error && !p.loading) setTimeout(() => loadPreset(game), 0);
   if (!p.data) {
     return `<section class="set"><h3>Pro settings</h3>${intro}${p.error ? `<div class="note err">${esc(p.error)}</div><button class="btn ghost" data-act="preset-reload" data-game="${game}" type="button">Try again</button>` : `<p class="muted">Reading your ${esc(name)} settings…</p>`}</section>`;
@@ -120,6 +138,7 @@ function presetsHtml(game) {
       <button class="btn ghost" data-act="preset-reload" data-game="${game}" type="button" ${p.busy ? "disabled" : ""}>Re-read</button>
     </div>
     <p class="hint">Files: ${files}. Lines marked <span class="ptag">new</span> aren't in your file yet; the game reads them the same way. ${presetBackupText(d)}</p>
+    <p class="hint">${PRESET_SOURCES[game]}</p>
   </section>`;
 }
 
@@ -144,6 +163,10 @@ const modeWord = (v) => (v === "1" ? "quick cast" : v === "0" ? "normal cast" : 
 
 /// One row per in-game action, built from its Key / Modifier / Mode lines.
 function hotkeyRowHtml(game, action, lines, p) {
+  if (lines[0].info) {
+    const l = lines[0];
+    return `<div class="hk-row info"><span class="hk-label">${esc(l.label)}${srcChip(l.source)}<span class="muted small"> ${esc(l.note || "")}</span></span><span class="hk-keys">${esc(l.value)}</span></div>`;
+  }
   const changed = lines.some((l) => l.changed);
   const on = lines.every((l) => !p.skip.has(l.id));
   const byLast = {};
@@ -178,13 +201,13 @@ function hotkeyRowHtml(game, action, lines, p) {
   const same = !changed;
   return `<label class="switch hk-row ${same ? "same" : ""}">
     <input type="checkbox" data-change="preset-action" data-game="${game}" data-ids="${esc(lines.map((l) => l.id).join("|"))}" ${on ? "checked" : ""} ${p.busy || same ? "disabled" : ""} />
-    <span class="hk-label">${esc(label)}${key && !key.present ? `<span class="ptag">new</span>` : ""}</span>
+    <span class="hk-label">${esc(label)}${srcChip((key || lines[0]).source)}${key && !key.present ? `<span class="ptag">new</span>` : ""}</span>
     <span class="hk-keys">${same ? target : `${current} <span class="muted">→</span> ${target}`}${extra}</span>
   </label>`;
 }
 
 function hotkeySectionHtml(game, section, actions, p) {
-  const rows = actions.map(([action, lines]) => ({ action, lines, changed: lines.some((l) => l.changed) }));
+  const rows = actions.map(([action, lines]) => ({ action, lines, changed: lines.some((l) => l.changed) || lines[0].info }));
   const changing = rows.filter((r) => r.changed);
   const same = rows.length - changing.length;
   const show = p.showSameKeys;
@@ -198,10 +221,10 @@ function hotkeysHtml(game) {
   const p = presetState(game);
   const name = PRESET_GAME[game] || game;
   const intro = game === "dota"
-    ? `<p class="muted">The layout most pros play on: abilities on <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>R</kbd>, items on <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd> <kbd>B</kbd> <kbd>N</kbd>, teleport on <kbd>T</kbd>, neutral item on <kbd>G</kbd>, control groups on the number row, quick cast everywhere except the aimed items (Blink, Force Staff, Euls and the like stay on normal cast, since a mis-aimed one is a death). Untick any row to keep your own key.</p>`
+    ? `<p class="muted">Pros don't share one Dota layout, so pick a named one. Each row names who plays it; rows tagged <span class="ptag src mine">my pick</span> fill a gap the research couldn't (Yatoro's control groups, for one). Untick any row to keep your own key.</p>`
     : game === "deadlock"
-    ? `<p class="muted">Melee on <kbd>Q</kbd>, items on <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd>, quick-buy on <kbd>B</kbd>, hold-to-crouch on <kbd>Ctrl</kbd>, pings on the mouse side buttons, abilities and items on quick cast. Untick any row to keep your own key.</p>`
-    : `<p class="muted">The standard competitive binds: jump on the wheel, grenades on <kbd>F</kbd> <kbd>C</kbd> <kbd>X</kbd> <kbd>Z</kbd>, knife on <kbd>T</kbd>, buy on <kbd>B</kbd>, push to talk on <kbd>V</kbd>, ping on <kbd>Mouse 4</kbd>. Untick any row to keep your own key.</p>`;
+    ? `<p class="muted">Every listed pro keeps abilities on <kbd>1</kbd>–<kbd>4</kbd>, parry on <kbd>F</kbd>, cancel on <kbd>Space</kbd>, self-cast on <kbd>Mouse 3</kbd>, dash on <kbd>Shift</kbd> and crouch held on <kbd>Ctrl</kbd>; they differ on where the items and melee go, so pick a player. Untick any row to keep your own key.</p>`
+    : `<p class="muted">CS2 pros don't publish their binds, so these follow the prosettings.net guide: each grenade on its own key, jump on the wheel, and the rest tagged <span class="ptag src mine">my pick</span>. Untick any row to keep your own key.</p>`;
   if (!p.data) {
     if (!p.error && !p.loading) setTimeout(() => loadPreset(game), 0);
     return `<section class="set">${intro}${p.error ? `<div class="note err">${esc(p.error)}</div><button class="btn ghost" data-act="preset-reload" data-game="${game}" type="button">Try again</button>` : loadingState(`Reading your ${name} keys…`)}</section>`;
@@ -217,8 +240,11 @@ function hotkeysHtml(game) {
   }
   const changes = d.lines.filter((l) => l.changed && isHotkey(l)).length;
   const picked = presetPicked(game, "hotkeys").length;
-  const status = d.canApply && changes === 0 ? `<span class="check-dot ok"></span><b>You're on the pro layout</b>` : presetStatusHtml(d, name);
-  return `<section class="set">${intro}
+  const status = d.canApply && changes === 0 ? `<span class="check-dot ok"></span><b>You're on this layout</b>` : presetStatusHtml(d, name);
+  const cur = (d.layouts || []).find((l) => l.id === d.layout) || {};
+  const picker = (d.layouts || []).length > 1 ? `<div class="chips seg">${d.layouts.map((l) => `<button class="chip ${l.id === d.layout ? "on" : ""}" data-act="preset-layout" data-game="${game}" data-layout="${l.id}" type="button" ${p.busy ? "disabled" : ""}>${esc(l.label)}</button>`).join("")}</div>
+    <p class="muted small"><b>${esc(cur.label || "")}</b> <span class="muted">${esc(cur.by || "")}.</span> ${esc(cur.desc || "")}</p>` : `<p class="muted small">${esc(cur.desc || "")}</p>`;
+  return `<section class="set">${intro}${picker}
     <div class="net-head">${status}</div>
     ${p.error ? `<div class="note err">${esc(p.error)}</div>` : ""}
     <div class="row wrap">
@@ -228,6 +254,7 @@ function hotkeysHtml(game) {
       <label class="switch inline"><input type="checkbox" data-change="preset-show-same" data-game="${game}" ${p.showSameKeys ? "checked" : ""} /><span>Show keys already set</span></label>
     </div>
     <p class="hint">Keys are read from your ${esc(name)} key file${d.files.some((f) => f.kind === "keys" && f.cloud) ? " (Steam cloud)" : ""} and written there with the game closed. ${presetBackupText(d)}</p>
+    <p class="hint">${PRESET_SOURCES[game]}</p>
   </section>
   <div class="hk-grid">${[...sections].map(([s, acts]) => hotkeySectionHtml(game, s, [...acts], p)).join("")}</div>`;
 }
@@ -278,6 +305,16 @@ act("preset-same", (el) => {
   else p.showSame.add(el.dataset.group);
   rerender();
 });
+act("preset-layout", (el) => {
+  const p = presetState(el.dataset.game);
+  if (p.busy || p.layout === el.dataset.layout) return;
+  p.layout = el.dataset.layout;
+  p.skip.clear();
+  p.error = null;
+  p.data = null;
+  rerender();
+  loadPreset(el.dataset.game);
+});
 act("preset-reload", (el) => {
   const p = presetState(el.dataset.game);
   p.error = null;
@@ -302,7 +339,7 @@ act("preset-apply", (el) => {
       p.error = null;
       rerender();
       try {
-        p.data = await invoke("presets_apply", { game, skip: presetSkipFor(game, scope) });
+        p.data = await invoke("presets_apply", { game, layout: p.layout, skip: presetSkipFor(game, scope) });
         toast(scope === "hotkeys" ? `${name} is on the pro layout. Start the game to use it.` : `${name} is on the preset. Start the game to see it.`);
       } catch (e) {
         p.error = e.message || String(e);
@@ -325,7 +362,7 @@ act("preset-restore", (el) => {
       p.error = null;
       rerender();
       try {
-        p.data = await invoke("presets_restore", { game });
+        p.data = await invoke("presets_restore", { game, layout: p.layout });
         toast(`${name} settings restored.`);
       } catch (e) {
         p.error = e.message || String(e);

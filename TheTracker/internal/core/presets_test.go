@@ -83,10 +83,18 @@ func fakePresetSteam(t *testing.T, a *App, game string) map[string]string {
 
 func TestPresetsApplyThenRestoreExactly(t *testing.T) {
 	for _, game := range []string{"dota", "deadlock", "cs2"} {
-		t.Run(game, func(t *testing.T) {
+		for _, layout := range presetLayouts[game] {
+			t.Run(game+"/"+layout.ID, func(t *testing.T) { presetRoundTrip(t, game, layout.ID) })
+		}
+	}
+}
+
+func presetRoundTrip(t *testing.T, game, layout string) {
+	{
+		{
 			a := newTestApp(t)
 			before := fakePresetSteam(t, a, game)
-			p, err := a.PresetPreview(game)
+			p, err := a.PresetPreview(game, layout)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -98,8 +106,20 @@ func TestPresetsApplyThenRestoreExactly(t *testing.T) {
 			for _, f := range p.Files {
 				kinds[f.Kind] = true
 			}
+			if p.Layout != layout || len(p.Layouts) == 0 {
+				t.Fatalf("layout %q of %v", p.Layout, p.Layouts)
+			}
 			for _, l := range p.Lines {
-				if !kinds[l.File] || l.Group == "" || l.Label == "" || len(l.Path) < 2 {
+				if l.Source == "" || l.Group == "" || l.Label == "" {
+					t.Fatalf("line without a source or label: %+v", l)
+				}
+				if l.Info {
+					if l.Changed || len(l.Path) != 0 {
+						t.Fatalf("info line must never change: %+v", l)
+					}
+					continue
+				}
+				if !kinds[l.File] || len(l.Path) < 2 {
 					t.Fatalf("bad line %+v", l)
 				}
 			}
@@ -111,11 +131,11 @@ func TestPresetsApplyThenRestoreExactly(t *testing.T) {
 					break
 				}
 			}
-			after, err := a.PresetApply(game, skip)
+			after, err := a.PresetApply(game, layout, skip)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if after.Changes != 1 || after.LastBackup == "" {
+			if after.Changes != 1 || after.LastBackup == "" || after.Layout != layout {
 				t.Fatalf("after apply: %d changes, backup %q", after.Changes, after.LastBackup)
 			}
 			for _, l := range after.Lines {
@@ -141,7 +161,7 @@ func TestPresetsApplyThenRestoreExactly(t *testing.T) {
 				}
 			}
 			// Restore puts every byte back.
-			restored, err := a.PresetRestore(game)
+			restored, err := a.PresetRestore(game, layout)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -154,7 +174,7 @@ func TestPresetsApplyThenRestoreExactly(t *testing.T) {
 					t.Fatalf("%s not restored exactly", path)
 				}
 			}
-		})
+		}
 	}
 }
 
@@ -162,46 +182,102 @@ func TestPresetsRefuseWhileTheGameRuns(t *testing.T) {
 	a := newTestApp(t)
 	fakePresetSteam(t, a, "dota")
 	runningPrograms = func() map[uint32]string { return map[uint32]string{1: "dota2"} }
-	p, err := a.PresetPreview("dota")
+	p, err := a.PresetPreview("dota", "")
 	if err != nil || !p.Running || p.CanApply {
 		t.Fatalf("running: %+v %v", p.Reasons, err)
 	}
-	if _, err := a.PresetApply("dota", nil); err == nil || !strings.Contains(err.Error(), "running") {
+	if _, err := a.PresetApply("dota", "", nil); err == nil || !strings.Contains(err.Error(), "running") {
 		t.Fatalf("apply while running: %v", err)
 	}
-	if _, err := a.PresetRestore("dota"); err == nil {
+	if _, err := a.PresetRestore("dota", ""); err == nil {
 		t.Fatal("restore while running")
 	}
 }
 
-func TestDotaPresetKeepsAimedItemsOnNormalCast(t *testing.T) {
+func presetKeyValues(t *testing.T, game, layout string) map[string]string {
+	t.Helper()
 	t.Setenv("TT_KV_DIR", "")
 	a := newTestApp(t)
-	fakePresetSteam(t, a, "dota")
-	p, err := a.PresetPreview("dota")
+	fakePresetSteam(t, a, game)
+	p, err := a.PresetPreview(game, layout)
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := map[string]string{}
 	for _, l := range p.Lines {
-		if l.File == "keys" {
+		if l.File == "keys" && !l.Info {
 			got[strings.Join(l.Path, "/")] = l.Value
 			if l.Remove {
 				got[strings.Join(l.Path, "/")] = "<removed>"
 			}
 		}
 	}
-	for path, want := range map[string]string{
-		"KeyBindings/Items/item_blink/Mode":                 "0",
-		"KeyBindings/Items/item_wand/Mode":                  "1",
-		"KeyBindings/Keys/Inventory1/Key":                   "Z",
-		"KeyBindings/Keys/Inventory1/Mode":                  "1",
-		"KeyBindings/Keys/SelectAllOthers/Key":              "`",
-		"KeyBindings/Keys/SelectAllOthers/Modifier":         "<removed>",
-		"KeyBindings/Keys/AbilityPrimary1AutoCast/Modifier": "ALT",
-	} {
-		if got[path] != want {
-			t.Errorf("%s = %q, want %q", path, got[path], want)
+	return got
+}
+
+func expectKeys(t *testing.T, got map[string]string, want map[string]string) {
+	t.Helper()
+	for path, v := range want {
+		if got[path] != v {
+			t.Errorf("%s = %q, want %q", path, got[path], v)
 		}
 	}
+}
+
+func TestDotaLayouts(t *testing.T) {
+	// Classic: default rows, quick cast off except the aimed items the
+	// guides name; the synthetic file's Alt modifier on SelectAllOthers is
+	// left alone because the layout doesn't bind that action.
+	expectKeys(t, presetKeyValues(t, "dota", "standard"), map[string]string{
+		"KeyBindings/Items/item_blink/Mode":    "0",
+		"KeyBindings/Items/item_wand/Mode":     "0",
+		"KeyBindings/Keys/Inventory1/Key":      "Z",
+		"KeyBindings/Keys/Inventory1/Mode":     "0",
+		"KeyBindings/Keys/AbilityPrimary1/Key": "Q",
+		"KeyBindings/Keys/CameraGrip/Key":      "MOUSE3",
+	})
+	if _, has := presetKeyValues(t, "dota", "standard")["KeyBindings/Keys/SelectAllOthers/Modifier"]; has {
+		t.Error("classic layout touched SelectAllOthers")
+	}
+	// Yatoro: items on the number row and Space, everything quick cast,
+	// control groups moved off the numbers.
+	expectKeys(t, presetKeyValues(t, "dota", "yatoro"), map[string]string{
+		"KeyBindings/Items/item_blink/Mode":     "1",
+		"KeyBindings/Items/item_wand/Mode":      "1",
+		"KeyBindings/Keys/Inventory1/Key":       "1",
+		"KeyBindings/Keys/Inventory5/Key":       "SPACE",
+		"KeyBindings/Keys/Inventory6/Key":       "C",
+		"KeyBindings/Keys/AbilityUltimate/Mode": "1",
+		"KeyBindings/Keys/HeroSelect/Key":       "F1",
+		"KeyBindings/Keys/ControlGroup1/Key":    "F2",
+	})
+	// miCKe: items on Alt+key, so the modifier is written.
+	expectKeys(t, presetKeyValues(t, "dota", "micke"), map[string]string{
+		"KeyBindings/Keys/Inventory1/Key":      "Q",
+		"KeyBindings/Keys/Inventory1/Modifier": "ALT",
+		"KeyBindings/Keys/AbilityPrimary3/Key": "F",
+	})
+	// An unknown layout id falls back to the first one.
+	a := newTestApp(t)
+	fakePresetSteam(t, a, "dota")
+	if p, err := a.PresetPreview("dota", "nope"); err != nil || p.Layout != "yatoro" {
+		t.Fatalf("fallback layout %q %v", p.Layout, err)
+	}
+}
+
+func TestDeadlockLayouts(t *testing.T) {
+	expectKeys(t, presetKeyValues(t, "deadlock", "lefaa"), map[string]string{
+		"KeyBindings/Keys/Item1/Key":             "Z",
+		"KeyBindings/Keys/Item2/Key":             "E",
+		"KeyBindings/Keys/Item3/Key":             "MOUSE4",
+		"KeyBindings/Keys/Item4/Key":             "MOUSE5",
+		"KeyBindings/Keys/Item4/Key2":            "NONE",
+		"KeyBindings/Keys/AbilityMelee/Key":      "Q",
+		"KeyBindings/Keys/AltCast/Key":           "MOUSE3",
+		"KeyBindings/Keys/ItemQuickCastMode/Key": "1",
+	})
+	expectKeys(t, presetKeyValues(t, "deadlock", "mikaels"), map[string]string{
+		"KeyBindings/Keys/Item1/Key":        "Q",
+		"KeyBindings/Keys/AbilityMelee/Key": "MOUSE5",
+	})
 }

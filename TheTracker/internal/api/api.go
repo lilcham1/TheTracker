@@ -25,8 +25,9 @@ type command func(body []byte) (any, error)
 
 // in adapts a typed function to a command, decoding the JSON body into T.
 type presetArg struct {
-	Game string   `json:"game"`
-	Skip []string `json:"skip"`
+	Game   string   `json:"game"`
+	Layout string   `json:"layout"`
+	Skip   []string `json:"skip"`
 }
 
 func in[T any](fn func(T) (any, error)) command {
@@ -276,9 +277,9 @@ func commands(a *core.App) map[string]command {
 		"save_games": in(func(g core.Games) (any, error) { return a.SetGames(g) }),
 
 		// ----- Pro settings presets -----
-		"presets_preview": in(func(p presetArg) (any, error) { return a.PresetPreview(p.Game) }),
-		"presets_apply":   in(func(p presetArg) (any, error) { return a.PresetApply(p.Game, p.Skip) }),
-		"presets_restore": in(func(p presetArg) (any, error) { return a.PresetRestore(p.Game) }),
+		"presets_preview": in(func(p presetArg) (any, error) { return a.PresetPreview(p.Game, p.Layout) }),
+		"presets_apply":   in(func(p presetArg) (any, error) { return a.PresetApply(p.Game, p.Layout, p.Skip) }),
+		"presets_restore": in(func(p presetArg) (any, error) { return a.PresetRestore(p.Game, p.Layout) }),
 
 		// ----- Running in the background -----
 		"background_settings": none(func() (any, error) { return a.Background(), nil }),
