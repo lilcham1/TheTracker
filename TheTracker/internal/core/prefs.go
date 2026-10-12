@@ -162,6 +162,9 @@ type CoachPrefs struct {
 	DeadlockLevel string `json:"deadlockLevel"`
 	// A short goal check on the overlay at 10:00 and 20:00.
 	GoalCheck bool `json:"goalCheck"`
+	// The AI coach write-up after each reviewed match (needs the key on the
+	// cloud service); on unless switched off.
+	AIOff bool `json:"aiOff"`
 }
 
 // NetworkPrefs: Game mode (see gamemode.go).

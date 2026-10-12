@@ -39,6 +39,8 @@ type Death struct {
 	At float64 `json:"at,omitempty"`
 	// What went wrong, from the player's state just before (deathcheck.go).
 	Reasons []string `json:"reasons,omitempty"`
+	// Where on the map, e.g. "their jungle" (deathcheck.go).
+	Region string `json:"region,omitempty"`
 }
 
 type KeyItemEntry struct {

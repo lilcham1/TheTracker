@@ -29,9 +29,13 @@ type ReviewDeath struct {
 	Clock    string   `json:"clock"`
 	Reasons  []string `json:"reasons,omitempty"`
 	GoldLost *int64   `json:"goldLost,omitempty"`
-	// Deadlock: who killed the player and how fast.
+	// Who killed the player; Deadlock adds how fast in Note.
 	Killer string `json:"killer,omitempty"`
 	Note   string `json:"note,omitempty"`
+	// Dota, from the parsed match: where, and the fight it was part of
+	// ("alone against 3", "lost 1 for 3", "picked off outside a fight").
+	Region string `json:"region,omitempty"`
+	Fight  string `json:"fight,omitempty"`
 }
 
 type MatchReview struct {
@@ -55,6 +59,8 @@ type MatchReview struct {
 	Notes []string `json:"notes"`
 	// The goals for the role and hero, met or missed (goals.go).
 	Goals *GoalSet `json:"goals,omitempty"`
+	// Facts the write-up can use that aren't points: curves, fights, vision.
+	Facts []string `json:"facts,omitempty"`
 }
 
 // WorkOnItem is an issue that keeps coming back.

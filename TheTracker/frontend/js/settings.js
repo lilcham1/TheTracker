@@ -335,6 +335,7 @@ async function saveCoach(patch) {
 }
 act("coach-set", (el) => saveCoach({ [el.dataset.key]: el.dataset.value }));
 onChange("coach-check", (el) => saveCoach({ goalCheck: el.checked }));
+onChange("coach-ai", (el) => saveCoach({ aiOff: !el.checked }));
 
 /// The analyzer's goals for a game: where they come from and how high.
 function coachHtml(game) {
@@ -351,6 +352,7 @@ function coachHtml(game) {
       <div class="chips">${chip("dotaMode", "role", "For my role and hero", !own)}${chip("dotaMode", "own", "My own goals", own)}</div>
       ${own ? `<p class="hint">Your own goals (last hits at 10:00, deaths, GPM) are set on the Sessions page.</p>` : `<div class="field"><span>How high</span><div class="chips">${levels}</div></div>
       <label class="switch"><input type="checkbox" data-change="coach-check" ${c.goalCheck !== false ? "checked" : ""} /><span>Goal check on the overlay at 10:00 and 20:00 <span class="muted">(a few seconds: your last hits and net worth against the goal)</span></span></label>`}
+      <label class="switch"><input type="checkbox" data-change="coach-ai" ${c.aiOff ? "" : "checked"} /><span>AI coach on Review <span class="muted">(a Claude write-up of each reviewed match, from the facts above; runs on your cloud service with an Anthropic key, a few cents a match)</span></span></label>
     </section>`;
   }
   return `<section class="set"><h3>Goals</h3>

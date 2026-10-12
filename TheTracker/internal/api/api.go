@@ -86,6 +86,7 @@ type matchArg struct {
 type reviewArg struct {
 	Game    string `json:"game"`
 	MatchID uint64 `json:"matchId"`
+	Force   bool   `json:"force"`
 }
 
 type queryArg struct {
@@ -326,6 +327,7 @@ func commands(a *core.App) map[string]command {
 			}
 			return a.DotaReview(p.MatchID)
 		}),
+		"coach": in(func(p reviewArg) (any, error) { return a.Coach(p.Game, p.MatchID, p.Force) }),
 		"work_on": in(func(p reviewArg) (any, error) {
 			if p.Game == "deadlock" {
 				return a.DeadlockWorkOn()

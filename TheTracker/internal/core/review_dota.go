@@ -34,12 +34,14 @@ type dotaReviewRaw struct {
 	LaneEff *float64 `json:"laneEff,omitempty"`
 	// Parsed matches: when each item was first bought, game clock.
 	Purchases map[string]float64 `json:"purchases,omitempty"`
+	// Parsed matches: fights, deaths, curves (review_fights.go).
+	Facts *dotaMatchFacts `json:"facts,omitempty"`
 }
 
 // reviewRaw fetches a match for review. A match OpenDota hasn't parsed yet
 // is asked to be parsed, and fetched again after half an hour.
 func (d *Dota) reviewRaw(matchID uint64) (dotaReviewRaw, error) {
-	key := fmt.Sprintf("od_review2_%d", matchID)
+	key := fmt.Sprintf("od_review3_%d", matchID)
 	var cached dotaReviewRaw
 	if at, ok := d.store.ReadCacheStale(key, &cached); ok && cached.MatchID == matchID {
 		if cached.Parsed || time.Since(at) < 30*time.Minute {
@@ -62,11 +64,16 @@ func (d *Dota) reviewRaw(matchID uint64) (dotaReviewRaw, error) {
 	_, out.Parsed = m["version"].(float64)
 	out.GameMode = int(jI64(m, "game_mode"))
 	found := false
-	for _, p := range jList(m["players"]) {
+	players := jList(m["players"])
+	for i, p := range players {
 		if jU64(p, "account_id") != *me {
 			continue
 		}
 		found = true
+		if out.Parsed {
+			facts := dotaFactsFrom(m, players, i, d.Heroes())
+			out.Facts = &facts
+		}
 		out.HeroID = int(jI64(p, "hero_id"))
 		out.Radiant = jI64(p, "player_slot") < 128
 		out.Kills, out.Deaths, out.Assists = int(jI64(p, "kills")), int(jI64(p, "deaths")), int(jI64(p, "assists"))
@@ -218,10 +225,20 @@ func (a *App) DotaReview(matchID uint64) (MatchReview, error) {
 			local = &s
 		}
 	}
+	if raw.Facts != nil {
+		fw, fg, facts := dotaFactPoints(*raw.Facts, raw.Duration, support)
+		wrong, good = append(wrong, fw...), append(good, fg...)
+		r.Facts = facts
+		if len(raw.Facts.Deaths) > 0 {
+			r.DeathLog = dotaDeathLog(raw.Facts.Deaths, local)
+		}
+	}
 	if local != nil {
 		counts := map[string]int{}
 		for _, d := range local.Deaths {
-			r.DeathLog = append(r.DeathLog, ReviewDeath{Clock: d.Clock, Reasons: d.Reasons, GoldLost: d.GoldLost})
+			if raw.Facts == nil || len(raw.Facts.Deaths) == 0 {
+				r.DeathLog = append(r.DeathLog, ReviewDeath{Clock: d.Clock, Reasons: d.Reasons, GoldLost: d.GoldLost, Region: d.Region})
+			}
 			seen := map[string]bool{}
 			for _, reason := range d.Reasons {
 				for _, k := range deathReasonKinds {
@@ -299,6 +316,37 @@ func (a *App) DotaReview(matchID uint64) (MatchReview, error) {
 	r.Wrong, r.Good = sortPoints(wrong, 4), sortPoints(good, 3)
 	r.Verdict = reviewVerdict(won, r.Wrong, r.Good)
 	return r, nil
+}
+
+// dotaDeathLog merges the parsed match's deaths with the ones the app saw
+// live (matched by clock, within ten seconds), so each has the fight, the
+// place, and what the player held.
+func dotaDeathLog(deaths []dotaDeathCtx, local *MatchSummary) []ReviewDeath {
+	out := []ReviewDeath{}
+	used := map[int]bool{}
+	for _, d := range deaths {
+		rd := ReviewDeath{Clock: FmtClock(d.Time), Killer: d.Killer, Region: d.Region, Fight: fightText(d)}
+		if d.BuyBack {
+			rd.Note = "bought back"
+		}
+		if d.GoldAdv <= -4000 {
+			rd.Note = strings.TrimPrefix(rd.Note+", team "+fmtThousands(int64(-d.GoldAdv))+" gold down", ", ")
+		}
+		if local != nil {
+			for i, l := range local.Deaths {
+				if !used[i] && l.At > 0 && math.Abs(l.At-d.Time) <= 10 {
+					used[i] = true
+					rd.Reasons, rd.GoldLost = l.Reasons, l.GoldLost
+					if rd.Region == "" {
+						rd.Region = l.Region
+					}
+					break
+				}
+			}
+		}
+		out = append(out, rd)
+	}
+	return out
 }
 
 func dotaBenchFigure(key string, v float64, duration int) string {

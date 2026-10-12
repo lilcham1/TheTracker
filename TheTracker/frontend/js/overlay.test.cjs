@@ -143,10 +143,10 @@ console.log("overlay timings ok");
 
 // ---------- Why you died ----------
 ov.setSettings(base);
-const deadMatch = { wasAlive: false, respawnSeconds: 17.6, deaths: [{ clock: "15:01", goldLost: 300, reasons: ["Your Black King Bar was ready: use it before the fight turns", "No TP scroll", "third, not shown"] }] };
+const deadMatch = { wasAlive: false, respawnSeconds: 17.6, deaths: [{ clock: "15:01", goldLost: 300, reasons: ["Your Black King Bar was ready: use it before the fight turns", "No TP scroll", "Died in their jungle", "fourth, not shown"] }] };
 const dh = ov.deathHtml(deadMatch);
 assert.ok(dh.includes("Why you died") && dh.includes("Black King Bar") && dh.includes("No TP scroll"), "the reasons show while dead");
-assert.ok(!dh.includes("third, not shown"), "two reasons at most");
+assert.ok(dh.includes("their jungle") && !dh.includes("fourth, not shown"), "three reasons at most");
 assert.ok(dh.includes('<span class="secs">18</span>') && dh.includes("300 gold lost"), "respawn and gold lost");
 assert.strictEqual(ov.deathHtml({ ...deadMatch, wasAlive: true }), "", "nothing once back alive");
 ov.setSettings({ ...base, deathTips: false });

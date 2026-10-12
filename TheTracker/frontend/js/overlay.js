@@ -248,12 +248,12 @@ const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<"
 function deathHtml(m) {
   if (settings.deathTips === false || !m || m.wasAlive !== false || !m.deaths || !m.deaths.length) return "";
   const d = m.deaths[m.deaths.length - 1];
-  const reasons = (d.reasons || []).slice(0, 2);
+  const reasons = (d.reasons || []).slice(0, 3);
   const back = m.respawnSeconds != null ? `<span class="resp">back in <span class="secs">${Math.max(0, Math.round(m.respawnSeconds))}</span> s</span>` : "";
   return `<div class="death"><div class="death-head"><b>Why you died</b>${back}</div>${
     reasons.length
       ? `<ul>${reasons.map((r) => `<li>${escHtml(r)}</li>`).join("")}</ul>`
-      : `<p>Nothing from your items or gold: think about where you stood and who saw you first.</p>`
+      : `<p>Nothing from your items, position or gold: think about who saw you first.</p>`
   }${d.goldLost ? `<div class="death-foot">${d.goldLost} gold lost</div>` : ""}</div>`;
 }
 

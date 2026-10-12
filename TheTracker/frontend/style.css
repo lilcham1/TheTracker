@@ -866,3 +866,10 @@ kbd { border-radius: 3px; }
 .muted.small, .small.muted { color: var(--muted); }
 .top-title p { color: var(--text-2); }
 .page { background: none; }
+
+/* The AI coach on Review. */
+.coach .coach-verdict { font-size: 15px; line-height: 1.5; }
+.coach .work-on { margin-top: 12px; }
+.coach-praise { display: flex; gap: 8px; align-items: baseline; margin-top: 10px; color: var(--text-2); }
+.coach-note { color: var(--text); }
+.rev-facts { margin-top: 8px; }

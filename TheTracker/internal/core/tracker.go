@@ -538,6 +538,7 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *pendingSave) {
 			}
 			d := Death{Clock: FmtClock(clock), GoldLost: lost, At: clock}
 			d.Reasons = deathReasons(m.lastAlive, m.Deaths, clock, m.GameType == "turbo")
+			d.Region = deathRegion(m.lastAlive)
 			m.Deaths = append(m.Deaths, d)
 			if lost != nil {
 				t.logf("Death at %s, lost %dg", d.Clock, *lost)
@@ -649,7 +650,7 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *pendingSave) {
 		m.RespawnSeconds = nil
 	}
 	if m.WasAlive && m.InProgress && items != nil {
-		m.lastAlive = snapshotOf(clock, hero, player, items, abilities)
+		m.lastAlive = snapshotOf(clock, gmap, hero, player, items, abilities)
 	}
 
 	if gameState == statePostGame {

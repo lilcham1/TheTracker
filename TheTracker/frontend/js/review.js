@@ -9,6 +9,10 @@ const reviewRes = {
   dota: resource("dotaReview", "review", { args: () => ({ game: "dota", matchId: REV.dota }), ttl: 10 * 60000 }),
   deadlock: resource("dlReview", "review", { args: () => ({ game: "deadlock", matchId: REV.deadlock }), ttl: 10 * 60000 }),
 };
+const coachRes = {
+  dota: resource("dotaCoach", "coach", { args: () => ({ game: "dota", matchId: REV.dota }), ttl: 6 * 3600000 }),
+  deadlock: resource("dlCoach", "coach", { args: () => ({ game: "deadlock", matchId: REV.deadlock }), ttl: 6 * 3600000 }),
+};
 const workOnRes = {
   dota: resource("dotaWorkOn", "work_on", { args: () => ({ game: "dota" }), ttl: 30 * 60000 }),
   deadlock: resource("dlWorkOn", "work_on", { args: () => ({ game: "deadlock" }), ttl: 30 * 60000 }),
@@ -17,8 +21,39 @@ const workOnRes = {
 onChange("rev-match", (el) => {
   REV[el.dataset.game] = Number(el.value);
   reviewRes[el.dataset.game].load();
+  coachRes[el.dataset.game].load();
   rerender();
 });
+act("coach-again", (el) => coachRes[el.dataset.game].load(true));
+
+/// The AI coach's write-up: its verdict, the habits to work on with a
+/// drill each, and what to keep. Death notes go into the death table.
+function coachHtml(game) {
+  const c = coachRes[game];
+  if (c.error) return `<section class="panel coach"><div class="sec-head"><h3>AI coach</h3></div><div class="note err">${esc(c.error)}</div></section>`;
+  if (!c.data) return `<section class="panel coach"><div class="sec-head"><h3>AI coach</h3></div>${loadingState("Reading the match…")}</section>`;
+  const d = c.data;
+  if (d.status === "off") return "";
+  if (d.status === "not_set_up") return `<section class="panel coach"><div class="sec-head"><h3>AI coach</h3></div>
+      <p class="muted">Not set up. The coach runs on your cloud service with an Anthropic key: <code>npx convex env set --prod ANTHROPIC_API_KEY …</code> then <code>npx convex deploy</code>. A write-up costs a few cents per match.</p></section>`;
+  if (d.status !== "ready" || !d.note) return `<section class="panel coach"><div class="sec-head"><h3>AI coach</h3></div><div class="note err">${esc(d.error || "No answer.")}</div>
+      <div class="row"><button class="btn ghost small" data-act="coach-again" data-game="${game}" type="button">Ask again</button></div></section>`;
+  const n = d.note;
+  return `<section class="panel coach">
+    <div class="sec-head"><h3>AI coach</h3><span class="muted small">${esc(n.model || "")}</span></div>
+    <p class="coach-verdict">${esc(n.verdict)}</p>
+    ${n.focus && n.focus.length ? `<div class="work-on">${n.focus.map((f) => `<div class="work-item"><b>${esc(f.title)}</b><p class="muted">${esc(f.why)}</p><div class="rev-habit"><span class="tag">Drill</span> ${esc(f.drill)}</div></div>`).join("")}</div>` : ""}
+    ${n.praise ? `<p class="coach-praise"><span class="check-dot ok"></span> ${esc(n.praise)}</p>` : ""}
+  </section>`;
+}
+
+function coachDeathNote(game, clock) {
+  const c = coachRes[game];
+  const n = c.data && c.data.status === "ready" && c.data.note;
+  if (!n || !n.deaths) return "";
+  const hit = n.deaths.find((d) => d.clock === clock);
+  return hit ? hit.note : "";
+}
 
 /// The matches to choose from: the game's own match list.
 function reviewChoices(game) {
@@ -60,7 +95,9 @@ function reviewHtml(game) {
           <p class="muted">${m.kills} / ${m.deaths} / ${m.assists} · ${fmtClock(m.duration)} · ${ago(m.startTime)}</p></div>
       </div>
       <p class="rev-verdict">${esc(m.verdict)}</p>
+      ${m.facts && m.facts.length ? `<p class="muted small rev-facts">${m.facts.map(esc).join(" · ")}</p>` : ""}
     </section>
+    ${coachHtml(game)}
     <div class="cols">
       <section>
         <div class="sec-head"><h3>What went wrong</h3></div>
@@ -71,8 +108,12 @@ function reviewHtml(game) {
         ${m.good.length ? m.good.map((p) => pointHtml(p, "good")).join("") : `<p class="muted">Nothing stood out above your usual.</p>`}
         <div class="sec-head"><h3>Deaths</h3></div>
         ${m.deathLog.length
-          ? `<table class="mini">${m.deathLog.map((d) => `<tr><td>${esc(d.clock)}</td><td>${d.killer ? `by ${esc(d.killer)}` : ""}${d.note ? ` <span class="muted">· ${esc(d.note)}</span>` : ""}</td>
-              <td class="num loss">${d.goldLost ? `-${fmtNum(d.goldLost)}` : ""}</td></tr>${(d.reasons || []).length ? `<tr class="why"><td colspan="3">${d.reasons.map(esc).join("<br>")}</td></tr>` : ""}`).join("")}</table>`
+          ? `<table class="mini">${m.deathLog.map((d) => {
+              const coach = coachDeathNote(game, d.clock);
+              const where = [d.fight, d.region ? `in ${d.region}` : "", d.note].filter(Boolean).join(", ");
+              return `<tr><td class="num">${esc(d.clock)}</td><td>${d.killer ? `<b>${esc(d.killer)}</b>` : ""}${where ? ` <span class="muted">${esc(where)}</span>` : ""}</td>
+              <td class="num loss">${d.goldLost ? `-${fmtNum(d.goldLost)}` : ""}</td></tr>${(d.reasons || []).length || coach ? `<tr class="why"><td colspan="3">${coach ? `<span class="coach-note">${esc(coach)}</span>` : ""}${(d.reasons || []).length ? `${coach ? "<br>" : ""}${d.reasons.map(esc).join("<br>")}` : ""}</td></tr>` : ""}`;
+            }).join("")}</table>`
           : `<p class="muted">${m.deaths ? "No death details for this match." : "No deaths."}</p>`}
       </section>
     </div>
@@ -111,6 +152,7 @@ view("dota-review", {
     ensureHeroList();
     dHist.load();
     workOnRes.dota.load(force);
+    coachRes.dota.load(force);
     return reviewRes.dota.load(force);
   },
   render() {
@@ -125,6 +167,7 @@ view("dl-review", {
   load(force) {
     dlOverview.load();
     workOnRes.deadlock.load(force);
+    coachRes.deadlock.load(force);
     return reviewRes.deadlock.load(force);
   },
   render() {
