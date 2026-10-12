@@ -150,6 +150,18 @@ type Prefs struct {
 	Window    WindowState     `json:"window"`
 	Games     Games           `json:"games"`
 	Network   NetworkPrefs    `json:"network"`
+	Coach     CoachPrefs      `json:"coach"`
+}
+
+// CoachPrefs: the goals the analyzer checks (goals.go).
+type CoachPrefs struct {
+	// "role": goals for the role and hero; "own": the goals set by hand.
+	DotaMode string `json:"dotaMode"`
+	// steady | push | pro: how high the goals are.
+	DotaLevel     string `json:"dotaLevel"`
+	DeadlockLevel string `json:"deadlockLevel"`
+	// A short goal check on the overlay at 10:00 and 20:00.
+	GoalCheck bool `json:"goalCheck"`
 }
 
 // NetworkPrefs: Game mode (see gamemode.go).
@@ -176,6 +188,7 @@ func defaultPrefs() Prefs {
 		General: GeneralPrefs{CloseToTray: true},
 		Games:   Games{Dota: true, Deadlock: true},
 		Network: NetworkPrefs{Categories: []string{"sync", "launchers", "windowsUpdate", "browsers"}},
+		Coach:   CoachPrefs{DotaMode: "role", DotaLevel: "push", DeadlockLevel: "push", GoalCheck: true},
 	}
 }
 
@@ -288,6 +301,19 @@ func (s *Store) SetFavorite(game string, hero *string) Prefs {
 			p.Favorites.Dota = hero
 		}
 	})
+}
+
+// SaveCoach keeps the analyzer's goal settings, levels limited to the known ones.
+func (s *Store) SaveCoach(c CoachPrefs) Prefs {
+	if c.DotaMode != "own" {
+		c.DotaMode = "role"
+	}
+	for _, l := range []*string{&c.DotaLevel, &c.DeadlockLevel} {
+		if _, ok := goalLevels[*l]; !ok {
+			*l = "push"
+		}
+	}
+	return s.UpdatePrefs(func(p *Prefs) { p.Coach = c })
 }
 
 func (s *Store) SaveOverlay(o OverlaySettings) Prefs {

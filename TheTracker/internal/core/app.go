@@ -135,6 +135,7 @@ func NewApp(dataDir string, shell Shell) *App {
 	a.Updater = NewUpdater()
 	a.Net = NewNetCheck(store)
 	a.GameMode = NewGameMode(store)
+	a.Tracker.ItemCost = a.Dota.itemCost
 	a.Tracker.OnSaved = func(m MatchSummary) {
 		a.Cloud.PushMatch(m)
 		a.notify(dotaNotification(m))
@@ -288,6 +289,8 @@ type LiveView struct {
 	Goals []GoalResult `json:"goals"`
 	// Core or support, for the overlay's reminder windows.
 	Role *LiveRole `json:"role,omitempty"`
+	// Goals for the role and hero, with progress (goals.go).
+	RoleGoals *GoalSet `json:"roleGoals,omitempty"`
 }
 
 func (a *App) Live(withLog bool) LiveView {
@@ -300,6 +303,7 @@ func (a *App) Live(withLog bool) LiveView {
 		snap := buildSummary(m, false, time.Now())
 		v.Goals = EvaluateGoals(g, &snap)
 		v.Role = a.liveRole(m)
+		v.RoleGoals = a.liveGoals(m, v.Role)
 	} else if m != nil && m.Summary != nil {
 		v.Goals = EvaluateGoals(a.Store.LoadPrefs().Goals, m.Summary)
 	}

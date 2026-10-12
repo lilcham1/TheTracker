@@ -154,3 +154,28 @@ assert.strictEqual(ov.deathHtml(deadMatch), "", "switched off in Settings");
 ov.setSettings(base);
 assert.ok(ov.deathHtml({ ...deadMatch, deaths: [{ clock: "3:00", reasons: [] }] }).includes("Nothing from your items"), "no reasons: a general hint");
 console.log("death card ok");
+
+// ---------- Goal check at 10:00 / 20:00 ----------
+const goalSet = { goals: [
+  { key: "lh10", label: "Last hits by 10:00", format: "count", target: 72, at: 600, value: 58 },
+  { key: "nw10", label: "Net worth at 10:00", format: "gold", target: 5100, at: 600, value: 5300 },
+  { key: "nw20", label: "Net worth at 20:00", format: "gold", target: 11000, at: 1200, value: null },
+] };
+const gc = ov.goalCheckHtml(goalSet, 603);
+assert.ok(gc.includes("10:00 goals") && gc.includes('class="missed">Last hits: <b>58</b> / 72') && gc.includes('class="met">Net worth: <b>5,300</b> / 5,100'), "10:00 check: " + gc);
+assert.strictEqual(ov.goalCheckHtml(goalSet, 612), "", "gone after a few seconds");
+assert.strictEqual(ov.goalCheckHtml(goalSet, 1203), "", "nothing to show at 20:00 without a value");
+assert.strictEqual(ov.goalCheckHtml(goalSet, 300), "", "nothing between marks");
+
+// ---------- Fixed places ----------
+ov.setSettings({ ...base, nextUp: true });
+const empty = ov.frame(t(5, 0), undefined, "");
+const busy = ov.frame(t(7, 58.5), undefined, "<div>msg</div>");
+for (const h of [empty, busy]) {
+  const order = ["slot-next", "slot-rings", "slot-msg"].map((c) => h.indexOf(c));
+  assert.ok(order.every((i) => i >= 0) && order[0] < order[1] && order[1] < order[2], "the three places are always there, in order");
+}
+const many = ov.frame(t(6, 1), undefined, "");
+assert.ok((many.match(/class="ring /g) || []).length <= 4, "at most four rings");
+ov.setSettings(base);
+console.log("goal check and layout ok");

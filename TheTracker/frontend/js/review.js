@@ -76,6 +76,7 @@ function reviewHtml(game) {
           : `<p class="muted">${m.deaths ? "No death details for this match." : "No deaths."}</p>`}
       </section>
     </div>
+    ${m.goals ? `<section class="rev-goals">${roleGoalsHtml(m.goals)}</section>` : ""}
     ${m.notes.length ? `<div class="note">${m.notes.map(esc).join("<br>")}</div>` : ""}
     ${workOnHtml(game)}`;
 }

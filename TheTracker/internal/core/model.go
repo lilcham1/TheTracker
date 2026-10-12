@@ -49,6 +49,9 @@ type KeyItemEntry struct {
 type Checkpoint struct {
 	LastHits int64 `json:"lastHits"`
 	Denies   int64 `json:"denies"`
+	// For the goals (goals.go); absent in matches saved before 2.1.
+	NetWorth int64 `json:"netWorth,omitempty"`
+	Assists  int64 `json:"assists,omitempty"`
 }
 
 type RoshanState struct {
@@ -99,6 +102,8 @@ type MatchSummary struct {
 	Incomplete bool   `json:"incomplete"`
 	// Free text the player attaches to a session afterwards.
 	Notes string `json:"notes,omitempty"`
+	// When each item was first owned (game clock), for item timing goals.
+	ItemTimes map[string]float64 `json:"itemTimes,omitempty"`
 }
 
 // MatchState is the match being tracked right now.
@@ -139,6 +144,10 @@ type MatchState struct {
 	Simulated bool `json:"simulated"`
 	// Seconds until the hero is back, while dead.
 	RespawnSeconds *int64 `json:"respawnSeconds,omitempty"`
+	// Gold plus what the carried items cost (or Dota's own figure).
+	NetWorth *int64 `json:"netWorth,omitempty"`
+	// When each item was first owned, by game clock, for item timing goals.
+	ItemTimes map[string]float64 `json:"itemTimes,omitempty"`
 	// The player's state on the last report while alive, for explaining a
 	// death. Not shown or saved.
 	lastAlive *aliveSnapshot
@@ -192,6 +201,12 @@ func (m *MatchState) clone() *MatchState {
 	}
 	c.Deaths = append([]Death{}, m.Deaths...)
 	c.KeyItemLog = append([]KeyItemEntry{}, m.KeyItemLog...)
+	if m.ItemTimes != nil {
+		c.ItemTimes = make(map[string]float64, len(m.ItemTimes))
+		for k, v := range m.ItemTimes {
+			c.ItemTimes[k] = v
+		}
+	}
 	c.Checkpoints = make(map[int]*Checkpoint, len(m.Checkpoints))
 	for k, v := range m.Checkpoints {
 		if v != nil {

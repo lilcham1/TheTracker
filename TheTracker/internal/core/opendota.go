@@ -667,10 +667,12 @@ type dotaItem struct {
 	Key  string `json:"key"`  // internal name, for icons
 	Name string `json:"name"` // display name
 	Cost int    `json:"cost"`
+	// What it is built from, by key (goals skip parts of a bigger item).
+	Components []string `json:"components,omitempty"`
 }
 
 func (d *Dota) itemNames() map[int]dotaItem {
-	m, _, _ := cachedFetch(d.store, "od_items", 24*time.Hour, false, func() (map[int]dotaItem, error) {
+	m, _, _ := cachedFetch(d.store, "od_items2", 24*time.Hour, false, func() (map[int]dotaItem, error) {
 		var raw map[string]jsonMap
 		if err := d.api.get("/constants/items", &raw); err != nil {
 			return nil, err
@@ -678,7 +680,15 @@ func (d *Dota) itemNames() map[int]dotaItem {
 		out := map[int]dotaItem{}
 		for key, v := range raw {
 			if id := int(jI64(v, "id")); id > 0 {
-				out[id] = dotaItem{Key: key, Name: jStr(v, "dname", key), Cost: int(jI64(v, "cost"))}
+				it := dotaItem{Key: key, Name: jStr(v, "dname", key), Cost: int(jI64(v, "cost"))}
+				if parts, ok := v["components"].([]any); ok {
+					for _, p := range parts {
+						if s, ok := p.(string); ok {
+							it.Components = append(it.Components, s)
+						}
+					}
+				}
+				out[id] = it
 			}
 		}
 		if len(out) == 0 {
@@ -704,7 +714,7 @@ func (d *Dota) ItemCatalog() []CatalogItem {
 		if it.Cost <= 0 || len(it.Key) > 7 && it.Key[:7] == "recipe_" {
 			continue
 		}
-		out = append(out, CatalogItem(it))
+		out = append(out, CatalogItem{Key: it.Key, Name: it.Name, Cost: it.Cost})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

@@ -424,6 +424,12 @@ function dotaLiveHtml() {
     return `<div class="live-strip"><span class="live-dot off"></span>
       <span class="grow"><b>Watching a game</b> <span class="muted">Spectating or a replay: it isn't recorded, and the overlay and Game mode stay off.</span></span></div>`;
   }
+  // Before the horn and before a hero is picked, it can't yet be told
+  // whether this is the player's own game or one being watched.
+  if (m && !m.ended && !m.inProgress && !m.heroName) {
+    return `<div class="live-strip"><span class="live-dot off"></span>
+      <span class="grow"><b>A game is starting</b> <span class="muted">Your match shows here once you've picked a hero; a game you're watching isn't recorded.</span></span></div>`;
+  }
   if (m && !(m.ended && D.dismissed === m.matchid)) return liveMatchHtml(m);
   const needs = liveNeedsSetup();
   const open = D.setupOpen === undefined ? needs : D.setupOpen;
@@ -600,7 +606,7 @@ function liveMatchHtml(m) {
       { label: "Gold per minute", value: dash(m.gpm), sub: `${dash(m.xpm)} XP per minute` },
       { label: "Gold lost to deaths", value: fmtNum(m.deaths.reduce((a, d) => a + (d.goldLost || 0), 0)), sub: known(m.gold) ? `${fmtNum(m.gold)} unspent now` : "" },
     ])}
-    ${goalsHtml(live.goals)}
+    ${roleGoalsHtml(live.roleGoals) || goalsHtml(live.goals)}
     ${netBlockHtml()}
 
     <div class="cols">

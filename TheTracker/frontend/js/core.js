@@ -327,6 +327,33 @@ const S = {
   update: null,
 };
 
+// ---------- Goals ----------
+
+/// A goal's figure: a time, gold, or a count.
+function fmtGoalValue(g, v) {
+  if (v == null) return "–";
+  if (g.format === "time") return fmtClock(v);
+  if (g.format === "gold") return fmtNum(Math.round(v));
+  return String(Math.round(v));
+}
+
+/// The goals for the role and hero, each with its state: met, missed, or
+/// still ahead with the progress so far.
+function roleGoalsHtml(set, { title = true } = {}) {
+  if (!set || !set.goals || !set.goals.length) return "";
+  const row = (g) => {
+    const state = g.state === "met" ? "ok" : g.state === "missed" ? "bad" : "idle";
+    const target = fmtGoalValue(g, g.target);
+    const label = g.key === "deaths" ? "Deaths" : g.label.replace(/ by$/, "");
+    const value = g.format === "time" && g.value == null ? (g.state === "missed" ? "not bought" : "not yet") : fmtGoalValue(g, g.value);
+    return `<div class="goal ${state}" title="${esc(g.why)}"><span class="dot"></span>
+      <span class="grow">${esc(label)}${g.format === "time" ? " by" : ""} <b>${g.key === "deaths" ? `at most ${target}${g.state === "pending" ? " so far" : ""}` : target}</b></span>
+      <span class="num">${value}</span></div>`;
+  };
+  const head = title ? `<div class="sec-head"><h3>Goals${set.role ? ` · ${esc(set.role)}` : ""}${set.hero ? `, ${esc(set.hero)}` : ""}</h3><span class="muted">${esc(set.level)} of players on this hero</span></div>` : "";
+  return `${head}<div class="goals">${set.goals.map(row).join("")}</div>${set.note ? `<p class="hint">${esc(set.note)}</p>` : ""}`;
+}
+
 // ---------- Resources ----------
 //
 // A resource is one piece of backend data a page depends on. It remembers

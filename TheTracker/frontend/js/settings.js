@@ -327,11 +327,44 @@ function accountHtml() {
 
 // ---------- Each game ----------
 
+async function saveCoach(patch) {
+  const next = { ...(S.boot.prefs.coach || {}), ...patch };
+  const prefs = await attempt(() => invoke("save_coach", next));
+  if (prefs) S.boot.prefs = prefs;
+  rerender();
+}
+act("coach-set", (el) => saveCoach({ [el.dataset.key]: el.dataset.value }));
+onChange("coach-check", (el) => saveCoach({ goalCheck: el.checked }));
+
+/// The analyzer's goals for a game: where they come from and how high.
+function coachHtml(game) {
+  const c = S.boot.prefs.coach || {};
+  const levelKey = game === "dota" ? "dotaLevel" : "deadlockLevel";
+  const level = c[levelKey] || "push";
+  const chip = (key, value, label, on) => `<button class="chip ${on ? "on" : ""}" data-act="coach-set" data-key="${key}" data-value="${value}" type="button">${label}</button>`;
+  const levels = [["steady", "Steady", "top 50%"], ["push", "Push", "top 30%"], ["pro", "Pro", "top 20%"]]
+    .map(([v, l, d]) => chip(levelKey, v, `${l} <span class="muted">${d}</span>`, level === v)).join("");
+  if (game === "dota") {
+    const own = c.dotaMode === "own";
+    return `<section class="set"><h3>Goals</h3>
+      <p class="muted">Each match gets goals for your role and hero: last hits and net worth at 10 and 20 minutes, when your key items should be done, assists for supports, and how few deaths. They come from how the better players on that hero do (OpenDota's public hero benchmarks), and are checked live on Overview, on the overlay at 10:00 and 20:00, and in Review.</p>
+      <div class="chips">${chip("dotaMode", "role", "For my role and hero", !own)}${chip("dotaMode", "own", "My own goals", own)}</div>
+      ${own ? `<p class="hint">Your own goals (last hits at 10:00, deaths, GPM) are set on the Sessions page.</p>` : `<div class="field"><span>How high</span><div class="chips">${levels}</div></div>
+      <label class="switch"><input type="checkbox" data-change="coach-check" ${c.goalCheck !== false ? "checked" : ""} /><span>Goal check on the overlay at 10:00 and 20:00 <span class="muted">(a few seconds: your last hits and net worth against the goal)</span></span></label>`}
+    </section>`;
+  }
+  return `<section class="set"><h3>Goals</h3>
+      <p class="muted">Each reviewed match is checked against goals from your own best recent games: souls a minute, deaths, last hits in lane by 10:00, and when you first afford a 3,200- and a 6,400-soul item.</p>
+      <div class="field"><span>How high</span><div class="chips">${levels.replaceAll("of players", "")}</div></div>
+    </section>`;
+}
+
 function dotaSettingsHtml() {
   return `<section class="set"><h3>Live tracking</h3>
       <p class="muted">Dota sends your own match state to TheTracker while you play: that's what records your sessions, drives the overlay and explains your deaths.</p>
       ${typeof liveSetupHtml === "function" ? liveSetupHtml() : ""}
     </section>
+    ${coachHtml("dota")}
     ${overlayHtml()}`;
 }
 
@@ -342,6 +375,7 @@ function deadlockSettingsHtml() {
         <span class="muted"> ${link.accountId ? "matches read from the public Deadlock API" : "sign in with Steam under Account"}</span></span>
         ${link.accountId ? "" : `<button class="link" data-act="settings-tab" data-tab="account" type="button">Account</button>`}</div></div>
     </section>
+    ${coachHtml("deadlock")}
     <section class="set"><h3>What works for Deadlock</h3>
       <p class="muted">Deadlock has no live feed apps can read, so there's no in-game overlay or live tracking for it. Match history, the Review tab, hero stats and the live streamers page all come from the public Deadlock API after or outside your games. The connection check and Game mode work while Deadlock is open (Connection tab).</p>
       <div class="row wrap"><button class="btn ghost" data-act="go" data-view="dl-review" type="button">Open Review</button>

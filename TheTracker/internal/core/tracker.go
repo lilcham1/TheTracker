@@ -34,6 +34,11 @@ const (
 type Tracker struct {
 	mu sync.Mutex
 
+	// The linked Dota account, read at most once a minute: a payload naming
+	// a different player is someone else's game being watched.
+	me   *uint64
+	meAt time.Time
+
 	store   *Store
 	current *MatchState
 	enabled bool
@@ -55,6 +60,8 @@ type Tracker struct {
 
 	// Called (outside the lock) with each match newly written to history.
 	OnSaved func(MatchSummary)
+	// What an item (by its name without "item_") costs, for net worth.
+	ItemCost func(string) int64
 
 	now func() time.Time
 }
@@ -308,6 +315,31 @@ func idString(v any) (string, bool) {
 // match. Playing, Dota describes the player directly (player.activity,
 // hero.name); watching, it lists every player grouped by team (team2,
 // team3) and says nothing about "you".
+// someoneElseLocked: the payload names a player, and it isn't the account
+// linked to TheTracker. Without a linked account nothing can be told.
+func (t *Tracker) someoneElseLocked(player jsonMap) bool {
+	if t.store == nil {
+		return false
+	}
+	if t.meAt.IsZero() || time.Since(t.meAt) > time.Minute {
+		t.me, t.meAt = t.store.LoadLink("dota").AccountID, time.Now()
+	}
+	if t.me == nil {
+		return false
+	}
+	if id, ok := idString(player["accountid"]); ok {
+		if n, err := strconv.ParseUint(id, 10, 64); err == nil && n != 0 {
+			return n != *t.me
+		}
+	}
+	if id, ok := idString(player["steamid"]); ok {
+		if n, err := strconv.ParseUint(id, 10, 64); err == nil && n > steamID64Base {
+			return n-steamID64Base != *t.me
+		}
+	}
+	return false
+}
+
 func watchingPayload(player, hero, gmap jsonMap) bool {
 	for _, m := range []jsonMap{player, hero} {
 		if sub(m, "team2") != nil || sub(m, "team3") != nil {
@@ -394,7 +426,7 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *pendingSave) {
 	abilities := sub(body, "abilities")
 
 	// Watching a game, not playing it: noted, never recorded.
-	if watchingPayload(player, hero, gmap) {
+	if watchingPayload(player, hero, gmap) || t.someoneElseLocked(player) {
 		if id, ok := idString(gmap["matchid"]); ok && id != "0" {
 			if id != t.watchingID {
 				t.logf("Watching match %s (spectating or a replay): not recorded", id)
@@ -541,7 +573,14 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *pendingSave) {
 		for _, minute := range CheckpointMinutes {
 			at := float64(minute) * 60
 			if clock >= at && clock < at+checkpointWindow && m.Checkpoints[minute] == nil {
-				m.Checkpoints[minute] = &Checkpoint{LastHits: m.LastHits, Denies: m.Denies}
+				cp := &Checkpoint{LastHits: m.LastHits, Denies: m.Denies}
+				if m.NetWorth != nil {
+					cp.NetWorth = *m.NetWorth
+				}
+				if m.Assists != nil {
+					cp.Assists = *m.Assists
+				}
+				m.Checkpoints[minute] = cp
 				t.logf("%d min: %d last hits, %d denies", minute, m.LastHits, m.Denies)
 			}
 		}
@@ -581,6 +620,26 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *pendingSave) {
 			}
 		}
 		m.OwnedItemCounts = counts
+		// When each item was first owned, and what everything carried is
+		// worth (Dota's own figure is used when it sends one).
+		if m.ItemTimes == nil {
+			m.ItemTimes = map[string]float64{}
+		}
+		var worth int64
+		for name, n := range counts {
+			if _, ok := m.ItemTimes[name]; !ok {
+				m.ItemTimes[name] = clock
+			}
+			if t.ItemCost != nil {
+				worth += t.ItemCost(name) * int64(n)
+			}
+		}
+		if nw, ok := getInt(player, "net_worth"); ok && nw > 0 {
+			m.NetWorth = &nw
+		} else if hasGold {
+			nw := gold + worth
+			m.NetWorth = &nw
+		}
 	}
 
 	// The state a death would be judged on: the last report while alive.
@@ -647,6 +706,7 @@ func buildSummary(m *MatchState, incomplete bool, now time.Time) MatchSummary {
 		Deaths:        c.Deaths,
 		KeyItems:      c.KeyItemLog,
 		Checkpoints:   c.Checkpoints,
+		ItemTimes:     c.ItemTimes,
 		RoshanDeaths:  m.Roshan.Deaths,
 		GameType:      m.GameType,
 		Won:           m.Won,

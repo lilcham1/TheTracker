@@ -224,10 +224,20 @@ function nextUpHtml(list) {
 }
 
 /// Everything drawn for a clock reading (fractional seconds allowed).
-function frame(clock, gameType) {
+// At most this many rings, in one row: the row's height is kept whether or
+// not any are showing, so nothing below it moves when they come and go.
+const MAX_RINGS = 4;
+
+/// The overlay's three fixed places: the "next up" line, the rings, and
+/// one message (why you died, or a goal check).
+function slotsHtml(next, rings, message) {
+  return `<div class="slot slot-next${settings.nextUp ? "" : " off"}">${next}</div><div class="slot slot-rings">${rings}</div><div class="slot slot-msg">${message || ""}</div>`;
+}
+
+function frame(clock, gameType, message = "") {
   const whole = Math.floor(clock);
-  const shown = upcoming(whole, gameType);
-  return ringsHtml(shown, clock - whole) + (settings.nextUp ? nextUpHtml(nextUp(whole, gameType, shown)) : "");
+  const shown = upcoming(whole, gameType).slice(0, MAX_RINGS);
+  return slotsHtml(settings.nextUp ? nextUpHtml(nextUp(whole, gameType, shown)) : "", ringsHtml(shown, clock - whole), message);
 }
 
 const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[c]);
@@ -245,6 +255,23 @@ function deathHtml(m) {
       ? `<ul>${reasons.map((r) => `<li>${escHtml(r)}</li>`).join("")}</ul>`
       : `<p>Nothing from your items or gold: think about where you stood and who saw you first.</p>`
   }${d.goldLost ? `<div class="death-foot">${d.goldLost} gold lost</div>` : ""}</div>`;
+}
+
+// How long the goal check stays up after its mark, in game seconds.
+const GOAL_CHECK_FOR = 8;
+
+/// At 10:00 and 20:00, for a few seconds: the goals due at that mark and
+/// how they went.
+function goalCheckHtml(set, clock) {
+  if (coach.goalCheck === false || !set || !set.goals) return "";
+  const mark = [600, 1200].find((m) => clock >= m && clock < m + GOAL_CHECK_FOR);
+  if (!mark) return "";
+  const due = set.goals.filter((g) => g.at === mark && g.value != null);
+  if (!due.length) return "";
+  const fmt = (g, v) => (g.format === "gold" ? Math.round(v).toLocaleString("en-US") : String(Math.round(v)));
+  return `<div class="goalcheck"><div class="death-head"><b>${mark / 60}:00 goals</b></div><ul>${due
+    .map((g) => `<li class="${g.value >= g.target ? "met" : "missed"}">${escHtml(g.label.replace(/ (at|by) \d+:00$/, ""))}: <b>${fmt(g, g.value)}</b> / ${fmt(g, g.target)}</li>`)
+    .join("")}</ul></div>`;
 }
 
 let lastHtml = "";
@@ -277,6 +304,7 @@ function applySettings() {
   chips.style.transform = `scale(${settings.scale})`;
   document.body.classList.toggle("right", /right$/.test(settings.corner));
   document.body.classList.toggle("bottom", /^bottom/.test(settings.corner));
+  document.body.classList.toggle("compact", !!settings.compact);
 }
 
 // The feed reports the clock a couple of times a second. Between reports the
@@ -287,6 +315,9 @@ let lastClock = null;
 // three seconds otherwise; the countdowns are drawn four times a second from
 // it, carrying the clock forward in between.
 let liveMatch = null;
+// The goals for the match (from the app), and the analyzer settings.
+let liveGoals = null;
+let coach = { goalCheck: true };
 
 async function poll() {
   try {
@@ -294,10 +325,12 @@ async function poll() {
     const m = live.current;
     // The draft and strategy time report a clock too; countdowns there would
     // be to events in a game that has not started.
-    if (!live.live || !m || !m.inProgress || m.lastClockTime <= 0) {
+    // A game being watched never shows anything, whatever the settings.
+    if (live.watching || !live.live || !m || !m.inProgress || m.lastClockTime <= 0) {
       liveMatch = null;
       lastClock = null;
     } else {
+      liveGoals = live.roleGoals || null;
       liveMatch = m;
       liveRole = live.role ? live.role.role : null;
       if (!lastClock || lastClock.value !== m.lastClockTime) lastClock = { value: m.lastClockTime, at: performance.now() };
@@ -312,7 +345,8 @@ async function poll() {
 function draw() {
   if (!liveMatch || !lastClock) return paint("");
   const ahead = Math.min(1, (performance.now() - lastClock.at) / 1000);
-  paint(frame(lastClock.value + ahead, liveMatch.gameType) + deathHtml(liveMatch));
+  const clock = lastClock.value + ahead;
+  paint(frame(clock, liveMatch.gameType, deathHtml(liveMatch) || goalCheckHtml(liveGoals, clock)));
 }
 
 // ?preview draws a fixed sample instead of following the match: Settings
@@ -326,12 +360,14 @@ function paintPreview() {
     { kind: "stack", secs: 5, lead: STACK_LEAD, at: 472 },
   ];
   const next = [{ kind: "lotus", secs: 83 }, { kind: "wisdom", secs: 362 }];
-  paint(ringsHtml(sample, 0.4) + (settings.nextUp ? nextUpHtml(next) : ""));
+  paint(slotsHtml(settings.nextUp ? nextUpHtml(next) : "", ringsHtml(sample, 0.4), ""));
 }
 
 async function loadSettings() {
   try {
-    settings = (await call("get_prefs")).overlay;
+    const prefs = await call("get_prefs");
+    settings = prefs.overlay;
+    coach = prefs.coach || coach;
     applySettings();
     if (PREVIEW) paintPreview();
   } catch (_) {
@@ -352,4 +388,4 @@ if (typeof document !== "undefined") {
     setInterval(() => liveMatch && draw(), 250);
   }
 }
-if (typeof module !== "undefined") module.exports = { upcoming, nextUp, schedule, untilNext, sinceLast, chipHtml, labelFor, artFor, frame, deathHtml, KINDS, setSettings: (s) => (settings = s), setRole: (r) => (liveRole = r) };
+if (typeof module !== "undefined") module.exports = { upcoming, nextUp, schedule, untilNext, sinceLast, chipHtml, labelFor, artFor, frame, deathHtml, goalCheckHtml, KINDS, setSettings: (s) => (settings = s), setRole: (r) => (liveRole = r) };

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -25,6 +26,13 @@ type deadlockReviewRaw struct {
 	LaneCreeps, LanePossible int64
 	DamageDealt, DamageTaken int64
 	SoulsLostToDeaths        int64
+	// Each item bought, with when (for item timing goals).
+	Buys []deadlockBuy `json:"buys,omitempty"`
+}
+
+type deadlockBuy struct {
+	At int   `json:"at"`
+	ID int64 `json:"id"`
 }
 
 type deadlockDeath struct {
@@ -38,7 +46,7 @@ func (d *Deadlock) reviewRaw(matchID uint64) (deadlockReviewRaw, error) {
 	if me == nil {
 		return deadlockReviewRaw{}, fmt.Errorf("Connect your Steam account to review Deadlock matches.")
 	}
-	out, _, err := cachedFetch(d.store, fmt.Sprintf("dl_review_%d", matchID), 30*24*time.Hour, false, func() (deadlockReviewRaw, error) {
+	out, _, err := cachedFetch(d.store, fmt.Sprintf("dl_review2_%d", matchID), 30*24*time.Hour, false, func() (deadlockReviewRaw, error) {
 		var v jsonMap
 		if err := d.api.get(fmt.Sprintf("/v1/matches/%d/metadata", matchID), &v); err != nil {
 			return deadlockReviewRaw{}, err
@@ -68,6 +76,11 @@ func deadlockReviewFrom(v jsonMap, me uint64) (deadlockReviewRaw, error) {
 		out.HeroID = int(jI64(p, "hero_id"))
 		out.Kills, out.Deaths, out.Assists = int(jI64(p, "kills")), int(jI64(p, "deaths")), int(jI64(p, "assists"))
 		out.NetWorth, out.LastHits = jI64(p, "net_worth"), int(jI64(p, "last_hits"))
+		for _, it := range jList(p["items"]) {
+			if t := jI64(it, "game_time_s"); t > 0 {
+				out.Buys = append(out.Buys, deadlockBuy{At: int(t), ID: jI64(it, "item_id")})
+			}
+		}
 		for _, dd := range jList(p["death_details"]) {
 			out.DeathLog = append(out.DeathLog, deadlockDeath{At: int(jI64(dd, "game_time_s")), KillerHero: heroBySlot[jI64(dd, "killer_player_slot")], TimeToKill: jF64(dd, "time_to_kill_s")})
 		}
@@ -234,6 +247,20 @@ func (a *App) DeadlockReview(matchID uint64) (MatchReview, error) {
 			Habit: fmt.Sprintf("Track where %s is before you move, and keep your escape for them.", name), Weight: 0.25 + 0.05*v, Value: &v})
 	}
 
+	// Goals from the player's own best games at the chosen level.
+	if set := a.deadlockGoals(matchID, raw, ov, souls, deaths); set != nil {
+		r.Goals = set
+		have := map[string]bool{}
+		for _, p := range wrong {
+			have[p.Kind] = true
+		}
+		same := map[string]string{"goal_souls": "souls", "goal_deaths": "deaths", "goal_lane10": "lane_cs"}
+		for _, p := range goalPoints(*set) {
+			if !have[same[p.Kind]] {
+				wrong = append(wrong, p)
+			}
+		}
+	}
 	r.Wrong, r.Good = sortPoints(wrong, 4), sortPoints(good, 3)
 	r.Verdict = reviewVerdict(won, r.Wrong, r.Good)
 	return r, nil
@@ -262,4 +289,109 @@ func (a *App) DeadlockWorkOn() (WorkOn, error) {
 		}
 	}
 	return tallyWorkOn("deadlock", reviewMany(ids, a.DeadlockReview)), nil
+}
+
+// itemCosts: what each Deadlock item costs, by id (public item list).
+func (d *Deadlock) itemCosts() map[int64]int64 {
+	m, _, _ := cachedFetch(d.store, "dl_item_costs", 24*time.Hour, false, func() (map[int64]int64, error) {
+		var rows []jsonMap
+		if err := d.api.get("/v1/assets/items", &rows); err != nil {
+			return nil, err
+		}
+		out := map[int64]int64{}
+		for _, r := range rows {
+			if c := jI64(r, "cost"); c > 0 {
+				out[jI64(r, "id")] = c
+			}
+		}
+		return out, nil
+	})
+	return m
+}
+
+// tierTimes: when the first item of at least 3,200 and 6,400 souls was
+// bought; 0 when never.
+func tierTimes(buys []deadlockBuy, costs map[int64]int64) (t3, t4 int) {
+	for _, b := range buys {
+		c := costs[b.ID]
+		if c >= 3200 && (t3 == 0 || b.At < t3) {
+			t3 = b.At
+		}
+		if c >= 6400 && (t4 == 0 || b.At < t4) {
+			t4 = b.At
+		}
+	}
+	return
+}
+
+// deadlockGoals: targets from the player's own recent games — souls a
+// minute and deaths from the match list, lane last hits and item timings
+// from the matches already reviewed — at the chosen level.
+func (a *App) deadlockGoals(matchID uint64, raw deadlockReviewRaw, ov DeadlockOverview, souls, deaths []float64) *GoalSet {
+	pct, label := goalLevel(a.Store.LoadPrefs().Coach.DeadlockLevel)
+	who := "your best " + strings.TrimPrefix(label, "top ") + " of recent games"
+	set := GoalSet{Game: "deadlock", Hero: "", Level: label, Goals: []Goal{}}
+	costs := a.Deadlock.itemCosts()
+	var lanes, t3s, t4s []float64
+	for _, m := range ov.Matches {
+		if m.MatchID == matchID {
+			continue
+		}
+		var o deadlockReviewRaw
+		if _, ok := a.Store.ReadCacheStale(fmt.Sprintf("dl_review2_%d", m.MatchID), &o); !ok {
+			continue
+		}
+		if o.LanePossible >= 20 {
+			lanes = append(lanes, float64(o.LaneCreeps))
+		}
+		t3, t4 := tierTimes(o.Buys, costs)
+		if t3 > 0 {
+			t3s = append(t3s, float64(t3))
+		}
+		if t4 > 0 {
+			t4s = append(t4s, float64(t4))
+		}
+	}
+	add := func(g Goal, have *float64) {
+		g.Value, g.State = have, "missed"
+		switch {
+		case have == nil:
+		case g.AtMost && *have <= g.Target, !g.AtMost && *have >= g.Target:
+			g.State = "met"
+		}
+		set.Goals = append(set.Goals, g)
+	}
+	v := func(x float64) *float64 { return &x }
+	mins := math.Max(1, float64(raw.Duration)/60)
+	if len(souls) >= 5 {
+		add(Goal{Key: "souls", Label: "Souls a minute", Format: "count", Target: math.Round(quantile(souls, pct)), Why: who}, v(float64(raw.NetWorth)/mins))
+	}
+	if len(deaths) >= 5 {
+		add(Goal{Key: "deaths", Label: "Deaths at most", Format: "count", Target: math.Round(quantile(deaths, 1-pct)), AtMost: true, Why: who}, v(float64(raw.Deaths)))
+	}
+	if len(lanes) >= 3 && raw.LanePossible >= 20 {
+		add(Goal{Key: "lane10", Label: "Last hits in lane by 10:00", Format: "count", Target: math.Round(quantile(lanes, pct)), At: 600, Why: who}, v(float64(raw.LaneCreeps)))
+	}
+	t3, t4 := tierTimes(raw.Buys, costs)
+	if len(t3s) >= 3 {
+		var have *float64
+		if t3 > 0 {
+			have = v(float64(t3))
+		}
+		add(Goal{Key: "tier3", Label: "First 3,200-soul item by", Format: "time", Target: roundTo(quantile(t3s, 1-pct)), AtMost: true, Why: who}, have)
+	}
+	if len(t4s) >= 3 && raw.Duration > int(quantile(t4s, 1-pct)) {
+		var have *float64
+		if t4 > 0 {
+			have = v(float64(t4))
+		}
+		add(Goal{Key: "tier4", Label: "First 6,400-soul item by", Format: "time", Target: roundTo(quantile(t4s, 1-pct)), AtMost: true, Why: who}, have)
+	}
+	if len(set.Goals) == 0 {
+		return nil
+	}
+	if len(lanes) < 3 || len(t3s) < 3 {
+		set.Note = "Lane and item goals appear once a few more of your matches have been reviewed (What to work on reviews your last ten)."
+	}
+	return &set
 }

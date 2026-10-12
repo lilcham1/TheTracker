@@ -7,6 +7,17 @@
     html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; }
     body { font-family: Bahnschrift, "Segoe UI", sans-serif; color: #f2f4f7; }
     #chips { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 6px; transform-origin: top left; }
+    /* Three fixed places: "next up", the rings (their row's height kept
+       even when empty), then one message. In a bottom corner the order
+       flips so "next up" stays at the screen's edge. */
+    body.bottom #chips { flex-direction: column-reverse; }
+    .slot { display: flex; flex-direction: column; align-items: inherit; }
+    .slot-next { min-height: 34px; justify-content: center; }
+    .slot-next.off { display: none; }
+    .slot-rings { min-height: 76px; }
+    body.compact .slot-rings { min-height: 56px; }
+    .slot-msg:empty, .slot-next:empty { visibility: hidden; }
+    body.preview .slot-rings { min-height: 0; }
     body.right #chips { align-items: flex-end; transform-origin: top right; }
     body.bottom { display: flex; flex-direction: column; justify-content: flex-end; height: 100vh; }
     body.bottom #chips { transform-origin: bottom left; }
@@ -16,7 +27,7 @@
     body.preview #chips { align-items: flex-start; transform-origin: top left; }
 
     /* Rings side by side, soonest first, four to a row. */
-    .rings { display: flex; flex-wrap: wrap; gap: 6px 4px; max-width: 292px; }
+    .rings { display: flex; flex-wrap: nowrap; gap: 6px 4px; max-width: 292px; }
     body.right .rings { justify-content: flex-end; }
     body.preview .rings { justify-content: flex-start; }
 
@@ -70,6 +81,15 @@
     .death li { margin: 3px 0; }
     .death p { margin: 6px 0 0; color: rgba(242, 244, 247, .85); }
     .death-foot { margin-top: 5px; font-size: 12.5px; color: rgba(242, 244, 247, .65); }
+
+    /* At 10:00 and 20:00: how the goals due then went. */
+    .goalcheck { margin-top: 6px; max-width: 320px; padding: 8px 12px 9px; border-radius: 9px; background: rgba(10, 12, 17, .88);
+      border-left: 3px solid #f0b54a; box-shadow: 0 3px 12px rgba(0, 0, 0, .45); font-size: 14px; }
+    .goalcheck .death-head b { color: #f0c46a; }
+    .goalcheck ul { margin: 6px 0 0; padding-left: 0; list-style: none; }
+    .goalcheck li { margin: 3px 0; }
+    .goalcheck li::before { content: "✓ "; color: #7ec46a; font-weight: 700; }
+    .goalcheck li.missed::before { content: "✗ "; color: #ff6b6b; }
 
     /* Next up: one quiet line, not a reminder. */
     .next { display: flex; gap: 16px; padding: 6px 12px; border-radius: 8px; background: rgba(10, 12, 17, .8); font-size: 17px; color: rgba(242, 244, 247, .85); white-space: nowrap; }

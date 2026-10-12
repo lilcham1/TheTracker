@@ -267,6 +267,7 @@ func commands(a *core.App) map[string]command {
 			return p, nil
 		}),
 		"save_goals": in(func(g core.Goals) (any, error) { return s.SaveGoals(g), nil }),
+		"save_coach": in(func(c core.CoachPrefs) (any, error) { return s.SaveCoach(c), nil }),
 		"save_games": in(func(g core.Games) (any, error) { return a.SetGames(g) }),
 
 		// ----- Running in the background -----

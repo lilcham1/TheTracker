@@ -295,6 +295,7 @@ button.line:hover { background: var(--panel); }
 .mini tr.why td { padding-top: 0; color: var(--muted); font-size: 12.5px; }
 .net-slot:not(:empty) { margin-bottom: 14px; }
 .rev-top { margin-bottom: 12px; }
+.rev-goals { margin: 16px 0; }
 .today-workon { margin: 14px 0; }
 .rev-pick { max-width: 360px; }
 .rev-head { margin-bottom: 16px; }

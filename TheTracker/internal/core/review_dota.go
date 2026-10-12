@@ -32,12 +32,14 @@ type dotaReviewRaw struct {
 	// Parsed matches only.
 	LH10    *int     `json:"lh10,omitempty"`
 	LaneEff *float64 `json:"laneEff,omitempty"`
+	// Parsed matches: when each item was first bought, game clock.
+	Purchases map[string]float64 `json:"purchases,omitempty"`
 }
 
 // reviewRaw fetches a match for review. A match OpenDota hasn't parsed yet
 // is asked to be parsed, and fetched again after half an hour.
 func (d *Dota) reviewRaw(matchID uint64) (dotaReviewRaw, error) {
-	key := fmt.Sprintf("od_review_%d", matchID)
+	key := fmt.Sprintf("od_review2_%d", matchID)
 	var cached dotaReviewRaw
 	if at, ok := d.store.ReadCacheStale(key, &cached); ok && cached.MatchID == matchID {
 		if cached.Parsed || time.Since(at) < 30*time.Minute {
@@ -82,6 +84,15 @@ func (d *Dota) reviewRaw(matchID uint64) (dotaReviewRaw, error) {
 			if v, ok := lh[10].(float64); ok {
 				n := int(v)
 				out.LH10 = &n
+			}
+		}
+		for _, buy := range jList(p["purchase_log"]) {
+			k, t := jStr(buy, "key", ""), jF64(buy, "time")
+			if out.Purchases == nil {
+				out.Purchases = map[string]float64{}
+			}
+			if _, seen := out.Purchases[k]; k != "" && !seen {
+				out.Purchases[k] = t
 			}
 		}
 		if v, ok := p["lane_efficiency_pct"].(float64); ok {
@@ -238,6 +249,52 @@ func (a *App) DotaReview(matchID uint64) (MatchReview, error) {
 	}
 	if !raw.Parsed {
 		r.Notes = append(r.Notes, "OpenDota hasn't fully analysed this match yet (TheTracker asked it to); laning figures appear in a while.")
+	}
+	// The goals for the role and hero, checked against what the match gave.
+	if !turbo {
+		role := "core"
+		if support {
+			role = "support"
+		}
+		if set, err := a.DotaGoals(raw.HeroID, role, a.Store.LoadPrefs().Coach.DotaLevel); err == nil {
+			f := dotaGoalFacts{Clock: float64(raw.Duration), Ended: true, Deaths: raw.Deaths,
+				LastHits: map[int]float64{}, NetWorth: map[int]float64{}, Assists: map[int]float64{}, ItemTimes: raw.Purchases}
+			if raw.LH10 != nil {
+				f.LastHits[10] = float64(*raw.LH10)
+			}
+			if local != nil {
+				for minute, cp := range local.Checkpoints {
+					if cp == nil {
+						continue
+					}
+					f.LastHits[minute] = float64(cp.LastHits)
+					if cp.NetWorth > 0 {
+						f.NetWorth[minute] = float64(cp.NetWorth)
+					}
+					if cp.NetWorth > 0 || cp.Assists > 0 {
+						f.Assists[minute] = float64(cp.Assists)
+					}
+				}
+				if len(local.ItemTimes) > 0 {
+					f.ItemTimes = local.ItemTimes
+				}
+			}
+			checked := checkDotaGoals(set, f)
+			r.Goals = &checked
+			// A missed goal that repeats a point already made stays in the
+			// Goals section only.
+			same := map[string]string{"goal_lh10": "last_hits_per_min", "goal_nw10": "gold_per_min", "goal_nw20": "gold_per_min",
+				"goal_deaths": "deaths_per_min", "goal_assists20": "assists_per_min"}
+			have := map[string]bool{}
+			for _, p := range wrong {
+				have[p.Kind] = true
+			}
+			for _, p := range goalPoints(checked) {
+				if !have[same[p.Kind]] {
+					wrong = append(wrong, p)
+				}
+			}
+		}
 	}
 	r.Wrong, r.Good = sortPoints(wrong, 4), sortPoints(good, 3)
 	r.Verdict = reviewVerdict(won, r.Wrong, r.Good)

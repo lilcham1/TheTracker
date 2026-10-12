@@ -53,6 +53,8 @@ type MatchReview struct {
 	DeathLog []ReviewDeath `json:"deathLog"`
 	// What the review couldn't use, said plainly.
 	Notes []string `json:"notes"`
+	// The goals for the role and hero, met or missed (goals.go).
+	Goals *GoalSet `json:"goals,omitempty"`
 }
 
 // WorkOnItem is an issue that keeps coming back.
