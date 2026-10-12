@@ -230,6 +230,23 @@ function frame(clock, gameType) {
   return ringsHtml(shown, clock - whole) + (settings.nextUp ? nextUpHtml(nextUp(whole, gameType, shown)) : "");
 }
 
+const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[c]);
+
+/// While dead: what went wrong, worked out by the app from the player's
+/// own state just before the death, and when the hero is back. The respawn
+/// seconds sit in a .secs span so they count down in place like the rings.
+function deathHtml(m) {
+  if (settings.deathTips === false || !m || m.wasAlive !== false || !m.deaths || !m.deaths.length) return "";
+  const d = m.deaths[m.deaths.length - 1];
+  const reasons = (d.reasons || []).slice(0, 2);
+  const back = m.respawnSeconds != null ? `<span class="resp">back in <span class="secs">${Math.max(0, Math.round(m.respawnSeconds))}</span> s</span>` : "";
+  return `<div class="death"><div class="death-head"><b>Why you died</b>${back}</div>${
+    reasons.length
+      ? `<ul>${reasons.map((r) => `<li>${escHtml(r)}</li>`).join("")}</ul>`
+      : `<p>Nothing from your items or gold: think about where you stood and who saw you first.</p>`
+  }${d.goldLost ? `<div class="death-foot">${d.goldLost} gold lost</div>` : ""}</div>`;
+}
+
 let lastHtml = "";
 let lastShape = "";
 const OFFSET_RE = /stroke-dashoffset="([\d.]+)"/g;
@@ -295,7 +312,7 @@ async function poll() {
 function draw() {
   if (!liveMatch || !lastClock) return paint("");
   const ahead = Math.min(1, (performance.now() - lastClock.at) / 1000);
-  paint(frame(lastClock.value + ahead, liveMatch.gameType));
+  paint(frame(lastClock.value + ahead, liveMatch.gameType) + deathHtml(liveMatch));
 }
 
 // ?preview draws a fixed sample instead of following the match: Settings
@@ -335,4 +352,4 @@ if (typeof document !== "undefined") {
     setInterval(() => liveMatch && draw(), 250);
   }
 }
-if (typeof module !== "undefined") module.exports = { upcoming, nextUp, schedule, untilNext, sinceLast, chipHtml, labelFor, artFor, frame, KINDS, setSettings: (s) => (settings = s), setRole: (r) => (liveRole = r) };
+if (typeof module !== "undefined") module.exports = { upcoming, nextUp, schedule, untilNext, sinceLast, chipHtml, labelFor, artFor, frame, deathHtml, KINDS, setSettings: (s) => (settings = s), setRole: (r) => (liveRole = r) };

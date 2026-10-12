@@ -76,6 +76,11 @@ type matchArg struct {
 	MatchID uint64 `json:"matchId"`
 }
 
+type reviewArg struct {
+	Game    string `json:"game"`
+	MatchID uint64 `json:"matchId"`
+}
+
 type queryArg struct {
 	Query string `json:"query"`
 }
@@ -296,9 +301,21 @@ func commands(a *core.App) map[string]command {
 		"dota_leaderboard":    in(func(p regionArg) (any, error) { return a.Dota.Leaderboard(p.Region, p.Force) }),
 
 		// ----- Deadlock -----
-		"deadlock_link_status":   none(func() (any, error) { return s.LoadLink("deadlock"), nil }),
-		"deadlock_overview":      in(func(p forceArg) (any, error) { return a.Deadlock.Overview(p.Limit, p.Force) }),
-		"deadlock_live":          none(func() (any, error) { return a.Deadlock.Live() }),
+		"deadlock_link_status": none(func() (any, error) { return s.LoadLink("deadlock"), nil }),
+		"deadlock_overview":    in(func(p forceArg) (any, error) { return a.Deadlock.Overview(p.Limit, p.Force) }),
+		"deadlock_live":        none(func() (any, error) { return a.Deadlock.Live() }),
+		"review": in(func(p reviewArg) (any, error) {
+			if p.Game == "deadlock" {
+				return a.DeadlockReview(p.MatchID)
+			}
+			return a.DotaReview(p.MatchID)
+		}),
+		"work_on": in(func(p reviewArg) (any, error) {
+			if p.Game == "deadlock" {
+				return a.DeadlockWorkOn()
+			}
+			return a.DotaWorkOn()
+		}),
 		"deadlock_match_detail":  in(func(p matchArg) (any, error) { return a.Deadlock.Detail(p.MatchID) }),
 		"deadlock_heroes":        none(func() (any, error) { return a.Deadlock.HeroList(), nil }),
 		"deadlock_meta":          in(func(p forceArg) (any, error) { return a.Deadlock.Meta(p.Force) }),

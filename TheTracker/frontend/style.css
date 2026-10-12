@@ -285,7 +285,20 @@ button.line:hover { background: var(--panel); }
 .live-head h2 { font-size: 26px; }
 .clock { font-size: 40px; font-variant-numeric: tabular-nums; }
 .live-slot:not(:empty) { margin-bottom: 18px; }
+.mini tr.why td { padding-top: 0; color: var(--muted); font-size: 12.5px; }
 .net-slot:not(:empty) { margin-bottom: 14px; }
+.rev-top { margin-bottom: 12px; }
+.today-workon { margin: 14px 0; }
+.rev-pick { max-width: 360px; }
+.rev-head { margin-bottom: 16px; }
+.rev-verdict { margin-top: 12px; font-size: 15px; }
+.rev-point { padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+.rev-point:last-child { border-bottom: 0; }
+.rev-title { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.rev-habit { margin-top: 6px; font-size: 13.5px; }
+.rev-habit .tag, .work-on .tag { display: inline-block; padding: 1px 7px; margin-right: 6px; border-radius: 999px; background: var(--line); color: var(--accent); font-size: 11.5px; font-weight: 600; }
+.work-on { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.work-item { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--panel); display: flex; flex-direction: column; gap: 6px; }
 .net { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .net-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .check-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; align-self: center; }

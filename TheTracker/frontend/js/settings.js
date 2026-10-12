@@ -215,6 +215,7 @@ function overlayHtml() {
         <div class="ov-look-opts">
           <label class="switch"><input type="checkbox" data-change="ov-save" data-key="compact" ${o.compact ? "checked" : ""} /><span>Compact <span class="muted">(icon and seconds only)</span></span></label>
           <label class="switch"><input type="checkbox" data-change="ov-save" data-key="nextUp" ${o.nextUp ? "checked" : ""} /><span>Show what's next <span class="muted">(one quiet line with the next two events)</span></span></label>
+          <label class="switch"><input type="checkbox" data-change="ov-save" data-key="deathTips" ${o.deathTips !== false ? "checked" : ""} /><span>Tell me why I died <span class="muted">(while you wait to respawn: a saving item that was ready, no TP, gold unspent, dying again soon)</span></span></label>
         </div>
         <div class="ov-preview"><span class="muted">Preview</span><iframe id="ovPreview" src="overlay.html?preview" title="Overlay preview" tabindex="-1"></iframe></div>
       </div>

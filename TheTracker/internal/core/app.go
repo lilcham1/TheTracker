@@ -344,6 +344,7 @@ func (a *App) StartSimulation(seconds int) error {
 	a.simMu.Unlock()
 
 	matchID := "sim" + strconv.FormatInt(time.Now().Unix(), 10)
+	respawn := 0.0
 	send := func(clock float64, state string, alive bool, gold int, winner string) {
 		a.Tracker.HandleUpdate(jsonMap{
 			SimulatedMarker: true,
@@ -353,10 +354,15 @@ func (a *App) StartSimulation(seconds int) error {
 				"assists": float64(3 + int(clock-220)/15), "last_hits": 38 + (clock-220)/4, "denies": float64(4 + int(clock)/120),
 				"gold": float64(gold), "gpm": 520.0, "xpm": 610.0,
 			},
-			"hero": jsonMap{"name": "npc_dota_hero_juggernaut", "alive": alive, "level": float64(min(1+int(clock)/75, 30))},
+			"hero": jsonMap{"name": "npc_dota_hero_juggernaut", "alive": alive, "level": float64(min(1+int(clock)/75, 30)),
+				"respawn_seconds": respawn, "buyback_cost": 600.0},
+			// A Black King Bar ready and gold unspent, so the death below
+			// shows what "why you died" says.
 			"items": jsonMap{
-				"slot0": jsonMap{"name": "item_phase_boots"},
-				"slot1": jsonMap{"name": map[bool]string{true: "item_manta", false: "empty"}[clock > 500]},
+				"slot0":     jsonMap{"name": "item_phase_boots"},
+				"slot1":     jsonMap{"name": map[bool]string{true: "item_manta", false: "empty"}[clock > 500]},
+				"slot2":     jsonMap{"name": "item_black_king_bar", "cooldown": 0.0, "can_cast": true},
+				"teleport0": jsonMap{"name": "item_tpscroll", "charges": 1.0, "can_cast": true},
 			},
 		})
 	}
@@ -366,8 +372,13 @@ func (a *App) StartSimulation(seconds int) error {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		for i := 0; i < seconds; i++ {
-			// One death partway through, so the gold-lost figures move.
-			dead := i >= 12 && i < 16
+			// One death partway through, so the gold-lost figures move and
+			// the overlay shows why.
+			dead := i >= 12 && i < 24
+			respawn = 0
+			if dead {
+				respawn = float64(24 - i)
+			}
 			gold := 2400
 			if i >= 12 {
 				gold = 1700

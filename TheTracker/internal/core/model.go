@@ -35,6 +35,10 @@ func GameTypeLabel(t string) string {
 type Death struct {
 	Clock    string `json:"clock"`
 	GoldLost *int64 `json:"goldLost"`
+	// The clock in seconds, for spacing deaths out.
+	At float64 `json:"at,omitempty"`
+	// What went wrong, from the player's state just before (deathcheck.go).
+	Reasons []string `json:"reasons,omitempty"`
 }
 
 type KeyItemEntry struct {
@@ -133,6 +137,11 @@ type MatchState struct {
 	LastSeenAt  *string `json:"lastSeenAt"`
 	// From the built-in simulator. Never saved or synced.
 	Simulated bool `json:"simulated"`
+	// Seconds until the hero is back, while dead.
+	RespawnSeconds *int64 `json:"respawnSeconds,omitempty"`
+	// The player's state on the last report while alive, for explaining a
+	// death. Not shown or saved.
+	lastAlive *aliveSnapshot
 	// Wards or a Blood Grenade were bought before 5:00 (see role.go). Kept
 	// once seen: wards are placed, so the item itself goes.
 	SupportItems bool `json:"supportItems"`

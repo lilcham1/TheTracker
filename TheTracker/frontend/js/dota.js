@@ -621,7 +621,7 @@ function liveMatchHtml(m) {
       </section>
       <section>
         <div class="sec-head"><h3>Deaths</h3></div>
-        ${m.deaths.length ? `<table class="mini">${m.deaths.map((d) => `<tr><td>${esc(d.clock)}</td><td class="num loss">${known(d.goldLost) ? `-${fmtNum(d.goldLost)} gold` : ""}</td></tr>`).join("")}</table>` : `<p class="muted">None so far.</p>`}
+        ${m.deaths.length ? `<table class="mini">${m.deaths.map((d) => `<tr><td>${esc(d.clock)}</td><td class="num loss">${known(d.goldLost) ? `-${fmtNum(d.goldLost)} gold` : ""}</td></tr>${(d.reasons || []).length ? `<tr class="why"><td colspan="2">${d.reasons.map((r) => esc(r)).join("<br>")}</td></tr>` : ""}`).join("")}</table>` : `<p class="muted">None so far.</p>`}
         <div class="sec-head"><h3>Key items</h3></div>
         ${m.keyItemLog.length ? `<div class="item-times">${m.keyItemLog.map((k) => `<span class="item-time">${itemImgHtml(k.item)}<span class="num">${esc(k.clock)}</span></span>`).join("")}</div>` : `<p class="muted">Boots, Blink, BKB and other big items are timed as you buy them.</p>`}
         <div class="sec-head"><h3>Roshan</h3></div>

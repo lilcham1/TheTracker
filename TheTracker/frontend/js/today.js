@@ -102,6 +102,9 @@ view("today", {
     if (g.deadlock && dlLinked()) dlOverview.load(force);
     if (g.cs2) csLoad();
     if (g.overwatch && owLinked()) owOverview.load(force).then(() => owProgressAll.load(true));
+    // What to work on: built from the last ten matches, cached for a while.
+    if (g.dota && dotaLinked()) workOnRes.dota.load();
+    if (g.deadlock && dlLinked()) workOnRes.deadlock.load();
   },
   render() {
     const games = enabledGames();
@@ -120,6 +123,9 @@ view("today", {
         { label: "Last 7 days", value: `${week.games} game${week.games === 1 ? "" : "s"}`, sub: `${week.won} won, ${week.lost} lost` },
         { label: "Won this week", value: pct(rate(week)), tone: toneOfRate(rate(week)) },
       ])}
+      ${["dota", "deadlock"].filter((g) => games.includes(g) && workOnRes[g].data && workOnRes[g].data.items.length).map((g) => `<section class="today-workon">
+        <div class="sec-head"><h3>To work on in ${GAME_NAMES[g]}</h3><button class="link" data-act="go" data-view="${g === "dota" ? "dota-review" : "dl-review"}" type="button">Review</button></div>
+        ${workOnHtml(g, { compact: true })}</section>`).join("")}
       <div class="today-grid">${games.map((g) => `<section class="today-card" data-theme="${g}">
         <div class="sec-head"><h3>${GAME_NAMES[g]}</h3><button class="link" data-act="game" data-game="${g}" type="button">Open</button></div>
         ${todayCardBody(g)}</section>`).join("")}</div>

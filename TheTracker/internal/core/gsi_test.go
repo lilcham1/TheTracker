@@ -55,8 +55,9 @@ func TestTheConfigNamesThePortAndAsksForWhatTheTrackerReads(t *testing.T) {
 			t.Errorf("%s must be requested", key)
 		}
 	}
-	if !strings.Contains(text, `"abilities"     "0"`) {
-		t.Error("abilities stays off: nothing reads it and it inflates every payload")
+	// Abilities are read for the "why you died" check (ultimate ready).
+	if !strings.Contains(text, `"abilities"     "1"`) {
+		t.Error("abilities must be requested for the death check")
 	}
 }
 
