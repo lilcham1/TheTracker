@@ -716,3 +716,128 @@ kbd { font: 500 11px var(--body); padding: 1px 5px; border: 1px solid var(--line
 .hk-label .small { display: block; margin-top: 1px; }
 .hk-layout .chips.seg { margin-top: 4px; }
 .hk-layout + .hk-grid { margin-top: 10px; }
+
+/* ======================================================================
+   Arena restyle. Layered over the base so the structure above stays: cut
+   corners instead of rounded pills, squared uppercase tags for filters,
+   skewed result marks, an accent edge on every card, a glow and a faint
+   diagonal texture behind the page, tracked uppercase headings and nav.
+   ====================================================================== */
+
+:root { --cut: 7px; --cut-sm: 5px; }
+.shell {
+  --cut-shape: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  --cut-shape-sm: polygon(var(--cut-sm) 0, 100% 0, 100% calc(100% - var(--cut-sm)), calc(100% - var(--cut-sm)) 100%, 0 100%, 0 var(--cut-sm));
+  --edge: linear-gradient(90deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 35%, transparent) 55%, transparent 100%);
+}
+
+/* The stage: a glow where the title sits and a faint diagonal texture. */
+.main { position: relative; background: radial-gradient(900px 380px at 12% -8%, var(--accent-soft), transparent 70%); }
+.page { background: repeating-linear-gradient(-45deg, transparent 0 14px, rgba(255, 255, 255, .012) 14px 15px); }
+
+/* Headings: big, tracked, with a slanted accent mark. */
+.top { padding: 18px 28px 14px; border-bottom: 0; }
+.top-title h1 { display: flex; align-items: center; gap: 12px; font: 700 26px/1.1 var(--display); letter-spacing: .02em; text-transform: uppercase; }
+.top-title h1::before { content: ""; width: 7px; height: 22px; background: var(--accent-grad); transform: skewX(-14deg); border-radius: 1px; flex: none; }
+.top-title p { font-size: 12.5px; margin-top: 3px; letter-spacing: .01em; }
+.sec-head h3, .panel h3, .set h3, .hk-section h3, .build-group h3 { font: 700 12.5px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); }
+.sec-head h3::before, .hk-section h3::before { content: ""; display: inline-block; width: 4px; height: 12px; margin-right: 9px; vertical-align: -1px; background: var(--accent); transform: skewX(-14deg); }
+.panel h2 { font: 700 22px var(--display); letter-spacing: .01em; }
+.empty h3 { font: 700 18px var(--display); letter-spacing: .04em; text-transform: uppercase; }
+
+/* The status strip replaces the pill cluster: flat tags with a dot, and a
+   square settings button. */
+.top-actions { gap: 4px 18px; align-items: center; }
+.pill { height: auto; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; font: 600 11.5px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); }
+.pill:hover { transform: none; box-shadow: none; color: var(--text); }
+.pill.on { color: var(--accent); }
+.pill .dot { width: 7px; height: 7px; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent); }
+.pill.ok .dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--win) 22%, transparent); }
+.pill.warn .dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
+.pill.icon-only { width: 36px; height: 36px; margin-left: 6px; border: 1px solid var(--line); background: var(--panel); clip-path: var(--cut-shape-sm); transition: border-color var(--t), color var(--t), background var(--t); }
+.pill.icon-only:hover { border-color: var(--accent); color: var(--accent); background: var(--panel-2); }
+.pill.icon-only.on { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Buttons: cut corners, tracked uppercase display type. */
+.btn { height: 36px; padding: 0 18px; border-radius: 0; clip-path: var(--cut-shape); font: 700 12.5px var(--display); letter-spacing: .08em; text-transform: uppercase; box-shadow: none; }
+.btn:hover:not(:disabled) { transform: none; box-shadow: none; filter: brightness(1.08); }
+.btn:active:not(:disabled) { transform: scale(.98); filter: brightness(.95); }
+.btn.ghost { background: color-mix(in srgb, var(--panel) 80%, transparent); border-color: var(--line); color: var(--text); font-weight: 600; }
+.btn.ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); filter: none; }
+.btn.small { height: 30px; padding: 0 13px; font-size: 11.5px; }
+.link { font-weight: 600; }
+
+/* Filters: squared uppercase tags; the one that is on is solid. A set
+   where exactly one is on becomes a rail with a solid block. */
+.chip { height: 28px; padding: 0 11px; border-radius: 3px; border-color: var(--line); font: 600 11.5px var(--display); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.chip:hover { border-color: var(--text-2); color: var(--text); }
+.chip.on { background: var(--accent-grad); border-color: transparent; color: var(--accent-ink); }
+.chip.on .muted { color: color-mix(in srgb, var(--accent-ink) 70%, transparent); }
+.chips.seg { padding: 2px; border-radius: 4px; background: var(--side); border-color: var(--line); box-shadow: none; }
+.chips.seg .chip { height: 26px; border-radius: 2px; }
+.chips.seg .chip:hover { background: var(--panel); }
+.chips.seg .chip.on { background: var(--accent-grad); color: var(--accent-ink); box-shadow: none; }
+.corner-grid .chip { border-radius: 3px; }
+
+/* Tabs: thick ink bar, tracked labels. */
+.tab, .page-tabs button { font: 600 12.5px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.tabs .ink, .page-tabs .ink { height: 3px; border-radius: 0; }
+
+/* Cards: an accent edge along the top of every raised surface. */
+.stat, .panel, .set, .work-item, .insight, .table-wrap, .goal-form, .build, .account-card, .live-strip { position: relative; border-radius: 6px; overflow: hidden; }
+.stat::before, .panel::before, .set::before, .work-item::before, .table-wrap::before, .goal-form::before, .build::before, .account-card::before, .live-strip::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 2px; background: var(--edge); pointer-events: none; }
+.insight { border-left-width: 4px; }
+.stat { padding: 14px 16px 12px; }
+.stat-label { letter-spacing: .12em; }
+.stat-value { font-size: 34px; font-weight: 700; letter-spacing: -.02em; }
+.stat:hover { transform: translateY(-2px); }
+.hero-head { border-radius: 6px; overflow: hidden; position: relative; background: linear-gradient(135deg, var(--accent-soft), var(--panel) 55%); }
+.hero-head::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(-55deg, transparent 0 22px, color-mix(in srgb, var(--accent) 7%, transparent) 22px 23px); pointer-events: none; }
+.hero-head::after { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 3px; background: var(--edge); }
+.hero-head > * { position: relative; }
+.hero-head h2 { font-weight: 700; letter-spacing: .01em; text-transform: uppercase; }
+
+/* Results: skewed marks, and the signature run of bars leans forward. */
+.res { min-width: 46px; padding: 2px 10px; border-radius: 2px; transform: skewX(-12deg); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.res.win { background: var(--win); color: #0b1a08; }
+.res.loss { background: var(--loss); color: #220907; }
+.form { transform: skewX(-12deg); }
+.form i { border-radius: 1px; }
+.line { border-radius: 4px; }
+.line.win { background: linear-gradient(90deg, color-mix(in srgb, var(--win) 9%, transparent), transparent 40%); }
+.line.loss { background: linear-gradient(90deg, color-mix(in srgb, var(--loss) 9%, transparent), transparent 40%); }
+button.line:hover { transform: translateX(2px); box-shadow: none; }
+.table th { font-weight: 700; letter-spacing: .1em; }
+.table tr.click:hover td { background: var(--accent-soft); }
+.goal { border-radius: 3px; font-family: var(--display); font-weight: 600; letter-spacing: .02em; }
+.rev-habit .tag, .work-on .tag { border-radius: 2px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; font-size: 10.5px; background: var(--accent); color: var(--accent-ink); }
+.ptag, .ptag.src { border-radius: 2px; }
+
+/* The rail: tracked uppercase nav, chunky game tabs, a glowing brand mark. */
+.brand { font: 700 18px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+.brand::after { width: 34px; height: 3px; box-shadow: 0 0 12px var(--accent); }
+.brand img { border-radius: 4px; }
+.games { gap: 2px; padding: 2px; border-radius: 4px; background: var(--side); border-color: var(--line); box-shadow: none; }
+.game { border-radius: 2px; padding: 8px 0; font: 700 12px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.game.on { clip-path: var(--cut-shape-sm); box-shadow: none; }
+.nav-item { border-radius: 3px; padding: 9px 10px 9px 14px; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.nav-item:hover { color: var(--text); }
+.nav-item.on { background: linear-gradient(90deg, var(--accent-soft), transparent 80%); color: var(--text); }
+.nav-item::before { top: 7px; bottom: 7px; width: 3px; border-radius: 0; }
+.search-btn { border-radius: 3px; font-size: 12.5px; }
+.side-live { position: relative; overflow: hidden; border-radius: 4px; border-top-width: 1px; background-image: linear-gradient(90deg, var(--accent-soft), transparent 60%); }
+.side-live::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 2px; background: var(--edge); }
+
+/* Inputs, notes, dialogs. */
+.input { border-radius: 4px; }
+.note { border-radius: 4px; border-left-width: 3px; }
+.toast { border-radius: 4px; border-left: 3px solid var(--accent); }
+.confirm { border-radius: 6px; }
+.banner { border-left: 4px solid var(--accent); }
+.empty { border-radius: 6px; }
+kbd { border-radius: 3px; }
+.net-cell .display, .clock { font-weight: 700; }
+
+/* The first block on a page slides in from the mark; the rest rise. */
+.page.enter > :first-child { animation-name: slide; }
+@keyframes slide { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
