@@ -2,24 +2,25 @@ package core
 
 // The AI coach: a short write-up of a reviewed match, written by Claude
 // Sonnet 5.5 from the facts the review established (never from anything it
-// has to guess). It runs on this PC with the owner's own Anthropic sign-in
-// (`ant auth login`, or ANTHROPIC_API_KEY), and only for the owner's Steam
-// account: everyone else never sees it. One call per match, kept locally,
-// so a match is never paid for twice.
+// has to guess). It runs through the owner's own Claude Code on this PC, in
+// headless mode, so their Claude plan covers it; and only for the owner's
+// Steam account: everyone else never sees it. One call per match, kept
+// locally, so a match is never asked for twice.
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
 const coachModel = "claude-sonnet-5-5"
@@ -110,43 +111,127 @@ var coachAsk = func(ctx context.Context, game string, facts map[string]any) (Coa
 	if game == "deadlock" {
 		name = "Deadlock"
 	}
-	// Credentials come from the SDK's standard chain: ANTHROPIC_API_KEY, or
-	// the profile `ant auth login` keeps on this PC.
-	client := anthropic.NewClient(option.WithRequestTimeout(2 * time.Minute))
-	msg, err := client.Beta.Messages.New(ctx, anthropic.BetaMessageNewParams{
-		Model:     coachModel,
-		MaxTokens: 4000,
-		// A policy decline is re-served by a fallback model in the same call.
-		Betas:     []anthropic.AnthropicBeta{anthropic.AnthropicBetaServerSideFallback2026_07_01},
-		Fallbacks: anthropic.BetaFallbacksParamOfDefault(),
-		System:    []anthropic.BetaTextBlockParam{{Text: coachSystem}},
-		OutputConfig: anthropic.BetaOutputConfigParam{
-			Effort: anthropic.BetaOutputConfigEffortMedium,
-			Format: anthropic.BetaJSONOutputFormatParam{Schema: coachSchema},
-		},
-		Messages: []anthropic.BetaMessageParam{
-			anthropic.NewBetaUserMessage(anthropic.NewBetaTextBlock("Game: " + name + "\nFacts:\n" + string(raw))),
-		},
-	})
-	if err != nil {
-		return CoachNote{}, err
+	bin := claudeCodePath()
+	if bin == "" {
+		return CoachNote{}, errNoClaudeCode
 	}
-	if msg.StopReason == anthropic.BetaStopReasonRefusal {
-		return CoachNote{}, errCoachRefused
+	schema, _ := json.Marshal(coachSchema)
+	args := []string{"-p", "--output-format", "json", "--model", coachModel, "--effort", "medium",
+		"--system-prompt", coachSystem, "--json-schema", string(schema),
+		// A write-up needs no tools, no MCP servers, and no saved session.
+		"--tools", "", "--strict-mcp-config", "--no-session-persistence"}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	out, err := coachExec(ctx, bin, args, "Game: "+name+"\nFacts:\n"+string(raw))
+	if ctx.Err() != nil {
+		return CoachNote{}, errors.New("Claude Code took too long to answer.")
 	}
-	var text strings.Builder
-	for _, block := range msg.Content {
-		if b, ok := block.AsAny().(anthropic.BetaTextBlock); ok {
-			text.WriteString(b.Text)
+	return parseClaudeCodeNote(out, err)
+}
+
+// coachExec runs Claude Code with the prompt on stdin; swapped in tests.
+var coachExec = func(ctx context.Context, bin string, args []string, stdin string) ([]byte, error) {
+	cmd := hidden(bin, args...)
+	// Its own folder, so no project's CLAUDE.md or settings come along;
+	// and no API key in its environment, so the Claude plan pays.
+	dir := filepath.Join(os.TempDir(), "thetracker-coach")
+	_ = os.MkdirAll(dir, 0o755)
+	cmd.Dir = dir
+	for _, kv := range os.Environ() {
+		k := strings.ToUpper(strings.SplitN(kv, "=", 2)[0])
+		if k == "ANTHROPIC_API_KEY" || k == "ANTHROPIC_AUTH_TOKEN" || k == "CLAUDECODE" || strings.HasPrefix(k, "CLAUDE_CODE_") {
+			continue
+		}
+		cmd.Env = append(cmd.Env, kv)
+	}
+	cmd.Stdin = strings.NewReader(stdin)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		return stdout.Bytes(), err
+	case <-ctx.Done():
+		_ = cmd.Process.Kill()
+		<-done
+		return stdout.Bytes(), ctx.Err()
+	}
+}
+
+// claudeCodePath finds the claude program: on the PATH, or where its
+// installer puts it.
+func claudeCodePath() string {
+	if p, err := exec.LookPath("claude"); err == nil {
+		return p
+	}
+	home, _ := os.UserHomeDir()
+	for _, p := range []string{
+		filepath.Join(home, ".local", "bin", "claude.exe"),
+		filepath.Join(os.Getenv("APPDATA"), "npm", "claude.cmd"),
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
 		}
 	}
+	return ""
+}
+
+// parseClaudeCodeNote reads Claude Code's --output-format json answer.
+func parseClaudeCodeNote(out []byte, runErr error) (CoachNote, error) {
+	var res struct {
+		IsError          bool            `json:"is_error"`
+		Subtype          string          `json:"subtype"`
+		Result           string          `json:"result"`
+		StructuredOutput json.RawMessage `json:"structured_output"`
+	}
+	if json.Unmarshal(out, &res) != nil {
+		if runErr != nil {
+			return CoachNote{}, fmt.Errorf("Claude Code didn't run: %v", runErr)
+		}
+		return CoachNote{}, errors.New("Claude Code's answer couldn't be read.")
+	}
+	if res.IsError {
+		return CoachNote{}, claudeCodeError(res.Result)
+	}
+	body := []byte(res.Result)
+	if len(res.StructuredOutput) > 0 && string(res.StructuredOutput) != "null" {
+		body = res.StructuredOutput
+	}
+	text := strings.TrimSpace(string(body))
+	text = strings.TrimPrefix(strings.TrimPrefix(text, "```json"), "```")
+	text = strings.TrimSpace(strings.TrimSuffix(text, "```"))
 	var note CoachNote
-	if err := json.Unmarshal([]byte(text.String()), &note); err != nil {
+	if err := json.Unmarshal([]byte(text), &note); err != nil || note.Verdict == "" {
 		return CoachNote{}, errors.New("The coach's answer couldn't be read.")
 	}
-	note.Model = string(msg.Model)
+	note.Model = coachModel + " via Claude Code"
 	return note, nil
 }
+
+// claudeCodeError turns Claude Code's own error text into an error the
+// coach can sort.
+func claudeCodeError(msg string) error {
+	low := strings.ToLower(msg)
+	switch {
+	case strings.Contains(low, "/login") || strings.Contains(low, "not logged in") || strings.Contains(low, "invalid api key") || strings.Contains(low, "oauth"):
+		return errClaudeCodeSignIn
+	case strings.Contains(low, "limit"):
+		return fmt.Errorf("Your Claude plan's usage limit is reached for now: %s", strings.TrimSpace(msg))
+	}
+	if msg == "" {
+		msg = "no details"
+	}
+	return fmt.Errorf("Claude Code couldn't write it: %s", strings.TrimSpace(msg))
+}
+
+var (
+	errNoClaudeCode     = errors.New("Claude Code isn't installed on this PC.")
+	errClaudeCodeSignIn = errors.New("Claude Code isn't signed in to your Claude account.")
+)
 
 var errCoachRefused = errors.New("The model declined to write this one.")
 
@@ -178,7 +263,10 @@ func (a *App) Coach(game string, matchID uint64, force bool) (CoachResult, error
 	}
 	note, err = coachAsk(context.Background(), game, coachFacts(review))
 	if err != nil {
-		return coachError(err), nil
+		res := coachError(err)
+		// The last failure, for troubleshooting without the UI.
+		a.Store.WriteCache("coach_last_error", res)
+		return res, nil
 	}
 	a.Store.WriteCache(key, note)
 	return CoachResult{Status: "ready", Note: &note}, nil
@@ -186,22 +274,8 @@ func (a *App) Coach(game string, matchID uint64, force bool) (CoachResult, error
 
 // coachError says what went wrong in words the player can act on.
 func coachError(err error) CoachResult {
-	var apiErr *anthropic.Error
-	if errors.As(err, &apiErr) {
-		switch {
-		case apiErr.StatusCode == 401 || apiErr.StatusCode == 403:
-			return CoachResult{Status: "not_set_up", Error: "Your Anthropic sign-in was refused or has expired."}
-		case apiErr.StatusCode == 429:
-			return CoachResult{Status: "error", Error: "Anthropic is rate-limiting your account right now; try again in a minute."}
-		case apiErr.StatusCode == 400 && strings.Contains(strings.ToLower(apiErr.Error()), "credit"):
-			return CoachResult{Status: "error", Error: "Your Anthropic account has no API credits left (platform.claude.com, Billing)."}
-		}
-		return CoachResult{Status: "error", Error: fmt.Sprintf("Anthropic answered with an error (HTTP %d).", apiErr.StatusCode)}
-	}
-	// The SDK's no-credentials error type is internal to it; its message is
-	// the only handle on it.
-	if strings.Contains(err.Error(), "no Anthropic credentials found") {
-		return CoachResult{Status: "not_set_up"}
+	if errors.Is(err, errNoClaudeCode) || errors.Is(err, errClaudeCodeSignIn) {
+		return CoachResult{Status: "not_set_up", Error: err.Error()}
 	}
 	return CoachResult{Status: "error", Error: err.Error()}
 }

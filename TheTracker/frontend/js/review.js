@@ -36,7 +36,7 @@ function coachHtml(game) {
   const d = c.data;
   if (d.status === "off" || d.status === "locked") return "";
   if (d.status === "not_set_up") return `<section class="panel coach"><div class="sec-head"><h3>AI coach</h3></div>
-      <p class="muted">${d.error ? esc(d.error) + " " : ""}Sign in once with your Anthropic account in a terminal: <code>ant auth login</code> (install it with <code>go install github.com/anthropics/anthropic-cli/cmd/ant@latest</code>), then reopen this page. Each write-up uses Claude Sonnet 5.5 and is billed to that account's API usage, a few cents a match.</p>
+      <p class="muted">${d.error ? esc(d.error) + " " : ""}The coach writes through Claude Code on this PC, with your Claude plan. Open a terminal, run <code>claude</code>, sign in with <code>/login</code>, then try again.</p>
       <div class="row"><button class="btn ghost small" data-act="coach-again" data-game="${game}" type="button">Try again</button></div></section>`;
   if (d.status !== "ready" || !d.note) return `<section class="panel coach"><div class="sec-head"><h3>AI coach</h3></div><div class="note err">${esc(d.error || "No answer.")}</div>
       <div class="row"><button class="btn ghost small" data-act="coach-again" data-game="${game}" type="button">Ask again</button></div></section>`;

@@ -352,7 +352,7 @@ function coachHtml(game) {
       <div class="chips">${chip("dotaMode", "role", "For my role and hero", !own)}${chip("dotaMode", "own", "My own goals", own)}</div>
       ${own ? `<p class="hint">Your own goals (last hits at 10:00, deaths, GPM) are set on the Sessions page.</p>` : `<div class="field"><span>How high</span><div class="chips">${levels}</div></div>
       <label class="switch"><input type="checkbox" data-change="coach-check" ${c.goalCheck !== false ? "checked" : ""} /><span>Goal check on the overlay at 10:00 and 20:00 <span class="muted">(a few seconds: your last hits and net worth against the goal)</span></span></label>`}
-      ${S.boot.coach ? `<label class="switch"><input type="checkbox" data-change="coach-ai" ${c.aiOff ? "" : "checked"} /><span>AI coach on Review <span class="muted">(Claude Sonnet 5.5 writes up each reviewed match from the facts above, with your own Anthropic sign-in on this PC)</span></span></label>` : ""}
+      ${S.boot.coach ? `<label class="switch"><input type="checkbox" data-change="coach-ai" ${c.aiOff ? "" : "checked"} /><span>AI coach on Review <span class="muted">(Claude Sonnet 5.5 writes up each reviewed match from the facts above, through your Claude Code and Claude plan)</span></span></label>` : ""}
     </section>`;
   }
   return `<section class="set"><h3>Goals</h3>

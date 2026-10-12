@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -90,7 +91,7 @@ func TestCoachAsksOnceAndKeepsTheAnswer(t *testing.T) {
 func TestCoachSaysWhenThereIsNoSignIn(t *testing.T) {
 	a := coachTestApp(t, 850402858)
 	stubCoach(t, func(context.Context, string, map[string]any) (CoachNote, error) {
-		return CoachNote{}, errors.New("no Anthropic credentials found. The SDK tried these sources in order: …")
+		return CoachNote{}, errClaudeCodeSignIn
 	})
 	if r, _ := a.Coach("dota", 100, false); r.Status != "not_set_up" {
 		t.Fatalf("no sign-in: %+v", r)
@@ -98,5 +99,63 @@ func TestCoachSaysWhenThereIsNoSignIn(t *testing.T) {
 	stubCoach(t, func(context.Context, string, map[string]any) (CoachNote, error) { return CoachNote{}, errCoachRefused })
 	if r, _ := a.Coach("dota", 100, false); r.Status != "error" || r.Error == "" {
 		t.Fatalf("refused: %+v", r)
+	}
+	stubCoach(t, func(context.Context, string, map[string]any) (CoachNote, error) { return CoachNote{}, errNoClaudeCode })
+	if r, _ := a.Coach("dota", 100, false); r.Status != "not_set_up" || !strings.Contains(r.Error, "isn't installed") {
+		t.Fatalf("no claude: %+v", r)
+	}
+}
+
+// What Claude Code prints with --output-format json, in its three shapes.
+func TestParseClaudeCodeNote(t *testing.T) {
+	note := `{"verdict":"Two deaths alone in their jungle cost the game.","deaths":[{"clock":"12:34","note":"Wait for a ward."}],"focus":[{"title":"Ward before you farm","why":"x","drill":"y"}],"praise":""}`
+	structured, _ := json.Marshal(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": "", "structured_output": json.RawMessage(note)})
+	n, err := parseClaudeCodeNote(structured, nil)
+	if err != nil || n.Focus[0].Title != "Ward before you farm" || n.Model != "claude-sonnet-5-5 via Claude Code" {
+		t.Fatalf("structured: %+v %v", n, err)
+	}
+	fenced, _ := json.Marshal(map[string]any{"type": "result", "is_error": false, "result": "```json\n" + note + "\n```"})
+	if n, err = parseClaudeCodeNote(fenced, nil); err != nil || n.Deaths[0].Clock != "12:34" {
+		t.Fatalf("text: %+v %v", n, err)
+	}
+	notIn, _ := json.Marshal(map[string]any{"type": "result", "is_error": true, "result": "Not logged in · Please run /login"})
+	if _, err = parseClaudeCodeNote(notIn, errors.New("exit status 1")); !errors.Is(err, errClaudeCodeSignIn) {
+		t.Fatalf("not logged in: %v", err)
+	}
+	limited, _ := json.Marshal(map[string]any{"type": "result", "is_error": true, "result": "Claude usage limit reached. Your limit will reset at 11pm."})
+	if _, err = parseClaudeCodeNote(limited, errors.New("exit status 1")); err == nil || !strings.Contains(err.Error(), "usage limit") {
+		t.Fatalf("limit: %v", err)
+	}
+	if _, err = parseClaudeCodeNote([]byte("garbage"), errors.New("exec: not found")); err == nil || !strings.Contains(err.Error(), "didn't run") {
+		t.Fatalf("garbage: %v", err)
+	}
+}
+
+// coachAsk builds the right Claude Code command line and hands the facts
+// over on stdin.
+func TestCoachAskRunsClaudeCodeHeadless(t *testing.T) {
+	old := coachExec
+	t.Cleanup(func() { coachExec = old })
+	var gotArgs []string
+	var gotIn string
+	coachExec = func(_ context.Context, bin string, args []string, stdin string) ([]byte, error) {
+		gotArgs, gotIn = args, stdin
+		return json.Marshal(map[string]any{"is_error": false, "result": `{"verdict":"ok","deaths":[],"focus":[],"praise":""}`})
+	}
+	if claudeCodePath() == "" {
+		t.Skip("no Claude Code on this machine")
+	}
+	n, err := coachAsk(context.Background(), "deadlock", map[string]any{"hero": "Haze"})
+	if err != nil || n.Verdict != "ok" {
+		t.Fatalf("%+v %v", n, err)
+	}
+	line := strings.Join(gotArgs, " ")
+	for _, want := range []string{"-p", "--output-format json", "--model claude-sonnet-5-5", "--json-schema", "--no-session-persistence", "--strict-mcp-config"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("args miss %q: %s", want, line)
+		}
+	}
+	if !strings.Contains(gotIn, "Game: Deadlock") || !strings.Contains(gotIn, `"hero":"Haze"`) {
+		t.Errorf("stdin: %q", gotIn)
 	}
 }
