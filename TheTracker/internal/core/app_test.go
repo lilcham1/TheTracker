@@ -252,13 +252,6 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 				return
 			}
 			reply(twitch)
-		case "coach:review":
-			if twitch == nil {
-				reply(map[string]any{"ok": false, "reason": "not_set_up"})
-				return
-			}
-			reply(map[string]any{"ok": true, "note": map[string]any{"verdict": "Lost to the same mistake three times.", "deaths": []any{map[string]any{"clock": "12:00", "note": "Press BKB first."}},
-				"focus": []any{map[string]any{"title": "BKB before the fight", "why": "Two deaths with it ready.", "drill": "Press it as the first spell lands."}}, "praise": "", "model": "claude-opus-5-5"}})
 		case "profiles:whoami":
 			reply(map[string]any{"userId": "user-1"})
 		case "matches:upsert":

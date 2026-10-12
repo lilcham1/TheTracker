@@ -64,6 +64,8 @@ type Boot struct {
 	Overlay    bool                    `json:"overlayVisible"`
 	DataDir    string                  `json:"dataDir"`
 	ExportDir  string                  `json:"exportDir"`
+	// The AI coach is the owner's alone; nobody else sees it.
+	Coach bool `json:"coach"`
 }
 
 type enabledArg struct {
@@ -126,7 +128,7 @@ func commands(a *core.App) map[string]command {
 				Version: core.Version, Prefs: s.LoadPrefs(), Profile: s.LoadProfile(),
 				DotaLink: s.LoadLink("dota"), DlLink: s.LoadLink("deadlock"), OwLink: a.Ow.Link(), Auth: a.Cloud.Auth(),
 				Background: a.Background(), Gsi: a.Gsi.Status(), Overlay: a.Shell.OverlayVisible(),
-				DataDir: s.Dir, ExportDir: core.ExportDir(),
+				DataDir: s.Dir, ExportDir: core.ExportDir(), Coach: a.CoachUnlocked(),
 			}, nil
 		}),
 

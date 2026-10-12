@@ -21,7 +21,7 @@ const workOnRes = {
 onChange("rev-match", (el) => {
   REV[el.dataset.game] = Number(el.value);
   reviewRes[el.dataset.game].load();
-  coachRes[el.dataset.game].load();
+  if (S.boot.coach) coachRes[el.dataset.game].load();
   rerender();
 });
 act("coach-again", (el) => coachRes[el.dataset.game].load(true));
@@ -29,13 +29,15 @@ act("coach-again", (el) => coachRes[el.dataset.game].load(true));
 /// The AI coach's write-up: its verdict, the habits to work on with a
 /// drill each, and what to keep. Death notes go into the death table.
 function coachHtml(game) {
+  if (!S.boot.coach) return "";
   const c = coachRes[game];
   if (c.error) return `<section class="panel coach"><div class="sec-head"><h3>AI coach</h3></div><div class="note err">${esc(c.error)}</div></section>`;
   if (!c.data) return `<section class="panel coach"><div class="sec-head"><h3>AI coach</h3></div>${loadingState("Reading the match…")}</section>`;
   const d = c.data;
-  if (d.status === "off") return "";
+  if (d.status === "off" || d.status === "locked") return "";
   if (d.status === "not_set_up") return `<section class="panel coach"><div class="sec-head"><h3>AI coach</h3></div>
-      <p class="muted">Not set up. The coach runs on your cloud service with an Anthropic key: <code>npx convex env set --prod ANTHROPIC_API_KEY …</code> then <code>npx convex deploy</code>. A write-up costs a few cents per match.</p></section>`;
+      <p class="muted">${d.error ? esc(d.error) + " " : ""}Sign in once with your Anthropic account in a terminal: <code>ant auth login</code> (install it with <code>go install github.com/anthropics/anthropic-cli/cmd/ant@latest</code>), then reopen this page. Each write-up uses Claude Sonnet 5.5 and is billed to that account's API usage, a few cents a match.</p>
+      <div class="row"><button class="btn ghost small" data-act="coach-again" data-game="${game}" type="button">Try again</button></div></section>`;
   if (d.status !== "ready" || !d.note) return `<section class="panel coach"><div class="sec-head"><h3>AI coach</h3></div><div class="note err">${esc(d.error || "No answer.")}</div>
       <div class="row"><button class="btn ghost small" data-act="coach-again" data-game="${game}" type="button">Ask again</button></div></section>`;
   const n = d.note;
@@ -152,7 +154,7 @@ view("dota-review", {
     ensureHeroList();
     dHist.load();
     workOnRes.dota.load(force);
-    coachRes.dota.load(force);
+    if (S.boot.coach) coachRes.dota.load(force);
     return reviewRes.dota.load(force);
   },
   render() {
@@ -167,7 +169,7 @@ view("dl-review", {
   load(force) {
     dlOverview.load();
     workOnRes.deadlock.load(force);
-    coachRes.deadlock.load(force);
+    if (S.boot.coach) coachRes.deadlock.load(force);
     return reviewRes.deadlock.load(force);
   },
   render() {
