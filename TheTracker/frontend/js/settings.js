@@ -5,7 +5,12 @@ const SET = {
   diag: null, diagRunning: false, backups: null, backupPath: null, restoreArmed: null,
 };
 
-const SETTINGS_TABS = [["general", "General"], ["overlay", "Overlay"], ["network", "Connection"], ["account", "Account"], ["about", "About and updates"]];
+// One settings page for the whole app: what applies everywhere, then a
+// section for each game that is switched on.
+const SETTINGS_TABS = [["general", "General"], ["network", "Connection"], ["account", "Account"], ["about", "About and updates"]];
+const SETTINGS_GAME_TABS = [["dota", "Dota 2"], ["deadlock", "Deadlock"], ["cs2", "Counter-Strike 2"], ["overwatch", "Overwatch"]];
+// Older links name the tab that used to hold the overlay.
+const SETTINGS_ALIASES = { overlay: "dota" };
 
 act("settings-tab", (el) => go("settings", { tab: el.dataset.tab }));
 
@@ -316,12 +321,47 @@ function accountHtml() {
   }
 
   return `<section class="set"><h3>Your account</h3>${main}</section>
-    ${games.overwatch ? `<section class="set"><h3>Overwatch profile</h3>
-      <p class="muted">Overwatch runs on Battle.net, not Steam, so its profile is connected separately.</p>
-      <div class="lines"><div class="line static">${imgHtml(ow.avatar, "avatar small")}<span class="grow"><b>${ow.playerId ? esc(ow.name) : "Not connected"}</b></span>
-        ${ow.playerId ? `<button class="link" data-act="ow-unlink" type="button">Disconnect</button>` : `<button class="link" data-act="go" data-view="ow-overview" type="button">Connect</button>`}</div></div></section>` : ""}
     <section class="set"><h3>What signing in does</h3>
       <p class="muted">It proves which Steam account is yours, nothing more. TheTracker gets your public Steam ID from Steam and reads your public match data with it. It cannot post, trade, or see anything private, and it stores no Steam password or key.</p></section>`;
+}
+
+// ---------- Each game ----------
+
+function dotaSettingsHtml() {
+  return `<section class="set"><h3>Live tracking</h3>
+      <p class="muted">Dota sends your own match state to TheTracker while you play: that's what records your sessions, drives the overlay and explains your deaths.</p>
+      ${typeof liveSetupHtml === "function" ? liveSetupHtml() : ""}
+    </section>
+    ${overlayHtml()}`;
+}
+
+function deadlockSettingsHtml() {
+  const link = S.boot.deadlockLink || {};
+  return `<section class="set"><h3>Your Deadlock account</h3>
+      <div class="lines"><div class="line static"><span class="grow"><b>${link.accountId ? esc(link.personaname || "Steam account " + link.accountId) : "Not connected"}</b>
+        <span class="muted"> ${link.accountId ? "matches read from the public Deadlock API" : "sign in with Steam under Account"}</span></span>
+        ${link.accountId ? "" : `<button class="link" data-act="settings-tab" data-tab="account" type="button">Account</button>`}</div></div>
+    </section>
+    <section class="set"><h3>What works for Deadlock</h3>
+      <p class="muted">Deadlock has no live feed apps can read, so there's no in-game overlay or live tracking for it. Match history, the Review tab, hero stats and the live streamers page all come from the public Deadlock API after or outside your games. The connection check and Game mode work while Deadlock is open (Connection tab).</p>
+      <div class="row wrap"><button class="btn ghost" data-act="go" data-view="dl-review" type="button">Open Review</button>
+        <button class="btn ghost" data-act="go" data-view="dl-live" type="button">Streamers you linked</button></div>
+    </section>`;
+}
+
+function cs2SettingsHtml() {
+  return `<section class="set"><h3>Live tracking</h3>
+      ${typeof csSetupHtml === "function" && typeof CS !== "undefined" && CS.status ? csSetupHtml() : `<p class="muted">Checking CS2…</p>`}
+    </section>`;
+}
+
+function overwatchSettingsHtml() {
+  const ow = S.boot.overwatchLink || {};
+  return `<section class="set"><h3>Overwatch profile</h3>
+      <p class="muted">Overwatch runs on Battle.net, not Steam, so its profile is connected separately. Your profile must be public for career stats.</p>
+      <div class="lines"><div class="line static">${imgHtml(ow.avatar, "avatar small")}<span class="grow"><b>${ow.playerId ? esc(ow.name) : "Not connected"}</b></span>
+        ${ow.playerId ? `<button class="link" data-act="ow-unlink" type="button">Disconnect</button>` : `<button class="link" data-act="go" data-view="ow-overview" type="button">Connect</button>`}</div></div>
+    </section>`;
 }
 
 // ---------- About ----------
@@ -367,14 +407,24 @@ function aboutHtml() {
     </section>`;
 }
 
+/// The settings tab to show: older names mapped, a switched-off game's
+/// section falling back to General.
+function settingsTab() {
+  let tab = S.params.tab || "general";
+  tab = SETTINGS_ALIASES[tab] || tab;
+  if (SETTINGS_GAME_TABS.some(([k]) => k === tab) && !S.boot.prefs.games[tab]) tab = "general";
+  return tab;
+}
+
 view("settings", {
   game: null, title: "Settings", live: true,
   // Only the test-match button follows the live data.
   liveKey: (live) => !!live.simulating,
   sub: () => "",
   load() {
-    const tab = S.params.tab || "general";
-    if (tab === "overlay" && !SET.monitors) invoke("list_monitors").then((m) => { SET.monitors = m; rerender(); }).catch(() => {});
+    const tab = settingsTab();
+    if (tab === "dota" && typeof refreshGsi === "function") refreshGsi();
+    if (tab === "dota" && !SET.monitors) invoke("list_monitors").then((m) => { SET.monitors = m; rerender(); }).catch(() => {});
     if (tab === "general") invoke("list_backups").then((b) => { SET.backups = b; rerender(); }).catch(() => {});
     if (tab === "about" && (!S.updateChecked || Date.now() - S.updateChecked > 60000)) checkForUpdate(true);
     if (tab === "account") pollSlow();
@@ -385,9 +435,17 @@ view("settings", {
     return invoke("background_settings").then((bg) => { S.boot.background = bg; rerender(); }).catch(() => {});
   },
   render() {
-    const tab = S.params.tab || "general";
-    const body = { general: generalHtml, overlay: overlayHtml, network: networkHtml, account: accountHtml, about: aboutHtml }[tab] || generalHtml;
-    return `<div class="tabs" role="tablist">${SETTINGS_TABS.map(([k, l]) => `<button class="tab ${tab === k ? "on" : ""}" data-act="settings-tab" data-tab="${k}" role="tab" aria-selected="${tab === k}" type="button">${l}</button>`).join("")}</div>
+    const tab = settingsTab();
+    const body = {
+      general: generalHtml, network: networkHtml, account: accountHtml, about: aboutHtml,
+      dota: dotaSettingsHtml, deadlock: deadlockSettingsHtml, cs2: cs2SettingsHtml, overwatch: overwatchSettingsHtml,
+    }[tab] || generalHtml;
+    const tabBtn = ([k, l]) => `<button class="tab ${tab === k ? "on" : ""}" data-act="settings-tab" data-tab="${k}" role="tab" aria-selected="${tab === k}" type="button">${l}</button>`;
+    const games = SETTINGS_GAME_TABS.filter(([k]) => S.boot.prefs.games[k]);
+    return `<div class="set-nav">
+        <div class="tabs set-group" role="tablist"><span class="set-label">App</span>${SETTINGS_TABS.map(tabBtn).join("")}</div>
+        ${games.length ? `<div class="tabs set-group" role="tablist"><span class="set-label">Games</span>${games.map(tabBtn).join("")}</div>` : ""}
+      </div>
       <div class="settings">${body()}</div>`;
   },
 });

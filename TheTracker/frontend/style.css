@@ -158,6 +158,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); }
 .tab { border: 0; background: none; padding: 9px 0 10px; color: var(--muted); font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.set-nav { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.set-group { flex-wrap: wrap; align-items: center; row-gap: 0; }
+.set-label { width: 56px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
 .tab:hover { color: var(--text); }
 .tab.on { color: var(--text); border-bottom-color: var(--accent); }
 

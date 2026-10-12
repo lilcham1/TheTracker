@@ -546,7 +546,7 @@ function roleHtml() {
   const r = live.role;
   if (!r) return "";
   if (S.boot.prefs.overlay.dota.roleMode !== "auto") {
-    return `<div class="sec-head"><h3>Overlay reminders</h3></div><p class="hint">Set by hand in Settings, so they don't follow your role. <button class="link" data-act="go" data-view="settings" data-params='{"tab":"overlay"}' type="button">Change</button></p>`;
+    return `<div class="sec-head"><h3>Overlay reminders</h3></div><p class="hint">Set by hand in Settings, so they don't follow your role. <button class="link" data-act="go" data-view="settings" data-params='{"tab":"dota"}' type="button">Change</button></p>`;
   }
   const chip = (id, label) => `<button class="chip ${(id === "auto" ? r.why !== "chosen" : r.why === "chosen" && r.role === id) ? "on" : ""}" data-act="live-role" data-role="${id}" type="button">${label}</button>`;
   return `<div class="sec-head"><h3>Overlay reminders</h3></div>
