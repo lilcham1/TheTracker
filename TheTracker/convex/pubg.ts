@@ -23,6 +23,8 @@ const ROUTES: [RegExp, number][] = [
   [new RegExp(`^/shards/${SHARD}/players/${ACCOUNT}$`), 120],
   [new RegExp(`^/shards/${SHARD}/seasons$`), 86400],
   [new RegExp(`^/shards/${SHARD}/players/${ACCOUNT}/seasons/(division\\.[a-z0-9.\\-]{1,60}|lifetime)(/ranked)?$`), 600],
+  [new RegExp(`^/shards/${SHARD}/players/${ACCOUNT}/(weapon_mastery|survival_mastery)$`), 1800],
+  [/^\/shards\/pc-(as|eu|jp|kakao|krjp|na|oc|ru|sa|sea)\/leaderboards\/division\.[a-z0-9.\-]{1,60}\/(squad-fpp|squad|duo-fpp|duo|solo-fpp|solo)$/, 1800],
   // Matches aren't rate-limited and never change; the app keeps them itself.
   [new RegExp(`^/shards/${SHARD}/matches/[0-9a-f\\-]{36}$`), 0],
 ];

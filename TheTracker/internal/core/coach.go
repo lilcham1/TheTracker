@@ -74,7 +74,7 @@ type CoachResult struct {
 	Error  string     `json:"error,omitempty"`
 }
 
-const coachSystem = `You are a coach for a solo-queue player of Dota 2 and Deadlock, reading one of their matches between games.
+const coachSystem = `You are a coach for a player of Dota 2, Deadlock and PUBG: Battlegrounds, reading one of their matches between games.
 You get the facts an analyzer established from the public match data and from what the player's own client reported: the review points, each death with who killed them, where, the fight it was part of and how the game stood, the role goals, net worth curves, time dead, wards.
 Rules:
 - Use only those facts. Never invent events, positions, items or numbers that aren't in them. If the facts are thin, say less.
@@ -107,10 +107,7 @@ var coachSchema = map[string]any{
 // coachAsk sends one review to the model; swapped in tests.
 var coachAsk = func(ctx context.Context, game string, facts map[string]any) (CoachNote, error) {
 	raw, _ := json.Marshal(facts)
-	name := "Dota 2"
-	if game == "deadlock" {
-		name = "Deadlock"
-	}
+	name := map[string]string{"dota": "Dota 2", "deadlock": "Deadlock", "pubg": "PUBG: Battlegrounds"}[game]
 	bin := claudeCodePath()
 	if bin == "" {
 		return CoachNote{}, errNoClaudeCode
@@ -236,7 +233,7 @@ var (
 var errCoachRefused = errors.New("The model declined to write this one.")
 
 // Coach returns the write-up for a match, asking the model once.
-func (a *App) Coach(game string, matchID uint64, force bool) (CoachResult, error) {
+func (a *App) Coach(game string, matchID uint64, matchKey string, force bool) (CoachResult, error) {
 	if !a.CoachUnlocked() {
 		return CoachResult{Status: "locked"}, nil
 	}
@@ -245,9 +242,12 @@ func (a *App) Coach(game string, matchID uint64, force bool) (CoachResult, error
 	}
 	var review MatchReview
 	var err error
-	if game == "deadlock" {
+	switch game {
+	case "pubg":
+		review, err = a.PubgReview(matchKey)
+	case "deadlock":
 		review, err = a.DeadlockReview(matchID)
-	} else {
+	default:
 		game = "dota"
 		review, err = a.DotaReview(matchID)
 	}
@@ -255,6 +255,9 @@ func (a *App) Coach(game string, matchID uint64, force bool) (CoachResult, error
 		return CoachResult{}, err
 	}
 	key := fmt.Sprintf("coach_%s_%d", game, review.MatchID)
+	if review.MatchKey != "" {
+		key = "coach_" + game + "_" + safeKey(review.MatchKey)
+	}
 	var note CoachNote
 	if !force {
 		if _, ok := a.Store.ReadCacheStale(key, &note); ok && note.Verdict != "" {
@@ -295,7 +298,7 @@ func coachFacts(r MatchReview) map[string]any {
 	deaths := []map[string]any{}
 	for _, d := range r.DeathLog {
 		m := map[string]any{"clock": d.Clock}
-		if d.Killer != "" {
+		if d.Killer != "" && r.Game != "pubg" {
 			m["killer"] = d.Killer
 		}
 		if d.Region != "" {

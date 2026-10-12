@@ -1,25 +1,28 @@
 // Review: what went wrong in a match, what went well, and what keeps going
-// wrong across recent matches, for Dota 2 and Deadlock. Built from public
+// wrong across recent matches, for Dota 2, Deadlock and PUBG. Built from public
 // match data and what TheTracker recorded live.
 
 // The match picked on each game's Review tab (0: the latest).
-const REV = { dota: 0, deadlock: 0 };
+const REV = { dota: 0, deadlock: 0, pubg: "" };
 
 const reviewRes = {
   dota: resource("dotaReview", "review", { args: () => ({ game: "dota", matchId: REV.dota }), ttl: 10 * 60000 }),
   deadlock: resource("dlReview", "review", { args: () => ({ game: "deadlock", matchId: REV.deadlock }), ttl: 10 * 60000 }),
+  pubg: resource("pgReview", "review", { args: () => ({ game: "pubg", matchKey: REV.pubg }), ttl: 10 * 60000 }),
 };
 const coachRes = {
   dota: resource("dotaCoach", "coach", { args: () => ({ game: "dota", matchId: REV.dota }), ttl: 6 * 3600000 }),
   deadlock: resource("dlCoach", "coach", { args: () => ({ game: "deadlock", matchId: REV.deadlock }), ttl: 6 * 3600000 }),
+  pubg: resource("pgCoach", "coach", { args: () => ({ game: "pubg", matchKey: REV.pubg }), ttl: 6 * 3600000 }),
 };
 const workOnRes = {
   dota: resource("dotaWorkOn", "work_on", { args: () => ({ game: "dota" }), ttl: 30 * 60000 }),
   deadlock: resource("dlWorkOn", "work_on", { args: () => ({ game: "deadlock" }), ttl: 30 * 60000 }),
+  pubg: resource("pgWorkOn", "work_on", { args: () => ({ game: "pubg" }), ttl: 30 * 60000 }),
 };
 
 onChange("rev-match", (el) => {
-  REV[el.dataset.game] = Number(el.value);
+  REV[el.dataset.game] = el.dataset.game === "pubg" ? (el.value === "0" ? "" : el.value) : Number(el.value);
   reviewRes[el.dataset.game].load();
   if (S.boot.coach) coachRes[el.dataset.game].load();
   rerender();
@@ -59,6 +62,10 @@ function coachDeathNote(game, clock) {
 
 /// The matches to choose from: the game's own match list.
 function reviewChoices(game) {
+  if (game === "pubg") {
+    return ((pgOverview.data && pgOverview.data.matches) || []).filter((m) => !m.custom).slice(0, 25)
+      .map((m) => ({ id: m.id, label: `${m.map} · ${m.modeName} · #${m.place} · ${ago(m.startTime)}` }));
+  }
   if (game === "dota") {
     return ((dHist.data && dHist.data.matches) || []).filter((m) => !m.abandoned).slice(0, 25)
       .map((m) => ({ id: m.matchId, label: `${m.heroName} · ${m.won ? "won" : "lost"} · ${ago(m.startTime)}` }));
@@ -87,14 +94,14 @@ function reviewHtml(game) {
   const wait = gate(r, "Reviewing the match…");
   if (wait) return `<div class="row">${picker}</div>${wait}`;
   const m = r.data;
-  const img = game === "dota" ? heroImgHtml(m.heroSlug, "portrait big") : imgHtml(m.heroImage, "portrait big");
-  const result = m.won === true ? `<span class="res win">Won</span>` : m.won === false ? `<span class="res loss">Lost</span>` : "";
+  const img = game === "dota" ? heroImgHtml(m.heroSlug, "portrait big") : game === "pubg" ? "" : imgHtml(m.heroImage, "portrait big");
+  const result = game === "pubg" ? (m.won ? `<span class="res win">Dinner</span>` : "") : m.won === true ? `<span class="res win">Won</span>` : m.won === false ? `<span class="res loss">Lost</span>` : "";
   return `<div class="row rev-top">${picker}<span class="grow"></span>
       ${game === "dota" ? `<button class="link" data-act="open-url" data-url="https://www.opendota.com/matches/${m.matchId}" type="button">Open on OpenDota</button>` : ""}</div>
     <section class="panel rev-head">
       <div class="live-head">${img}
         <div class="grow"><h2 class="display">${esc(m.hero)} ${result}</h2>
-          <p class="muted">${m.kills} / ${m.deaths} / ${m.assists} · ${fmtClock(m.duration)} · ${ago(m.startTime)}</p></div>
+          <p class="muted">${game === "pubg" ? `${m.kills} kill${m.kills === 1 ? "" : "s"}, ${m.assists} assist${m.assists === 1 ? "" : "s"}` : `${m.kills} / ${m.deaths} / ${m.assists}`} · ${fmtClock(m.duration)} · ${ago(m.startTime)}</p></div>
       </div>
       <p class="rev-verdict">${esc(m.verdict)}</p>
       ${m.facts && m.facts.length ? `<p class="muted small rev-facts">${m.facts.map(esc).join(" · ")}</p>` : ""}
@@ -160,6 +167,23 @@ view("dota-review", {
   render() {
     if (!dotaLinked()) return linkPanelHtml("dota");
     return reviewHtml("dota");
+  },
+});
+
+view("pg-review", {
+  game: "pubg", nav: true, tabOf: "pg-matches", icon: "matches", title: "Review",
+  sub: () => "What went wrong, what went well, and what to work on",
+  load(force) {
+    if (!pgLinked()) return Promise.resolve();
+    workOnRes.pubg.load(force);
+    if (S.boot.coach) coachRes.pubg.load(force);
+    return pgOverview.load().then(() => reviewRes.pubg.load(force));
+  },
+  render() {
+    const wait = pgGate();
+    if (wait) return wait;
+    return `${reviewHtml("pubg")}
+      <p class="hint">PUBG has no live feed for apps: this review is built from the match's telemetry, PUBG's event log of every match, which arrives a few minutes after it ends.</p>`;
   },
 });
 

@@ -89,7 +89,9 @@ type matchArg struct {
 type reviewArg struct {
 	Game    string `json:"game"`
 	MatchID uint64 `json:"matchId"`
-	Force   bool   `json:"force"`
+	// PUBG's match ids are text.
+	MatchKey string `json:"matchKey"`
+	Force    bool   `json:"force"`
 }
 
 type queryArg struct {
@@ -325,13 +327,19 @@ func commands(a *core.App) map[string]command {
 		"deadlock_overview":    in(func(p forceArg) (any, error) { return a.Deadlock.Overview(p.Limit, p.Force) }),
 		"deadlock_live":        none(func() (any, error) { return a.Deadlock.Live() }),
 		"review": in(func(p reviewArg) (any, error) {
+			if p.Game == "pubg" {
+				return a.PubgReview(p.MatchKey)
+			}
 			if p.Game == "deadlock" {
 				return a.DeadlockReview(p.MatchID)
 			}
 			return a.DotaReview(p.MatchID)
 		}),
-		"coach": in(func(p reviewArg) (any, error) { return a.Coach(p.Game, p.MatchID, p.Force) }),
+		"coach": in(func(p reviewArg) (any, error) { return a.Coach(p.Game, p.MatchID, p.MatchKey, p.Force) }),
 		"work_on": in(func(p reviewArg) (any, error) {
+			if p.Game == "pubg" {
+				return a.PubgWorkOn()
+			}
 			if p.Game == "deadlock" {
 				return a.DeadlockWorkOn()
 			}
@@ -393,6 +401,15 @@ func commands(a *core.App) map[string]command {
 		}),
 		"pubg_unlink":   none(func() (any, error) { return core.PubgLink{}, a.Pubg.SetLink(core.PubgLink{}) }),
 		"pubg_overview": in(func(p forceArg) (any, error) { return a.Pubg.Overview(p.Force) }),
+		"pubg_weapons":  in(func(p forceArg) (any, error) { return a.Pubg.Weapons(p.Force) }),
+		"pubg_goals":    none(func() (any, error) { return a.PubgGoals() }),
+		"pubg_leaderboard": in(func(p struct {
+			Region string `json:"region"`
+			Mode   string `json:"mode"`
+		}) (any, error) {
+			return a.Pubg.Leaderboard(p.Region, p.Mode)
+		}),
+		"pubg_streams": none(func() (any, error) { return a.PubgStreams(), nil }),
 		"ow_meta": in(func(p struct {
 			Mode     string `json:"mode"`
 			Region   string `json:"region"`

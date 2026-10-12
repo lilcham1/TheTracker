@@ -85,6 +85,21 @@ var presetGames = map[string]struct {
 	"dota":     {"570", "dota 2 beta/game/dota", "dota2", "Dota 2"},
 	"deadlock": {"1422450", "Deadlock/game/citadel", "project8", "Deadlock"},
 	"cs2":      {"730", "Counter-Strike Global Offensive/game/csgo", "cs2", "Counter-Strike 2"},
+	"pubg":     {"578080", "PUBG", "TslGame", "PUBG"},
+}
+
+// presetDoc is a settings file the presets edit: Valve KeyValues
+// (keyvalues.go) or an Unreal .ini (inidoc.go).
+type presetDoc interface {
+	Get(path ...string) (string, bool)
+	Set(value string, path ...string)
+	Delete(path ...string) bool
+	String() string
+}
+
+// pubgConfigDir is where PUBG keeps its settings; a test swaps it.
+var pubgConfigDir = func() string {
+	return filepath.Join(os.Getenv("LOCALAPPDATA"), "TslGame", "Saved", "Config", "WindowsNoEditor")
 }
 
 // presetFiles locates the game's settings files for the signed-in Steam
@@ -95,6 +110,15 @@ func (a *App) presetFiles(game string) ([]PresetFile, []string) {
 		return nil, []string{"Unknown game."}
 	}
 	var reasons []string
+	if game == "pubg" {
+		// PUBG keeps its settings outside Steam, per Windows user.
+		p := filepath.Join(pubgConfigDir(), "GameUserSettings.ini")
+		_, err := os.Stat(p)
+		if err != nil {
+			reasons = append(reasons, "PUBG has no settings file yet (open the game once and change any setting).")
+		}
+		return []PresetFile{{Kind: "settings", Path: p, Found: err == nil}}, reasons
+	}
 	root := a.Gsi.steamRoot()
 	acct := steamAccount()
 	if root == "" || acct == 0 {
@@ -152,8 +176,8 @@ func presetRunning(game string) bool {
 
 // ---------- Preview, apply, restore ----------
 
-func (a *App) presetDocs(files []PresetFile) (map[string]*kvDoc, error) {
-	docs := map[string]*kvDoc{}
+func (a *App) presetDocs(files []PresetFile) (map[string]presetDoc, error) {
+	docs := map[string]presetDoc{}
 	for _, f := range files {
 		if !f.Found {
 			continue
@@ -161,6 +185,10 @@ func (a *App) presetDocs(files []PresetFile) (map[string]*kvDoc, error) {
 		raw, err := os.ReadFile(f.Path)
 		if err != nil {
 			return nil, err
+		}
+		if strings.EqualFold(filepath.Ext(f.Path), ".ini") {
+			docs[f.Kind] = iniParse(string(raw))
+			continue
 		}
 		doc, err := kvParse(string(raw))
 		if err != nil {

@@ -8,7 +8,7 @@ const pgLinked = () => !!(S.boot && S.boot.pubgLink && S.boot.pubgLink.accountId
 const PG_SHARDS = [["steam", "Steam"], ["kakao", "Kakao"], ["psn", "PlayStation"], ["xbox", "Xbox"], ["console", "Console"]];
 const pgMins = (s) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min` : `${Math.round(s / 60)} min`);
 const pgM = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`);
-const pgPlace = (m) => `<span class="pg-place ${m.place === 1 ? "win" : m.place <= 10 ? "top" : ""}">#${m.place}</span><span class="muted">/${m.teams}</span>`;
+const pgPlace = (m) => `<span class="pg-place ${m.place === 1 ? "win" : m.place <= 10 ? "top" : ""}">#${m.place}</span><span class="pg-of">/${m.teams}</span>`;
 
 act("pg-search", async () => {
   const q = ($("#pgQuery") || {}).value || "";
@@ -85,7 +85,7 @@ function pgSetupHtml() {
 
 function pgLoad(force) {
   if (!pgLinked()) return Promise.resolve();
-  return pgOverview.load(force);
+  return pgOverview.load(force).then(() => pgGoals.load(force));
 }
 
 function pgGate() {
@@ -151,6 +151,7 @@ view("pg-overview", {
       ${d.ranked.length ? `<div class="sec-head"><h3>Ranked this season</h3></div>
         <table class="mini">${d.ranked.map((r) => `<tr><td><b>${esc(r.modeName)}</b></td><td>${esc(r.tier)} ${esc(r.subTier)} <span class="muted">${fmtNum(r.points)} RP</span></td>
           <td class="num">${r.rounds} played</td><td class="num">${r.wins} won</td><td class="num">avg #${r.avgRank.toFixed(1)}</td><td class="num">KDA ${r.kda.toFixed(2)}</td></tr>`).join("")}</table>` : ""}
+      ${pgGoals.data && pgGoals.data.goals.length ? `<section class="rev-goals">${roleGoalsHtml(pgGoals.data)}</section>` : ""}
       <div class="sec-head"><h3>Recent matches</h3><button class="link" data-act="go" data-view="pg-matches" type="button">All matches</button></div>
       ${ms.length ? `<div class="lines">${ms.slice(0, 8).map(pgMatchHtml).join("")}</div>` : `<p class="muted">No matches in the last 14 days.</p>`}
       ${d.missing ? `<p class="hint">${d.missing} match${d.missing === 1 ? "" : "es"} couldn't be read yet.</p>` : ""}
@@ -181,7 +182,122 @@ function pgSettingsHtml() {
         <span class="muted"> ${l.accountId ? esc((PG_SHARDS.find(([k]) => k === l.shard) || [, l.shard])[1]) : ""}</span></span>
         ${l.accountId ? `<button class="link" data-act="pg-unlink" type="button">Disconnect</button>` : `<button class="link" data-act="go" data-view="pg-overview" type="button">Connect</button>`}</div></div>
     </section>
+    ${pgGoalLevelHtml()}
+    ${typeof presetsHtml === "function" ? presetsHtml("pubg") : ""}
     <section class="set"><h3>What works for PUBG</h3>
-      <p class="muted">PUBG has no live feed apps can read, so there's no overlay or live tracking: your matches show up a few minutes after they end. The API keeps 14 days of matches. The connection check and Game mode work while PUBG is open (Connection tab).</p>
+      <p class="muted">PUBG has no live feed apps can read, so there's no overlay or live tracking: your matches, their review and the AI coach arrive a few minutes after a match ends. The API keeps 14 days of matches. The connection check and Game mode work while PUBG is open (Connection tab).</p>
+    </section>`;
+}
+
+// ---------- Weapons, leaderboard, live streams, goals ----------
+
+const pgWeapons = resource("pgWeapons", "pubg_weapons", { ttl: 30 * 60000 });
+const pgGoals = resource("pgGoals", "pubg_goals", { ttl: 5 * 60000 });
+const pgBoard = resource("pgBoard", "pubg_leaderboard", { args: () => ({ region: PG.region, mode: PG.boardMode }), ttl: 30 * 60000 });
+const pgStreams = resource("pgStreams", "pubg_streams", { ttl: 60000 });
+PG.region = "eu";
+PG.boardMode = "squad-fpp";
+PG.wSort = "damage";
+const PG_REGIONS = [["eu", "Europe"], ["na", "North America"], ["as", "Asia"], ["sea", "South-East Asia"], ["krjp", "Korea / Japan"], ["kakao", "Kakao"], ["oc", "Oceania"], ["sa", "South America"], ["ru", "Russia"]];
+
+act("pg-region", (el) => {
+  PG.region = el.dataset.value;
+  pgBoard.load();
+  rerender();
+});
+act("pg-board-mode", (el) => {
+  PG.boardMode = el.dataset.value;
+  pgBoard.load();
+  rerender();
+});
+act("pg-wsort", (el) => {
+  PG.wSort = el.dataset.value;
+  rerender();
+});
+
+view("pg-weapons", {
+  game: "pubg", nav: true, icon: "builds", title: "Weapons",
+  sub: () => "Your lifetime record with every gun, from PUBG's weapon mastery",
+  load(force) {
+    if (!pgLinked()) return Promise.resolve();
+    return pgWeapons.load(force);
+  },
+  render() {
+    if (!pgLinked()) return pgLinkHtml();
+    if (pgWeapons.error && pgNotSetUp(pgWeapons.error)) return pgSetupHtml();
+    const wait = gate(pgWeapons, "Reading your weapon mastery…");
+    if (wait) return wait;
+    const d = pgWeapons.data;
+    const key = { damage: (w) => w.damage, kills: (w) => w.kills, level: (w) => w.level, headshots: (w) => (w.kills ? w.headshots / w.kills : 0), longest: (w) => w.longest };
+    const ws = d.weapons.slice().sort((a, b) => key[PG.wSort](b) - key[PG.wSort](a));
+    const total = ws.reduce((a, w) => a + w.damage, 0);
+    const th = (k, l) => `<th class="num ${PG.wSort === k ? "sorted" : ""}"><button data-act="pg-wsort" data-value="${k}" type="button">${l}${PG.wSort === k ? " ▼" : ""}</button></th>`;
+    return `${statRow([
+        { label: "Survival mastery", value: d.survivalLevel ? `Level ${d.survivalLevel}` : "–", sub: d.survivalLevel ? `tier ${d.survivalTier} · ${fmtNum(d.survivalMatches)} matches` : "" },
+        { label: "Weapons used", value: fmtNum(ws.length) },
+        { label: "Kills, all guns", value: fmtNum(ws.reduce((a, w) => a + w.kills, 0)) },
+        { label: "Favourite", value: d.weapons.length ? esc(d.weapons[0].name) : "–", sub: d.weapons.length ? `${pct((d.weapons[0].damage * 100) / Math.max(1, total))} of your damage` : "" },
+      ])}
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Weapon</th>${th("level", "Level")}${th("kills", "Kills")}<th class="num">Knocks</th>${th("damage", "Damage")}${th("headshots", "Headshot kills")}${th("longest", "Longest kill")}<th class="num">Most in a match</th></tr></thead>
+        <tbody>${ws.map((w) => `<tr><td><b>${esc(w.name)}</b></td><td class="num">${w.level}</td><td class="num">${fmtNum(w.kills)}</td><td class="num">${fmtNum(w.knocks)}</td>
+          <td class="num">${fmtNum(Math.round(w.damage))}</td><td class="num">${w.kills ? pct((w.headshots * 100) / w.kills) : "–"}</td><td class="num">${pgM(w.longest)}</td><td class="num">${w.mostKills}</td></tr>`).join("")}</tbody>
+      </table></div>
+      ${d.freshness && d.freshness.stale ? `<p class="hint">Showing the last copy: ${esc(d.freshness.error || "PUBG couldn't be reached")}.</p>` : ""}`;
+  },
+});
+
+view("pg-leaderboard", {
+  game: "pubg", nav: true, icon: "leaderboard", title: "Leaderboard",
+  sub: () => "The ranked top 500 this season, by region",
+  load(force) {
+    return pgBoard.load(force);
+  },
+  render() {
+    const chips = `<div class="chips seg">${PG_REGIONS.map(([k, l]) => `<button class="chip ${PG.region === k ? "on" : ""}" data-act="pg-region" data-value="${k}" type="button">${l}</button>`).join("")}</div>
+      <div class="chips seg">${[["squad-fpp", "Squad FPP"], ["squad", "Squad TPP"]].map(([k, l]) => `<button class="chip ${PG.boardMode === k ? "on" : ""}" data-act="pg-board-mode" data-value="${k}" type="button">${l}</button>`).join("")}</div>`;
+    if (pgBoard.error && pgNotSetUp(pgBoard.error)) return pgSetupHtml();
+    const wait = gate(pgBoard, "Reading the leaderboard…");
+    if (wait) return `<div class="filters">${chips}</div>${wait}`;
+    const d = pgBoard.data;
+    return `<div class="filters">${chips}</div>
+      ${d.rows.length ? `<div class="table-wrap"><table class="table">
+        <thead><tr><th class="num">#</th><th>Player</th><th>Tier</th><th class="num">Points</th><th class="num">Games</th><th class="num">Wins</th><th class="num">Avg place</th><th class="num">KDA</th><th class="num">Avg damage</th></tr></thead>
+        <tbody>${d.rows.map((r) => `<tr class="${r.me ? "me" : ""}"><td class="num">${r.rank}</td><td><b>${esc(r.name)}</b></td><td>${esc(r.tier)} ${esc(r.subTier)}</td>
+          <td class="num">${fmtNum(r.points)}</td><td class="num">${r.games}</td><td class="num">${r.wins}</td><td class="num">${r.avgRank ? `#${r.avgRank.toFixed(1)}` : "–"}</td>
+          <td class="num">${r.kda.toFixed(2)}</td><td class="num">${fmtNum(Math.round(r.damage))}</td></tr>`).join("")}</tbody></table></div>`
+        : `<p class="muted">PUBG has no ranked leaderboard for this region and mode yet this season.</p>`}
+      <p class="hint">From PUBG's official ranked leaderboard, which PUBG refreshes every couple of hours.</p>`;
+  },
+});
+
+view("pg-live", {
+  game: "pubg", nav: true, icon: "live", title: "Live",
+  sub: () => "PUBG on Twitch right now, most watched first",
+  load(force) {
+    return pgStreams.load(force);
+  },
+  render() {
+    const wait = gate(pgStreams, "Finding live streams…");
+    if (wait) return wait;
+    const d = pgStreams.data;
+    if (d.reason === "not_set_up") return `<p class="muted">Live streams need the Twitch keys on the cloud service, the same ones the Dota and Deadlock streamer pages use.</p>`;
+    if (d.reason) return `<p class="muted">Twitch couldn't be reached right now. Try again in a minute.</p>`;
+    if (!d.streams.length) return `<p class="muted">Nobody is streaming PUBG on Twitch right now.</p>`;
+    return `<div class="stream-grid">${d.streams.slice(0, 60).map((s) => `<button class="stream-card" data-act="open-url" data-url="${esc(twitchUrl(s.login))}" type="button" title="Watch ${esc(s.name)} on Twitch">
+        <span class="stream-thumb">${s.thumbnail ? `<img src="${esc(s.thumbnail)}" alt="" loading="lazy" />` : ""}<span class="live-tag">Live</span><span class="viewers">${fmtViewers(s.viewers)} watching</span></span>
+        <span class="stream-body"><span class="stream-name"><b>${esc(s.name)}</b></span><span class="stream-title">${esc(s.title || "")}</span></span>
+      </button>`).join("")}</div>`;
+  },
+});
+
+/// How high the PUBG goals aim: a share of the player's own recent matches.
+function pgGoalLevelHtml() {
+  const c = S.boot.prefs.coach || {};
+  const level = c.pubgLevel || "push";
+  const chip = (v, l, d) => `<button class="chip ${level === v ? "on" : ""}" data-act="coach-set" data-key="pubgLevel" data-value="${v}" type="button">${l} <span class="muted">${d}</span></button>`;
+  return `<section class="set"><h3>Goals</h3>
+      <p class="muted">Goals for damage, kills, placement and time alive, drawn from your own last 14 days, checked on Overview and in each match's Review.</p>
+      <div class="field"><span>How high</span><div class="chips seg">${chip("steady", "Steady", "top 50%")}${chip("push", "Push", "top 30%")}${chip("pro", "Pro", "top 20%")}</div></div>
     </section>`;
 }

@@ -33,6 +33,9 @@ var presetLayouts = map[string][]PresetLayout{
 		{"mikaels", "MikaelS", "Virtus.pro", "Abilities 1 2 3 4, items Q X C E, melee Mouse 5, parry F, cancel Space, self-cast Mouse 3."},
 		{"hydration", "Hydration", "Pulsar Esports", "Abilities 1 2 3 4, items Z X C V, melee Q, parry F, cancel Space, self-cast Mouse 3."},
 	},
+	"pubg": {
+		{"standard", "Standard", "TGLTN, Kickstart", "PUBG's own movement keys, which the pros keep, with scope on hold."},
+	},
 	"cs2": {
 		{"standard", "Standard", "Guide-based", "Each grenade on its own key, jump on the wheel, push to talk on V, ping on Mouse 4. Pros' own binds aren't published."},
 	},
@@ -81,15 +84,18 @@ func (b *presetBuilder) info(section, action, label, value, source, note string)
 // presetLines builds the lines for a game and hotkey layout; docs (by file
 // kind) let a few lines follow what the player's file holds (Dota's
 // per-item cast modes).
-func presetLines(game string, docs map[string]*kvDoc, layout string) []PresetLine {
+func presetLines(game string, docs map[string]presetDoc, layout string) []PresetLine {
 	b := &presetBuilder{game: game}
 	switch game {
 	case "dota":
-		dotaPreset(b, docs["keys"], presetLayout(game, layout).ID)
+		keys, _ := docs["keys"].(*kvDoc)
+		dotaPreset(b, keys, presetLayout(game, layout).ID)
 	case "deadlock":
 		deadlockPreset(b, presetLayout(game, layout).ID)
 	case "cs2":
 		cs2Preset(b)
+	case "pubg":
+		pubgPreset(b)
 	}
 	return b.lines
 }
@@ -434,4 +440,50 @@ func cs2Preset(b *presetBuilder) {
 		}
 		b.bind(k.section, k.key, k.label, k.cmd, source, "config", "bindings", k.key)
 	}
+}
+
+// PUBG keeps everything in one Unreal .ini. Values follow the game's own
+// spelling (6 decimals for floats); quality levels run 0 (Very Low) to 4
+// (Ultra). Sources: prosettings.net's PUBG guide (68 pros), its player
+// pages (TGLTN, Kickstart), and vortexgaming.io's pro settings round-up.
+func pubgPreset(b *presetBuilder) {
+	const tsl, sg = "/Script/TslGame.TslGameUserSettings", "ScalabilityGroups"
+	set := func(group, section, key, value, label, source, note string) {
+		b.add(group, "settings", label, value, source, note, section, key)
+	}
+	pros := "TGLTN, Kickstart"
+	set("Video", tsl, "FullscreenMode", "0", "Fullscreen", pros+", guide", "Lowest input lag; borderless is 1.")
+	set("Video", tsl, "PreferredFullscreenMode", "0", "Fullscreen (preferred)", pros, "")
+	set("Video", tsl, "LastConfirmedFullscreenMode", "0", "Fullscreen (confirmed)", pros, "")
+	set("Video", tsl, "ScreenScale", "100.000000", "Render scale 100", pros+", guide", "Sharp at native resolution.")
+	set("Video", sg, "sg.ResolutionQuality", "100.000000", "Resolution quality 100", pros, "")
+	set("Video", tsl, "FpsCameraFov", "95.000000", "First-person FOV 95", "21 of 48 pros listing FOV", "The most common pro FOV; 103 is the widest and the guide's pick.")
+	set("Video", sg, "sg.AntiAliasingQuality", "0", "Anti-aliasing very low", pros, "The guide prefers medium to cut shimmer on wires and fences.")
+	set("Video", sg, "sg.PostProcessQuality", "0", "Post-processing very low", pros+", guides", "Higher adds shadows and blur that hide players indoors.")
+	set("Video", sg, "sg.ShadowQuality", "0", "Shadows very low", pros+", guide", "Players' own shadows still render.")
+	set("Video", sg, "sg.TextureQuality", "2", "Textures medium", "Kickstart, guides", "Clearer camouflaged items; TGLTN plays very low.")
+	set("Video", sg, "sg.EffectsQuality", "0", "Effects very low", pros+", guide", "")
+	set("Video", sg, "sg.FoliageQuality", "0", "Foliage very low", pros+", guide", "Less grass to hide in.")
+	set("Video", sg, "sg.ViewDistanceQuality", "1", "View distance low", "prosettings.net guide", "TGLTN very low, Kickstart medium.")
+	set("Video", tsl, "bSharpen", "True", "Sharpen on", "Kickstart, vortexgaming.io", "Sharper silhouettes at range; TGLTN leaves it off.")
+	set("Video", tsl, "bUseVSync", "False", "V-sync off", pros+", guide", "")
+	set("Video", tsl, "bMotionBlur", "False", "Motion blur off", pros+", guide", "")
+	set("Video", tsl, "bUseInGameSmoothedFrameRate", "False", "Smoothed frame rate off", "prosettings.net guide", "It adds input lag.")
+	set("Audio", tsl, "bIsRenewalWeaponSoundEnabled", "False", "Legacy gun sounds", "vortexgaming.io", "The sound pros grew up hearing direction in.")
+	set("Audio", tsl, "bIsEnabledHrtfRemoteWeaponSound", "True", "HRTF for distant gunfire", "vortexgaming.io", "")
+	set("Audio", tsl, "bIsBGMSoundMute", "True", "Lobby music off", srcMyPick, "")
+	set("Gameplay", tsl, "InputModeADS", "Hold", "Scope: hold", "vortexgaming.io", "Let go to leave the scope.")
+	set("Gameplay", tsl, "bAutoEquipAttachmentByInteraction", "True", "Auto-equip attachments on pickup", "vortexgaming.io", "")
+	set("Gameplay", tsl, "bAutoEquipAttachmentFromInventory", "True", "Auto-equip attachments from inventory", "vortexgaming.io", "")
+	set("Gameplay", tsl, "bAutoReplaceAttachment", "True", "Auto-replace attachments", "vortexgaming.io", "")
+	set("Gameplay", tsl, "bAutoWeaponSkinReplacement", "False", "No automatic weapon skins", "vortexgaming.io", "")
+	set("Gameplay", tsl, "bUseBulletRecommendOption", "False", "No ammo recommendations", "vortexgaming.io", "")
+	set("Gameplay", tsl, "bUseEquipmentRecommendOption", "False", "No equipment recommendations", "vortexgaming.io", "")
+	set("Gameplay", tsl, "bUseAttachmentRecommendOption", "False", "No attachment recommendations", "vortexgaming.io", "")
+	set("Visibility", tsl, "KillMessageListSizeLimit", "10", "Kill feed shows 10", "vortexgaming.io", "")
+	set("Visibility", tsl, "bEnableUniversalGamma", "True", "One brightness for every map", "prosettings.net guide", "")
+	// Keys: PUBG writes only the keys a player changed, and the pros keep
+	// its defaults, so these are shown, not written.
+	b.info("Movement and combat", "pubg_keys", "Movement and combat keys", "Crouch C, prone Z, jump Space, walk L-Ctrl, sprint L-Shift, peek Q / E, interact F, auto-run =", pros,
+		"PUBG's own defaults, which TGLTN and Kickstart keep. If you changed one, set it back under Settings, Key Bindings in the game.")
 }

@@ -39,8 +39,10 @@ type ReviewDeath struct {
 }
 
 type MatchReview struct {
-	Game      string  `json:"game"`
-	MatchID   uint64  `json:"matchId"`
+	Game    string `json:"game"`
+	MatchID uint64 `json:"matchId"`
+	// PUBG's match ids are text.
+	MatchKey  string  `json:"matchKey,omitempty"`
 	Hero      string  `json:"hero"`
 	HeroImage *string `json:"heroImage,omitempty"`
 	HeroSlug  string  `json:"heroSlug,omitempty"`

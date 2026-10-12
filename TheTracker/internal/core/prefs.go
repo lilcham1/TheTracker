@@ -161,6 +161,7 @@ type CoachPrefs struct {
 	// steady | push | pro: how high the goals are.
 	DotaLevel     string `json:"dotaLevel"`
 	DeadlockLevel string `json:"deadlockLevel"`
+	PubgLevel     string `json:"pubgLevel"`
 	// A short goal check on the overlay at 10:00 and 20:00.
 	GoalCheck bool `json:"goalCheck"`
 	// The AI coach write-up after each reviewed match (needs the key on the
@@ -312,7 +313,7 @@ func (s *Store) SaveCoach(c CoachPrefs) Prefs {
 	if c.DotaMode != "own" {
 		c.DotaMode = "role"
 	}
-	for _, l := range []*string{&c.DotaLevel, &c.DeadlockLevel} {
+	for _, l := range []*string{&c.DotaLevel, &c.DeadlockLevel, &c.PubgLevel} {
 		if _, ok := goalLevels[*l]; !ok {
 			*l = "push"
 		}

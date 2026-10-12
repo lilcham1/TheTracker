@@ -348,10 +348,10 @@ function roleGoalsHtml(set, { title = true } = {}) {
     const label = g.key === "deaths" ? "Deaths" : g.label.replace(/ by$/, "");
     const value = g.format === "time" && g.value == null ? (g.state === "missed" ? "not bought" : "not yet") : fmtGoalValue(g, g.value);
     return `<div class="goal ${state}" title="${esc(g.why)}"><span class="dot"></span>
-      <span class="grow">${esc(label)}${g.format === "time" ? " by" : ""} <b>${g.key === "deaths" ? `at most ${target}${g.state === "pending" ? " so far" : ""}` : target}</b></span>
+      <span class="grow">${esc(label)}${g.format === "time" && g.key !== "alive" ? " by" : ""} <b>${g.key === "deaths" ? `at most ${target}${g.state === "pending" ? " so far" : ""}` : g.key === "place" ? `#${target} or better` : target}</b></span>
       <span class="num">${value}</span></div>`;
   };
-  const head = title ? `<div class="sec-head"><h3>Goals${set.role ? ` · ${esc(set.role)}` : ""}${set.hero ? `, ${esc(set.hero)}` : ""}</h3><span class="muted">${esc(set.level)} of players on this hero</span></div>` : "";
+  const head = title ? `<div class="sec-head"><h3>Goals${set.role ? ` · ${esc(set.role)}` : ""}${set.hero ? `, ${esc(set.hero)}` : ""}</h3><span class="muted">${esc(set.level)} ${set.game === "pubg" ? "of your recent matches" : "of players on this hero"}</span></div>` : "";
   return `${head}<div class="goals">${set.goals.map(row).join("")}</div>${set.note ? `<p class="hint">${esc(set.note)}</p>` : ""}`;
 }
 

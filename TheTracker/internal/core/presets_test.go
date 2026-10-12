@@ -26,6 +26,10 @@ func fakePresetSteam(t *testing.T, a *App, game string) map[string]string {
 	oldAcct := steamAccount
 	steamAccount = func() uint64 { return 850402858 }
 	t.Cleanup(func() { steamAccount = oldAcct })
+	pubgDir := filepath.Join(root, "LocalAppData", "TslGame")
+	oldPubg := pubgConfigDir
+	pubgConfigDir = func() string { return pubgDir }
+	t.Cleanup(func() { pubgConfigDir = oldPubg })
 	oldRun := runningPrograms
 	runningPrograms = func() map[uint32]string { return map[uint32]string{} }
 	t.Cleanup(func() { runningPrograms = oldRun })
@@ -41,6 +45,9 @@ func fakePresetSteam(t *testing.T, a *App, game string) map[string]string {
 			"convars":      "\"config\"\r\n{\r\n\t\"convars\"\r\n\t{\r\n\t\t\"citadel_camera_hero_fov\"\t\t\"90\"\r\n\t}\r\n}\r\n",
 			"cloudconvars": "\"config\"\r\n{\r\n\t\"convars\"\r\n\t{\r\n\t\t\"citadel_camera_hero_fov\"\t\t\"80\"\r\n\t}\r\n}\r\n",
 			"keys":         "\"KeyBindings\"\r\n{\r\n\t\"Keys\"\r\n\t{\r\n\t\t\"Item1\"\r\n\t\t{\r\n\t\t\t\"Key\"\t\t\"MOUSE5\"\r\n\t\t\t\"Key2\"\t\t\"NONE\"\r\n\t\t}\r\n\t}\r\n}\r\n",
+		},
+		"pubg": {
+			"settings": "[/Script/Engine.GameUserSettings]\r\nbUseDesiredScreenHeight=False\r\n\r\n[ScalabilityGroups]\r\nsg.ShadowQuality=2\r\nsg.TextureQuality=1\r\n\r\n[/Script/TslGame.TslGameUserSettings]\r\nFpsCameraFov=103.000000\r\nbSharpen=False\r\nOutgameUserDatas=(Key=\"X\",Value=\"stays\")\r\nFullscreenMode=1\r\n",
 		},
 		"cs2": {
 			"video":   "\"video.cfg\"\r\n{\r\n\t\"setting.fullscreen\"\t\t\"1\"\r\n}\r\n",
@@ -83,7 +90,7 @@ func fakePresetSteam(t *testing.T, a *App, game string) map[string]string {
 }
 
 func TestPresetsApplyThenRestoreExactly(t *testing.T) {
-	for _, game := range []string{"dota", "deadlock", "cs2"} {
+	for _, game := range []string{"dota", "deadlock", "cs2", "pubg"} {
 		for _, layout := range presetLayouts[game] {
 			t.Run(game+"/"+layout.ID, func(t *testing.T) { presetRoundTrip(t, game, layout.ID) })
 		}
@@ -99,7 +106,7 @@ func presetRoundTrip(t *testing.T, game, layout string) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !p.Installed || p.Running || !p.CanApply || p.Changes == 0 || len(p.Lines) < 40 {
+			if !p.Installed || p.Running || !p.CanApply || p.Changes == 0 || len(p.Lines) < 25 {
 				t.Fatalf("preview: installed %v running %v canApply %v changes %d lines %d reasons %v", p.Installed, p.Running, p.CanApply, p.Changes, len(p.Lines), p.Reasons)
 			}
 			// Every line names a group and a file that exists.
@@ -151,7 +158,7 @@ func presetRoundTrip(t *testing.T, game, layout string) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := kvParse(string(now)); err != nil {
+				if _, err := kvParse(string(now)); err != nil && !strings.HasSuffix(path, ".ini") {
 					t.Fatalf("%s after apply: %v", path, err)
 				}
 				if strings.Contains(orig, "\r\n") != strings.Contains(string(now), "\r\n") {

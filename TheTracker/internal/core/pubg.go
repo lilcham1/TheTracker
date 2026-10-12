@@ -139,6 +139,8 @@ type PubgMatch struct {
 	KillPlace int        `json:"killPlace"`
 	DeathType string     `json:"deathType"`
 	Team      []PubgMate `json:"team"`
+	// Where PUBG keeps the match's event log (pubg_review.go).
+	Telemetry string `json:"telemetry,omitempty"`
 }
 
 var pubgMaps = map[string]string{
@@ -185,6 +187,9 @@ func pubgMatchFrom(m jsonMap, accountID string) (PubgMatch, bool) {
 	participants := map[string]jsonMap{}
 	var mine string
 	for _, inc := range jList(m["included"]) {
+		if jStr(inc, "type", "") == "asset" && jStr(sub(inc, "attributes"), "name", "") == "telemetry" {
+			out.Telemetry = jStr(sub(inc, "attributes"), "URL", "")
+		}
 		if jStr(inc, "type", "") != "participant" {
 			continue
 		}
@@ -234,7 +239,7 @@ func pubgMatchFrom(m jsonMap, accountID string) (PubgMatch, bool) {
 
 // match reads one match; a match never changes, so it's kept for good.
 func (p *Pubg) match(shard, id, accountID string) (PubgMatch, error) {
-	key := "pubg_match_" + safeKey(id) + "_" + safeKey(accountID)
+	key := "pubg_match2_" + safeKey(id) + "_" + safeKey(accountID)
 	var cached PubgMatch
 	if _, ok := p.store.ReadCacheStale(key, &cached); ok && cached.ID == id {
 		return cached, nil

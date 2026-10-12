@@ -29,14 +29,16 @@ async function loadPreset(game, force = false) {
 
 const PRESET_GROUPS = ["Video", "Audio", "Gameplay", "Visibility"];
 const PRESET_GROUP_LABEL = { Video: "Video", Audio: "Audio", Gameplay: "Gameplay", Visibility: "Visibility & accessibility" };
-const PRESET_GAME = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2" };
-const PRESET_VIEW = { dota: "hotkeys", deadlock: "dl-hotkeys", cs2: "cs-hotkeys" };
+const PRESET_GAME = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2", pubg: "PUBG" };
+const PRESET_VIEW = { dota: "hotkeys", deadlock: "dl-hotkeys", cs2: "cs-hotkeys", pubg: "pg-pro" };
 const PRESET_INTRO = {
+  pubg: "Fullscreen at render scale 100, FOV 95 (the most common pro FOV), every quality setting very low except textures (medium) and view distance (low), sharpen on, V-sync, motion blur and smoothing off, legacy gun sounds with HRTF, scope on hold, recommendations off. Pros keep PUBG's default movement keys.",
   dota: "Borderless at native resolution, effects off, textures high, camera 6000, zoom and shake off, Stop-to-cancel teleports, music off, Yatoro's minimap. Pros don't share one keyboard layout: pick one below.",
   deadlock: "Fullscreen, effects off, fog low, shadows medium, FOV 90, hold to zoom and crouch, reduced shake. Pros agree on abilities 1–4, parry F, cancel Space, self-cast Mouse 3; pick a player's items and melee below.",
   cs2: "Fullscreen, shadows high, detail low, HDR quality, the shared 68 / 2.5 / 0 / -1.5 viewmodel, donk's crosshair, the centred rotating radar every pro keeps, stingers off. Binds follow the prosettings.net guide.",
 };
 const PRESET_SOURCES = {
+  pubg: "Sources: prosettings.net PUBG guide (68 pros) and player pages (TGLTN, Kickstart); vortexgaming.io pro settings round-up.",
   dota: "Sources: prosettings.net, gamingcfg.com (Yatoro, miCKe, Puppey, Topson, Miracle-), hawk.live, winio.ai, cyberscore.live, esports.gg.",
   deadlock: "Sources: prosettings.net (MikaelS, Lefaa, Hydration, Surefour, Recrent), Dexerto, BLAST, deadlocklabs.gg.",
   cs2: "Sources: prosettings.net (ZywOo, donk, NiKo, m0NESY, ropz), white.market, favade.org.",
@@ -164,8 +166,9 @@ function hotkeySectionHtml(game, section, actions, p) {
   const changing = rows.filter((r) => r.changed);
   const same = rows.length - changing.length;
   const show = p.showSame;
+  const real = changing.filter((r) => !r.lines[0].info).length;
   return `<section class="set hk-section">
-    <h3>${esc(section)} <span class="muted small">${changing.length ? `${changing.length} change${changing.length === 1 ? "" : "s"}` : "all set"}${same && !show ? `, ${same} already set` : ""}</span></h3>
+    <h3>${esc(section)} <span class="muted small">${real ? `${real} change${real === 1 ? "" : "s"}` : changing.length ? "set in the game" : "all set"}${same && !show ? `, ${same} already set` : ""}</span></h3>
     <div class="hk-rows">${(show ? rows : changing).map((r) => hotkeyRowHtml(game, r.action, r.lines, p)).join("") || `<p class="muted small">Already on the layout.</p>`}</div>
   </section>`;
 }

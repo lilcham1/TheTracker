@@ -35,7 +35,7 @@ type Stream = { login: string; name: string; title: string; viewers: number; sta
 type Result = { ok: true; streams: Stream[] } | { ok: false; reason: string };
 
 // The Twitch categories the app reads, by the app's own game keys.
-const CATEGORIES: Record<string, string> = { deadlock: "Deadlock", dota: "Dota 2" };
+const CATEGORIES: Record<string, string> = { deadlock: "Deadlock", dota: "Dota 2", pubg: "PUBG: BATTLEGROUNDS" };
 
 /** Live streams in one game's Twitch category, most watched first. */
 export const streams = action({

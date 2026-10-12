@@ -42,7 +42,7 @@ func TestCoachIsLockedForEveryoneButTheOwner(t *testing.T) {
 	if a.CoachUnlocked() {
 		t.Fatal("account 42 isn't the owner")
 	}
-	if r, err := a.Coach("dota", 100, false); err != nil || r.Status != "locked" || *calls != 0 {
+	if r, err := a.Coach("dota", 100, "", false); err != nil || r.Status != "locked" || *calls != 0 {
 		t.Fatalf("locked: %+v %v calls %d", r, err, *calls)
 	}
 	if coachOwnerOf(42) || !coachOwnerOf(850402858) {
@@ -61,15 +61,15 @@ func TestCoachAsksOnceAndKeepsTheAnswer(t *testing.T) {
 		seen = facts
 		return CoachNote{Verdict: "Lost to the same mistake three times.", Focus: []CoachFocus{{Title: "BKB before the fight"}}, Model: coachModel}, nil
 	})
-	r, err := a.Coach("dota", 100, false)
+	r, err := a.Coach("dota", 100, "", false)
 	if err != nil || r.Status != "ready" || r.Note.Focus[0].Title != "BKB before the fight" || r.Note.Model != "claude-sonnet-5-5" {
 		t.Fatalf("ready: %+v %v", r, err)
 	}
 	// Kept locally: the model isn't asked again unless forced.
-	if r, _ = a.Coach("dota", 100, false); r.Status != "ready" || *calls != 1 {
+	if r, _ = a.Coach("dota", 100, "", false); r.Status != "ready" || *calls != 1 {
 		t.Fatalf("cached: %+v calls %d", r, *calls)
 	}
-	if _, _ = a.Coach("dota", 100, true); *calls != 2 {
+	if _, _ = a.Coach("dota", 100, "", true); *calls != 2 {
 		t.Fatalf("force: calls %d", *calls)
 	}
 	// The facts carry the review and nothing personal.
@@ -83,7 +83,7 @@ func TestCoachAsksOnceAndKeepsTheAnswer(t *testing.T) {
 	}
 	// Off in Settings.
 	a.Store.SaveCoach(CoachPrefs{AIOff: true})
-	if r, _ = a.Coach("dota", 100, false); r.Status != "off" {
+	if r, _ = a.Coach("dota", 100, "", false); r.Status != "off" {
 		t.Fatalf("off: %+v", r)
 	}
 }
@@ -93,15 +93,15 @@ func TestCoachSaysWhenThereIsNoSignIn(t *testing.T) {
 	stubCoach(t, func(context.Context, string, map[string]any) (CoachNote, error) {
 		return CoachNote{}, errClaudeCodeSignIn
 	})
-	if r, _ := a.Coach("dota", 100, false); r.Status != "not_set_up" {
+	if r, _ := a.Coach("dota", 100, "", false); r.Status != "not_set_up" {
 		t.Fatalf("no sign-in: %+v", r)
 	}
 	stubCoach(t, func(context.Context, string, map[string]any) (CoachNote, error) { return CoachNote{}, errCoachRefused })
-	if r, _ := a.Coach("dota", 100, false); r.Status != "error" || r.Error == "" {
+	if r, _ := a.Coach("dota", 100, "", false); r.Status != "error" || r.Error == "" {
 		t.Fatalf("refused: %+v", r)
 	}
 	stubCoach(t, func(context.Context, string, map[string]any) (CoachNote, error) { return CoachNote{}, errNoClaudeCode })
-	if r, _ := a.Coach("dota", 100, false); r.Status != "not_set_up" || !strings.Contains(r.Error, "isn't installed") {
+	if r, _ := a.Coach("dota", 100, "", false); r.Status != "not_set_up" || !strings.Contains(r.Error, "isn't installed") {
 		t.Fatalf("no claude: %+v", r)
 	}
 }

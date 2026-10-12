@@ -885,3 +885,4 @@ kbd { border-radius: 3px; }
 .pg-detail { margin: 2px 0 8px 14px; padding: 10px 14px; border-left: 2px solid var(--accent-soft); }
 .pg-detail .mini tr.me td { color: var(--accent); }
 .pg-detail p { margin-top: 8px; }
+.pg-rank .pg-of { display: inline; color: var(--muted); font-size: 13px; }
