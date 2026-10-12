@@ -294,7 +294,7 @@ const ICONS = {
   builds: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4z"/>',
   sessions: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   leaderboard: '<path d="M8 21V10M16 21V14M12 21V4M3 21h18"/>',
-  settings: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   overlay: '<rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 9h5M7 13h3"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/>',
   today: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>',
@@ -438,7 +438,7 @@ function renderNav() {
   switcher.innerHTML = games
     .map((g) => `<button class="game ${g === S.game && S.view !== "today" ? "on" : ""}" data-act="game" data-game="${g}" type="button">${GAMES[g].label}</button>`)
     .join("");
-  const settingsBtn = $('.side-foot [data-view="settings"]');
+  const settingsBtn = $("#settingsBtn");
   if (settingsBtn) settingsBtn.classList.toggle("on", S.view === "settings");
   const todayBtn = $("#todayBtn");
   if (todayBtn) todayBtn.classList.toggle("on", S.view === "today");
