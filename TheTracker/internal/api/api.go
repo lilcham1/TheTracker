@@ -24,6 +24,11 @@ import (
 type command func(body []byte) (any, error)
 
 // in adapts a typed function to a command, decoding the JSON body into T.
+type presetArg struct {
+	Game string   `json:"game"`
+	Skip []string `json:"skip"`
+}
+
 func in[T any](fn func(T) (any, error)) command {
 	return func(body []byte) (any, error) {
 		var args T
@@ -269,6 +274,11 @@ func commands(a *core.App) map[string]command {
 		"save_goals": in(func(g core.Goals) (any, error) { return s.SaveGoals(g), nil }),
 		"save_coach": in(func(c core.CoachPrefs) (any, error) { return s.SaveCoach(c), nil }),
 		"save_games": in(func(g core.Games) (any, error) { return a.SetGames(g) }),
+
+		// ----- Pro settings presets -----
+		"presets_preview": in(func(p presetArg) (any, error) { return a.PresetPreview(p.Game) }),
+		"presets_apply":   in(func(p presetArg) (any, error) { return a.PresetApply(p.Game, p.Skip) }),
+		"presets_restore": in(func(p presetArg) (any, error) { return a.PresetRestore(p.Game) }),
 
 		// ----- Running in the background -----
 		"background_settings": none(func() (any, error) { return a.Background(), nil }),

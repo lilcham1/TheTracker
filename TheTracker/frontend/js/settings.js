@@ -365,7 +365,8 @@ function dotaSettingsHtml() {
       ${typeof liveSetupHtml === "function" ? liveSetupHtml() : ""}
     </section>
     ${coachHtml("dota")}
-    ${overlayHtml()}`;
+    ${overlayHtml()}
+    ${presetsHtml("dota")}`;
 }
 
 function deadlockSettingsHtml() {
@@ -376,6 +377,7 @@ function deadlockSettingsHtml() {
         ${link.accountId ? "" : `<button class="link" data-act="settings-tab" data-tab="account" type="button">Account</button>`}</div></div>
     </section>
     ${coachHtml("deadlock")}
+    ${presetsHtml("deadlock")}
     <section class="set"><h3>What works for Deadlock</h3>
       <p class="muted">Deadlock has no live feed apps can read, so there's no in-game overlay or live tracking for it. Match history, the Review tab, hero stats and the live streamers page all come from the public Deadlock API after or outside your games. The connection check and Game mode work while Deadlock is open (Connection tab).</p>
       <div class="row wrap"><button class="btn ghost" data-act="go" data-view="dl-review" type="button">Open Review</button>
@@ -386,7 +388,8 @@ function deadlockSettingsHtml() {
 function cs2SettingsHtml() {
   return `<section class="set"><h3>Live tracking</h3>
       ${typeof csSetupHtml === "function" && typeof CS !== "undefined" && CS.status ? csSetupHtml() : `<p class="muted">Checking CS2…</p>`}
-    </section>`;
+    </section>
+    ${presetsHtml("cs2")}`;
 }
 
 function overwatchSettingsHtml() {
