@@ -27,6 +27,7 @@ type command func(body []byte) (any, error)
 type presetArg struct {
 	Game   string   `json:"game"`
 	Layout string   `json:"layout"`
+	Kind   string   `json:"kind"`
 	Skip   []string `json:"skip"`
 }
 
@@ -280,6 +281,9 @@ func commands(a *core.App) map[string]command {
 		"presets_preview": in(func(p presetArg) (any, error) { return a.PresetPreview(p.Game, p.Layout) }),
 		"presets_apply":   in(func(p presetArg) (any, error) { return a.PresetApply(p.Game, p.Layout, p.Skip) }),
 		"presets_restore": in(func(p presetArg) (any, error) { return a.PresetRestore(p.Game, p.Layout) }),
+		"presets_restore_original": in(func(p presetArg) (any, error) {
+			return a.PresetRestoreOriginal(p.Game, p.Kind, p.Layout)
+		}),
 
 		// ----- Running in the background -----
 		"background_settings": none(func() (any, error) { return a.Background(), nil }),

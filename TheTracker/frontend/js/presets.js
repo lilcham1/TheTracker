@@ -206,6 +206,7 @@ function proSettingsHtml(game) {
     <div class="row wrap">
       <button class="btn" data-act="preset-apply" data-game="${game}" type="button" ${!d.canApply || !picked || p.busy ? "disabled" : ""}>${p.busy ? "Working…" : `Apply ${picked ? picked + " " : ""}line${picked === 1 ? "" : "s"}`}</button>
       ${d.lastBackup ? `<button class="btn ghost" data-act="preset-restore" data-game="${game}" type="button" ${d.running || p.busy ? "disabled" : ""}>Restore my settings</button>` : ""}
+      ${d.originalKeys ? `<button class="btn ghost" data-act="preset-reset-keys" data-game="${game}" type="button" ${d.running || p.busy ? "disabled" : ""} title="Your key file from ${esc(d.originalKeys)}, before any preset">Reset hotkeys</button>` : ""}
       <button class="btn ghost" data-act="preset-reload" data-game="${game}" type="button" ${p.busy ? "disabled" : ""}>Re-read</button>
       <label class="switch inline"><input type="checkbox" data-change="preset-show-same" data-game="${game}" ${p.showSame ? "checked" : ""} /><span>Show lines already set</span></label>
     </div>
@@ -291,6 +292,29 @@ act("preset-apply", (el) => {
       try {
         p.data = await invoke("presets_apply", { game, layout: p.layout, skip: [...p.skip] });
         toast(`${name} is on the preset. Start the game to see it.`);
+      } catch (e) {
+        p.error = e.message || String(e);
+      }
+      p.busy = false;
+      rerender();
+    },
+  });
+});
+act("preset-reset-keys", (el) => {
+  const game = el.dataset.game;
+  const p = presetState(game);
+  const name = PRESET_GAME[game] || game;
+  confirmBox({
+    title: `Reset ${name} hotkeys?`,
+    body: `<p class="muted">Your key file from before any preset (backup ${esc(p.data.originalKeys || "")}) is put back exactly. Video, audio and the rest stay as they are. Keep ${esc(name)} closed.</p>`,
+    ok: "Reset hotkeys",
+    then: async () => {
+      p.busy = true;
+      p.error = null;
+      rerender();
+      try {
+        p.data = await invoke("presets_restore_original", { game, kind: "keys", layout: p.layout });
+        toast(`${name} hotkeys are back to your originals.`);
       } catch (e) {
         p.error = e.message || String(e);
       }

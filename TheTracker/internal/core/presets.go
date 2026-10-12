@@ -68,6 +68,9 @@ type PresetPreview struct {
 	// How many lines would change.
 	Changes    int    `json:"changes"`
 	LastBackup string `json:"lastBackup,omitempty"`
+	// The oldest backup that holds the key file: the keys from before the
+	// first preset, if any apply has touched them.
+	OriginalKeys string `json:"originalKeys,omitempty"`
 }
 
 // steamAccount is the signed-in Steam account; a test swaps it.
@@ -210,6 +213,9 @@ func (a *App) PresetPreview(game, layout string) (PresetPreview, error) {
 	p.CanApply = p.Installed && !p.Running && len(docs) > 0 && allFound(files)
 	if dir := a.latestPresetBackup(game); dir != "" {
 		p.LastBackup = filepath.Base(dir)
+	}
+	if dir, _ := a.oldestPresetBackupWith(game, "keys"); dir != "" {
+		p.OriginalKeys = filepath.Base(dir)
 	}
 	return p, nil
 }
@@ -364,6 +370,64 @@ func (a *App) PresetApply(game, layout string, skip []string) (PresetPreview, er
 		now := time.Now()
 		_ = os.Chtimes(f.Path, now, now)
 	}
+	return a.PresetPreview(game, layout)
+}
+
+// oldestPresetBackupWith finds the earliest backup holding a file of one
+// kind, with that file's original path.
+func (a *App) oldestPresetBackupWith(game, kind string) (dir, path string) {
+	entries, err := os.ReadDir(a.presetBackupRoot(game))
+	if err != nil {
+		return "", ""
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		d := filepath.Join(a.presetBackupRoot(game), n)
+		raw, err := os.ReadFile(filepath.Join(d, "manifest.json"))
+		var man presetManifest
+		if err != nil || json.Unmarshal(raw, &man) != nil {
+			continue
+		}
+		for p, name := range man.Files {
+			if strings.HasPrefix(name, kind+"_") {
+				return d, p
+			}
+		}
+	}
+	return "", ""
+}
+
+// PresetRestoreOriginal puts one file back from the oldest backup that
+// holds it: the player's own version from before any preset. The game
+// must be closed.
+func (a *App) PresetRestoreOriginal(game, kind, layout string) (PresetPreview, error) {
+	if presetRunning(game) {
+		return PresetPreview{}, errors.New(presetGames[game].label + " is running. Close it first.")
+	}
+	dir, path := a.oldestPresetBackupWith(game, kind)
+	if dir == "" {
+		return PresetPreview{}, errors.New("No backup holds that file.")
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "manifest.json"))
+	var man presetManifest
+	if json.Unmarshal(raw, &man) != nil {
+		return PresetPreview{}, errors.New("The backup's manifest couldn't be read.")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, man.Files[path]))
+	if err != nil {
+		return PresetPreview{}, err
+	}
+	if err := replaceFile(path, data); err != nil {
+		return PresetPreview{}, fmt.Errorf("Couldn't restore %s: %v", filepath.Base(path), err)
+	}
+	now := time.Now()
+	_ = os.Chtimes(path, now, now)
 	return a.PresetPreview(game, layout)
 }
 

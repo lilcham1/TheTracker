@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakePresetSteam builds a Steam folder with the game installed and the
@@ -174,6 +175,36 @@ func presetRoundTrip(t *testing.T, game, layout string) {
 					t.Fatalf("%s not restored exactly", path)
 				}
 			}
+		}
+	}
+}
+
+func TestPresetsResetHotkeysToTheOriginals(t *testing.T) {
+	t.Setenv("TT_KV_DIR", "")
+	a := newTestApp(t)
+	before := fakePresetSteam(t, a, "dota")
+	if _, err := a.PresetApply("dota", "yatoro", nil); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1100 * time.Millisecond) // backups are named to the second
+	if _, err := a.PresetApply("dota", "puppey", nil); err != nil {
+		t.Fatal(err)
+	}
+	p, err := a.PresetRestoreOriginal("dota", "keys", "puppey")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.OriginalKeys == "" || p.Layout != "puppey" {
+		t.Fatalf("preview after reset: %+v", p)
+	}
+	for path, orig := range before {
+		now, _ := os.ReadFile(path)
+		isKeys := strings.HasSuffix(path, ".lst")
+		if isKeys && string(now) != orig {
+			t.Fatalf("keys not back to the original")
+		}
+		if !isKeys && string(now) == orig {
+			t.Fatalf("%s should still carry the preset", filepath.Base(path))
 		}
 	}
 }
