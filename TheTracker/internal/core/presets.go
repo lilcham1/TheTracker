@@ -31,6 +31,10 @@ type PresetLine struct {
 	Path  []string `json:"-"`
 	Value string   `json:"value"`
 	Note  string   `json:"note,omitempty"`
+	// Hotkeys: the in-game action and the section of the layout it sits
+	// in, so the page shows one row per action.
+	Action  string `json:"action,omitempty"`
+	Section string `json:"section,omitempty"`
 	// Remove the key instead of setting it (a modifier the layout drops).
 	Remove bool `json:"remove,omitempty"`
 	// Filled by the preview.
@@ -148,6 +152,12 @@ func (b *presetBuilder) add(group, file, label, value, note string, path ...stri
 	b.lines = append(b.lines, PresetLine{ID: id, Group: group, Label: label, File: file, Path: path, Value: value, Note: note})
 }
 
+// bind adds one hotkey line for an action.
+func (b *presetBuilder) bind(section, action, label, value string, path ...string) {
+	id := b.game + ".keys." + strings.Join(path, "/")
+	b.lines = append(b.lines, PresetLine{ID: id, Group: "Hotkeys", Label: label, File: "keys", Path: path, Value: value, Action: action, Section: section})
+}
+
 func (b *presetBuilder) video(key, value, label, note string) {
 	b.add("Video", "video", label, value, note, "video.cfg", "setting."+key)
 }
@@ -245,45 +255,38 @@ func dotaPreset(b *presetBuilder, keys *kvDoc) {
 	cv("Visibility", "dota_hud_netgraph", "false", "Net graph off", "The app's Connection check covers it.")
 
 	// Hotkeys: the full pro layout.
-	type bind struct{ action, key, mod, mode string }
+	type bind struct{ section, action, label, key, mod, mode string }
 	binds := []bind{
-		{"AbilityPrimary1", "Q", "", "1"}, {"AbilityPrimary2", "W", "", "1"}, {"AbilityPrimary3", "E", "", "1"},
-		{"AbilitySecondary1", "D", "", "1"}, {"AbilitySecondary2", "F", "", "1"}, {"AbilityUltimate", "R", "", "1"},
-		{"AbilityPrimary1AutoCast", "Q", "ALT", ""}, {"AbilityPrimary2AutoCast", "W", "ALT", ""}, {"AbilityPrimary3AutoCast", "E", "ALT", ""},
-		{"AbilitySecondary1AutoCast", "D", "ALT", ""}, {"AbilitySecondary2AutoCast", "F", "ALT", ""}, {"AbilityUltimateAutoCast", "R", "ALT", ""},
-		{"Inventory1", "Z", "", "1"}, {"Inventory2", "X", "", "1"}, {"Inventory3", "C", "", "1"},
-		{"Inventory4", "V", "", "1"}, {"Inventory5", "B", "", "1"}, {"Inventory6", "N", "", "1"},
-		{"InventoryTP", "T", "", "1"}, {"InventoryNeutral", "G", "", "1"},
-		{"ControlGroup1", "1", "", ""}, {"ControlGroup2", "2", "", ""}, {"ControlGroup3", "3", "", ""}, {"ControlGroup4", "4", "", ""}, {"ControlGroup5", "5", "", ""},
-		{"SelectAll", "F5", "", ""}, {"SelectAllOthers", "`", "", ""}, {"ScoreboardToggle", "TAB", "", ""},
-		{"HeroSelect", "F1", "", ""}, {"CourierSelect", "F2", "", ""}, {"CourierDeliver", "F3", "", ""}, {"ScoutSelect", "F4", "", ""},
-		{"LearnAbilities", "U", "", ""}, {"LearnStats", "O", "", ""},
-		{"ShopToggle", "P", "", ""}, {"PurchaseQuickbuy", "P", "ALT", ""}, {"PurchaseSticky", "Q", "ALT", ""},
-		{"ActivateGlyph", "J", "", ""}, {"ActivateRadar", "K", "", ""},
-		{"HeroAttack", "A", "", ""}, {"HeroMove", "M", "", ""}, {"HeroStop", "S", "", ""}, {"HeroHold", "H", "", ""},
-		{"CameraGrip", "MOUSE3", "", ""},
-		{"ChatTeam", "ENTER", "", ""}, {"ChatGlobal", "ENTER", "SHIFT", ""}, {"ChatVoiceTeam", "MOUSE4", "", ""}, {"ChatWheel", "MOUSE5", "", ""},
-		{"CombatLogToggle", "L", "", ""}, {"ScreenshotSettings", "F12", "", ""}, {"Console", `\`, "", ""},
+		{"Abilities", "AbilityPrimary1", "Ability 1", "Q", "", "1"}, {"Abilities", "AbilityPrimary2", "Ability 2", "W", "", "1"}, {"Abilities", "AbilityPrimary3", "Ability 3", "E", "", "1"},
+		{"Abilities", "AbilitySecondary1", "Ability 4", "D", "", "1"}, {"Abilities", "AbilitySecondary2", "Ability 5", "F", "", "1"}, {"Abilities", "AbilityUltimate", "Ultimate", "R", "", "1"},
+		{"Abilities", "AbilityPrimary1AutoCast", "Ability 1 auto-cast", "Q", "ALT", ""}, {"Abilities", "AbilityPrimary2AutoCast", "Ability 2 auto-cast", "W", "ALT", ""}, {"Abilities", "AbilityPrimary3AutoCast", "Ability 3 auto-cast", "E", "ALT", ""},
+		{"Abilities", "AbilitySecondary1AutoCast", "Ability 4 auto-cast", "D", "ALT", ""}, {"Abilities", "AbilitySecondary2AutoCast", "Ability 5 auto-cast", "F", "ALT", ""}, {"Abilities", "AbilityUltimateAutoCast", "Ultimate auto-cast", "R", "ALT", ""},
+		{"Abilities", "LearnAbilities", "Learn abilities", "U", "", ""}, {"Abilities", "LearnStats", "Level up talents / stats", "O", "", ""},
+		{"Items", "Inventory1", "Item 1", "Z", "", "1"}, {"Items", "Inventory2", "Item 2", "X", "", "1"}, {"Items", "Inventory3", "Item 3", "C", "", "1"},
+		{"Items", "Inventory4", "Item 4", "V", "", "1"}, {"Items", "Inventory5", "Item 5", "B", "", "1"}, {"Items", "Inventory6", "Item 6", "N", "", "1"},
+		{"Items", "InventoryTP", "Town Portal Scroll", "T", "", "1"}, {"Items", "InventoryNeutral", "Neutral item", "G", "", "1"},
+		{"Units and selection", "ControlGroup1", "Control group 1", "1", "", ""}, {"Units and selection", "ControlGroup2", "Control group 2", "2", "", ""}, {"Units and selection", "ControlGroup3", "Control group 3", "3", "", ""}, {"Units and selection", "ControlGroup4", "Control group 4", "4", "", ""}, {"Units and selection", "ControlGroup5", "Control group 5", "5", "", ""},
+		{"Units and selection", "HeroSelect", "Select hero", "F1", "", ""}, {"Units and selection", "SelectAll", "Select all units", "F5", "", ""}, {"Units and selection", "SelectAllOthers", "Select all other units", "`", "", ""},
+		{"Units and selection", "CourierSelect", "Select courier", "F2", "", ""}, {"Units and selection", "CourierDeliver", "Courier deliver", "F3", "", ""}, {"Units and selection", "ScoutSelect", "Select scout", "F4", "", ""},
+		{"Hero orders", "HeroAttack", "Attack", "A", "", ""}, {"Hero orders", "HeroMove", "Move", "M", "", ""}, {"Hero orders", "HeroStop", "Stop", "S", "", ""}, {"Hero orders", "HeroHold", "Hold position", "H", "", ""},
+		{"Hero orders", "CameraGrip", "Camera grip", "MOUSE3", "", ""},
+		{"Shop and map", "ShopToggle", "Shop", "P", "", ""}, {"Shop and map", "PurchaseQuickbuy", "Quick-buy", "P", "ALT", ""}, {"Shop and map", "PurchaseSticky", "Buy sticky item", "Q", "ALT", ""},
+		{"Shop and map", "ActivateGlyph", "Glyph", "J", "", ""}, {"Shop and map", "ActivateRadar", "Scan", "K", "", ""}, {"Shop and map", "ScoreboardToggle", "Scoreboard", "TAB", "", ""},
+		{"Chat and voice", "ChatTeam", "Team chat", "ENTER", "", ""}, {"Chat and voice", "ChatGlobal", "All chat", "ENTER", "SHIFT", ""}, {"Chat and voice", "ChatVoiceTeam", "Push to talk", "MOUSE4", "", ""}, {"Chat and voice", "ChatWheel", "Chat wheel", "MOUSE5", "", ""},
+		{"Other", "CombatLogToggle", "Combat log", "L", "", ""}, {"Other", "ScreenshotSettings", "Screenshot", "F12", "", ""}, {"Other", "Console", "Console", `\`, "", ""},
 	}
 	for _, k := range binds {
-		label := k.action
+		b.bind(k.section, k.action, k.label, k.key, "KeyBindings", "Keys", k.action, "Key")
 		if k.mod != "" {
-			label += " = " + k.mod + "+" + k.key
-		} else {
-			label += " = " + k.key
-		}
-		b.add("Hotkeys", "keys", label, k.key, "", "KeyBindings", "Keys", k.action, "Key")
-		if k.mod != "" {
-			b.add("Hotkeys", "keys", k.action+" modifier", k.mod, "", "KeyBindings", "Keys", k.action, "Modifier")
+			b.bind(k.section, k.action, k.label+" modifier", k.mod, "KeyBindings", "Keys", k.action, "Modifier")
 		} else if keys != nil {
 			if _, has := keys.Get("KeyBindings", "Keys", k.action, "Modifier"); has {
-				line := PresetLine{ID: "dota.keys.KeyBindings/Keys/" + k.action + "/Modifier", Group: "Hotkeys", Label: k.action + " modifier removed", File: "keys",
-					Path: []string{"KeyBindings", "Keys", k.action, "Modifier"}, Value: "", Remove: true}
-				b.lines = append(b.lines, line)
+				b.bind(k.section, k.action, k.label+" modifier removed", "", "KeyBindings", "Keys", k.action, "Modifier")
+				b.lines[len(b.lines)-1].Remove = true
 			}
 		}
 		if k.mode != "" {
-			b.add("Hotkeys", "keys", k.action+" quick cast", k.mode, "", "KeyBindings", "Keys", k.action, "Mode")
+			b.bind(k.section, k.action, k.label+" quick cast", k.mode, "KeyBindings", "Keys", k.action, "Mode")
 		}
 	}
 	// Per-item cast mode: quick cast on everything except the targeted
@@ -305,7 +308,8 @@ func dotaPreset(b *presetBuilder, keys *kvDoc) {
 			if normal[it] {
 				mode, label = "0", "normal cast (aimed)"
 			}
-			b.add("Hotkeys", "keys", strings.TrimPrefix(it, "item_")+": "+label, mode, "", "KeyBindings", "Items", it, "Mode")
+			name := strings.ReplaceAll(strings.TrimPrefix(it, "item_"), "_", " ")
+			b.bind("Item cast modes", it, strings.ToUpper(name[:1])+name[1:]+": "+label, mode, "KeyBindings", "Items", it, "Mode")
 		}
 	}
 }
@@ -367,24 +371,27 @@ func deadlockPreset(b *presetBuilder) {
 		cv("Visibility", "citadel_subtitles_newscaster", "false", "Newscaster subtitles off", "")
 	}
 
-	type bind struct{ action, key string }
+	type bind struct{ section, action, label, key string }
 	binds := []bind{
-		{"AbilityMelee", "Q"}, {"Item1", "Z"}, {"Item2", "X"}, {"Item3", "C"}, {"Item4", "V"},
-		{"HeldItem", "F"}, {"Interact", "E"}, {"Reload", "R"}, {"Mantle", "SPACE"}, {"Zipline", "SPACE"},
-		{"Crouch", "CTRL"}, {"Roll", "SHIFT"}, {"Teleport", "G"}, {"PurchaseQuickbuy", "B"},
-		{"Scoreboard", "TAB"}, {"OpenHeroSheet", "N"}, {"Ping", "MOUSE3"}, {"InstantPing", "MOUSE4"}, {"PushToTalk", "MOUSE5"},
-		{"CancelAbility", "CAPSLOCK"}, {"AltCast", "ALT"}, {"Chat", "ENTER"}, {"ChatTeam", "Y"}, {"ExtraInfo", "H"},
-		{"MinimapZoomIn", "["}, {"MinimapZoomOut", "]"}, {"ToggleFreeCursor", "F6"},
+		{"Abilities and items", "AbilityMelee", "Melee", "Q"}, {"Abilities and items", "Item1", "Item 1", "Z"}, {"Abilities and items", "Item2", "Item 2", "X"}, {"Abilities and items", "Item3", "Item 3", "C"}, {"Abilities and items", "Item4", "Item 4", "V"},
+		{"Abilities and items", "HeldItem", "Held item", "F"}, {"Abilities and items", "CancelAbility", "Cancel ability", "CAPSLOCK"}, {"Abilities and items", "AltCast", "Alt cast", "ALT"}, {"Abilities and items", "Reload", "Reload", "R"},
+		{"Movement", "Mantle", "Jump / mantle", "SPACE"}, {"Movement", "Zipline", "Zipline", "SPACE"}, {"Movement", "Crouch", "Crouch", "CTRL"}, {"Movement", "Roll", "Dash / roll", "SHIFT"},
+		{"Movement", "Teleport", "Teleport", "G"}, {"Movement", "Interact", "Interact", "E"},
+		{"Shop and map", "PurchaseQuickbuy", "Quick-buy", "B"}, {"Shop and map", "Scoreboard", "Scoreboard", "TAB"}, {"Shop and map", "OpenHeroSheet", "Hero sheet", "N"},
+		{"Shop and map", "MinimapZoomIn", "Minimap zoom in", "["}, {"Shop and map", "MinimapZoomOut", "Minimap zoom out", "]"}, {"Shop and map", "ExtraInfo", "Extra info", "H"},
+		{"Chat and pings", "Ping", "Ping", "MOUSE3"}, {"Chat and pings", "InstantPing", "Instant ping", "MOUSE4"}, {"Chat and pings", "PushToTalk", "Push to talk", "MOUSE5"},
+		{"Chat and pings", "Chat", "Chat", "ENTER"}, {"Chat and pings", "ChatTeam", "Team chat", "Y"},
+		{"Other", "ToggleFreeCursor", "Free cursor", "F6"},
 	}
 	for _, k := range binds {
-		b.add("Hotkeys", "keys", k.action+" = "+k.key, k.key, "", "KeyBindings", "Keys", k.action, "Key")
-		b.add("Hotkeys", "keys", k.action+" second key cleared", "NONE", "", "KeyBindings", "Keys", k.action, "Key2")
+		b.bind(k.section, k.action, k.label, k.key, "KeyBindings", "Keys", k.action, "Key")
+		b.bind(k.section, k.action, k.label+" second key cleared", "NONE", "KeyBindings", "Keys", k.action, "Key2")
 	}
 	for i := 1; i <= 4; i++ {
-		b.add("Hotkeys", "keys", fmt.Sprintf("Ability %d quick cast", i), "1", "", "KeyBindings", "Keys", fmt.Sprintf("AbilityQuickCastMode%d", i), "Key")
+		b.bind("Cast modes", fmt.Sprintf("AbilityQuickCastMode%d", i), fmt.Sprintf("Ability %d: quick cast", i), "1", "KeyBindings", "Keys", fmt.Sprintf("AbilityQuickCastMode%d", i), "Key")
 	}
-	b.add("Hotkeys", "keys", "Items quick cast", "1", "", "KeyBindings", "Keys", "ItemQuickCastMode", "Key")
-	b.add("Hotkeys", "keys", "Alt cast: normal", "0", "", "KeyBindings", "Keys", "AltCastMode", "Key")
+	b.bind("Cast modes", "ItemQuickCastMode", "Items: quick cast", "1", "KeyBindings", "Keys", "ItemQuickCastMode", "Key")
+	b.bind("Cast modes", "AltCastMode", "Alt cast: normal cast", "0", "KeyBindings", "Keys", "AltCastMode", "Key")
 }
 
 func cs2Preset(b *presetBuilder) {
@@ -442,19 +449,20 @@ func cs2Preset(b *presetBuilder) {
 	cv("Visibility", "cl_showfps", "0", "FPS counter off", "")
 	cv("Visibility", "r_drawtracers_firstperson", "1", "Own tracers on", "")
 
-	type bind struct{ key, cmd, label string }
+	// CS2 binds go from key to command, so the key is the action.
+	type bind struct{ section, key, cmd, label string }
 	binds := []bind{
-		{"MWHEELUP", "+jump", "Scroll up: jump"}, {"MWHEELDOWN", "+jump", "Scroll down: jump"}, {"SPACE", "+jump", "Space: jump"},
-		{"CTRL", "+duck", "Ctrl: crouch"}, {"SHIFT", "+sprint", "Shift: walk"}, {"E", "+use", "E: use"}, {"G", "drop", "G: drop"},
-		{"B", "buymenu", "B: buy menu"}, {"Q", "lastinv", "Q: last weapon"}, {"R", "+reload", "R: reload"},
-		{"F", "use weapon_flashbang", "F: flashbang"}, {"C", "use weapon_smokegrenade", "C: smoke"},
-		{"X", "use weapon_hegrenade", "X: HE grenade"}, {"Z", "use weapon_molotov; use weapon_incgrenade", "Z: molotov"},
-		{"T", "use weapon_knife", "T: knife"}, {"V", "+voicerecord", "V: voice"}, {"MOUSE4", "player_ping", "Mouse 4: ping"},
-		{"TAB", "+showscores", "Tab: scoreboard"}, {"`", "toggleconsole", "`: console"},
-		{"N", "toggle cl_radar_scale 0.35 0.6", "N: radar zoom"},
+		{"Movement", "MWHEELUP", "+jump", "Jump (scroll up)"}, {"Movement", "MWHEELDOWN", "+jump", "Jump (scroll down)"}, {"Movement", "SPACE", "+jump", "Jump"},
+		{"Movement", "CTRL", "+duck", "Crouch"}, {"Movement", "SHIFT", "+sprint", "Walk"}, {"Movement", "E", "+use", "Use"},
+		{"Weapons and grenades", "Q", "lastinv", "Last weapon"}, {"Weapons and grenades", "R", "+reload", "Reload"}, {"Weapons and grenades", "G", "drop", "Drop"}, {"Weapons and grenades", "T", "use weapon_knife", "Knife"},
+		{"Weapons and grenades", "F", "use weapon_flashbang", "Flashbang"}, {"Weapons and grenades", "C", "use weapon_smokegrenade", "Smoke"},
+		{"Weapons and grenades", "X", "use weapon_hegrenade", "HE grenade"}, {"Weapons and grenades", "Z", "use weapon_molotov; use weapon_incgrenade", "Molotov / incendiary"},
+		{"Buying and info", "B", "buymenu", "Buy menu"}, {"Buying and info", "TAB", "+showscores", "Scoreboard"}, {"Buying and info", "N", "toggle cl_radar_scale 0.35 0.6", "Radar zoom"},
+		{"Voice and pings", "V", "+voicerecord", "Push to talk"}, {"Voice and pings", "MOUSE4", "player_ping", "Ping"},
+		{"Other", "`", "toggleconsole", "Console"},
 	}
 	for _, k := range binds {
-		b.add("Hotkeys", "keys", k.label, k.cmd, "", "config", "bindings", k.key)
+		b.bind(k.section, k.key, k.label, k.cmd, "config", "bindings", k.key)
 	}
 }
 
@@ -524,7 +532,7 @@ func (a *App) PresetPreview(game string) (PresetPreview, error) {
 // kvSame treats the games' two spellings of a boolean, and numbers that
 // only differ in formatting, as the same value.
 func kvSame(a, b string) bool {
-	if a == b {
+	if strings.EqualFold(a, b) {
 		return true
 	}
 	norm := func(s string) string {
