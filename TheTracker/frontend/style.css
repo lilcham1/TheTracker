@@ -690,21 +690,9 @@ kbd { font: 500 11px var(--body); padding: 1px 5px; border: 1px solid var(--line
 .ov-sub { margin-left: 28px; }
 
 /* ---------- Pro settings presets ---------- */
-.preset-groups { display: flex; flex-direction: column; gap: 6px; }
-.preset-group { border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
-.preset-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: background var(--t-fast); }
-.preset-head:hover { background: var(--panel-2); }
-.preset-head .chev { width: 7px; height: 7px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint); transform: rotate(-45deg); transition: transform var(--t) var(--ease); flex: none; margin: 0 4px 0 2px; }
-.preset-group.open .preset-head .chev { transform: rotate(45deg); }
-.preset-lines { padding: 2px 12px 10px 14px; border-top: 1px solid var(--line-soft); }
-.preset-line { padding: 6px 0; font-size: 13px; }
-.preset-line.same { opacity: .6; }
-.preset-line .grow { flex: 1; min-width: 0; }
-.preset-vals { flex: none; font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
-.preset-vals code, .preset-line code { font: 12px var(--mono, ui-monospace, monospace); padding: 1px 5px; border-radius: 4px; background: var(--panel-2); color: var(--text); }
+.hk-row code { font: 12px var(--mono, ui-monospace, monospace); padding: 1px 5px; border-radius: 4px; background: var(--panel-2); color: var(--text); }
 .ptag { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); vertical-align: 1px; }
 .link.small { font-size: 12px; margin: 6px 0 2px; }
-@media (max-width: 720px) { .preset-line { flex-wrap: wrap; } .preset-vals { width: 100%; padding-left: 28px; } }
 
 /* ---------- Hotkeys page ---------- */
 .hk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px; margin-top: 14px; }
@@ -725,3 +713,6 @@ kbd { font: 500 11px var(--body); padding: 1px 5px; border: 1px solid var(--line
 .hk-row.info { display: flex; align-items: flex-start; gap: 11px; padding: 8px 0 8px 28px; cursor: default; opacity: 1; }
 .hk-row.info .hk-keys { white-space: normal; max-width: 46%; text-align: right; }
 .hk-section .chips.seg { margin: 0; }
+.hk-label .small { display: block; margin-top: 1px; }
+.hk-layout .chips.seg { margin-top: 4px; }
+.hk-layout + .hk-grid { margin-top: 10px; }
