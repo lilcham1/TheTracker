@@ -32,14 +32,14 @@ const PRESET_GROUP_LABEL = { Video: "Video", Audio: "Audio", Gameplay: "Gameplay
 const PRESET_GAME = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2" };
 const PRESET_VIEW = { dota: "hotkeys", deadlock: "dl-hotkeys", cs2: "cs-hotkeys" };
 const PRESET_INTRO = {
-  dota: "What the pros run: borderless at native resolution with the effects stripped (ambient occlusion, bloom, fog, tree wind and anti-aliasing off, textures high, shadows medium), a fast camera (Yatoro 6193, Miracle 7572), camera zoom and screen shake off, teleports and channels that need a Stop to cancel, music off, an extra-large minimap with hero icons on Alt. Pros don't share one keyboard layout, so pick a named one below.",
-  deadlock: "What the pros run: fullscreen, anti-aliasing, both ambient occlusions, blur, blooms, area lights and depth of field off (MikaelS, Lefaa), fog low, shadows medium so enemies still cast them, field of view 90, zoom and vertical scaling 1, hold to zoom and crouch, reduced camera shake and flashing. Every listed pro keeps abilities on 1–4, parry on F, cancel on Space and self-cast on Mouse 3; they differ on items and melee, so pick a player below.",
-  cs2: "What the pros run: fullscreen, V-sync and FSR off, HDR quality, global shadows high with dynamic shadows on everything, model, shader and particle detail low, ambient occlusion off (ZywOo, donk, NiKo, m0NESY, ropz, b1t), the 68 / 2.5 / 0 / -1.5 viewmodel all six share, donk's crosshair, the centred rotating radar every listed pro keeps, and the guide's audio mix with music and round stingers off. Pros don't publish their binds, so those follow the prosettings.net guide.",
+  dota: "Borderless at native resolution, effects off, textures high, camera 6000, zoom and shake off, Stop-to-cancel teleports, music off, Yatoro's minimap. Pros don't share one keyboard layout: pick one below.",
+  deadlock: "Fullscreen, effects off, fog low, shadows medium, FOV 90, hold to zoom and crouch, reduced shake. Pros agree on abilities 1–4, parry F, cancel Space, self-cast Mouse 3; pick a player's items and melee below.",
+  cs2: "Fullscreen, shadows high, detail low, HDR quality, the shared 68 / 2.5 / 0 / -1.5 viewmodel, donk's crosshair, the centred rotating radar every pro keeps, stingers off. Binds follow the prosettings.net guide.",
 };
 const PRESET_SOURCES = {
-  dota: "Sources: prosettings.net Dota 2 pro list and options guide; gamingcfg.com configs (Yatoro, miCKe, Puppey, Topson, Miracle-); hawk.live and winio.ai on Yatoro; cyberscore.live and esports.gg option guides; a shared pro autoexec for the minimap size.",
-  deadlock: "Sources: prosettings.net player pages (MikaelS, Lefaa, Hydration, Surefour, Recrent) and options guide; Dexerto and BLAST settings guides; deadlocklabs.gg crosshairs.",
-  cs2: "Sources: prosettings.net player pages (ZywOo, donk, NiKo, m0NESY, ropz) and options guide; white.market's six-player video table; favade.org radar reference.",
+  dota: "Sources: prosettings.net, gamingcfg.com (Yatoro, miCKe, Puppey, Topson, Miracle-), hawk.live, winio.ai, cyberscore.live, esports.gg.",
+  deadlock: "Sources: prosettings.net (MikaelS, Lefaa, Hydration, Surefour, Recrent), Dexerto, BLAST, deadlocklabs.gg.",
+  cs2: "Sources: prosettings.net (ZywOo, donk, NiKo, m0NESY, ropz), white.market, favade.org.",
 };
 
 const isHotkey = (l) => l.group === "Hotkeys";
@@ -175,7 +175,7 @@ function hotkeySectionHtml(game, section, actions, p) {
 function proSettingsHtml(game) {
   const p = presetState(game);
   const name = PRESET_GAME[game] || game;
-  const intro = `<p class="muted">${PRESET_INTRO[game]} Each line names who uses the value: a pro's published settings, the settings guides, or <span class="ptag src mine">my pick</span> where no pro data was found. Untick anything you'd rather keep; your files are backed up first and <b>Restore</b> puts them back exactly.</p>`;
+  const intro = `<p class="muted">${PRESET_INTRO[game]} Each line says who uses it; <span class="ptag src mine">my pick</span> means no pro data. Untick what you'd rather keep. Files are backed up first.</p>`;
   if (!p.data) {
     if (!p.error && !p.loading) setTimeout(() => loadPreset(game), 0);
     return `<section class="set">${intro}${p.error ? `<div class="note err">${esc(p.error)}</div><button class="btn ghost" data-act="preset-reload" data-game="${game}" type="button">Try again</button>` : loadingState(`Reading your ${name} settings…`)}</section>`;
@@ -209,7 +209,7 @@ function proSettingsHtml(game) {
       <button class="btn ghost" data-act="preset-reload" data-game="${game}" type="button" ${p.busy ? "disabled" : ""}>Re-read</button>
       <label class="switch inline"><input type="checkbox" data-change="preset-show-same" data-game="${game}" ${p.showSame ? "checked" : ""} /><span>Show lines already set</span></label>
     </div>
-    <p class="hint">Files: ${files}. Lines marked <span class="ptag">new</span> aren't in your file yet; the game reads them the same way. Written with the game closed. ${presetBackupText(d)}</p>
+    <p class="hint">Files: ${files}. <span class="ptag">new</span> = not in your file yet. ${presetBackupText(d)}</p>
     <p class="hint">${PRESET_SOURCES[game]}</p>
   </section>
   <div class="hk-grid">${PRESET_GROUPS.filter((g) => byGroup[g]).map((g) => settingGroupHtml(game, g, byGroup[g], p)).join("")}</div>
@@ -237,7 +237,7 @@ function presetsHtml(game) {
   const d = p.data;
   const name = PRESET_GAME[game] || game;
   return `<section class="set"><h3>Pro settings</h3>
-    <p class="muted">Video, audio, gameplay, visibility and a named pro hotkey layout for ${esc(name)}, each line against your own files with its source. They live on the <b>Pro settings</b> page in the sidebar.</p>
+    <p class="muted">Video, audio, gameplay, visibility and a pro hotkey layout for ${esc(name)}, on the <b>Pro settings</b> page in the sidebar.</p>
     ${d ? `<div class="net-head">${presetStatusHtml(d, name)}</div>` : ""}
     <div class="row wrap"><button class="btn ghost" data-act="go" data-view="${PRESET_VIEW[game]}" type="button">Open Pro settings</button></div>
   </section>`;
@@ -282,8 +282,7 @@ act("preset-apply", (el) => {
   const picked = presetPicked(game).length;
   confirmBox({
     title: `Apply the preset to ${name}?`,
-    body: `<p class="muted">${picked} line${picked === 1 ? "" : "s"} will be written to your ${esc(name)} settings files. Your current files are backed up first, and <b>Restore my settings</b> puts them back exactly.</p>
-      <p class="muted">Keep ${esc(name)} closed until this is done. If Steam asks about a cloud sync conflict at the next launch, choose to <b>upload the local files</b>.</p>`,
+    body: `<p class="muted">${picked} line${picked === 1 ? "" : "s"} written to your ${esc(name)} files, backed up first. Keep the game closed. If Steam asks about a cloud conflict, choose <b>upload local</b>.</p>`,
     ok: "Apply",
     then: async () => {
       p.busy = true;

@@ -841,3 +841,28 @@ kbd { border-radius: 3px; }
 /* The first block on a page slides in from the mark; the rest rise. */
 .page.enter > :first-child { animation-name: slide; }
 @keyframes slide { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+
+/* Readability pass: brighter secondary text, normal-case nav and tags at a
+   readable size, calmer result marks. */
+:root { --text-2: #c9d0db; --muted: #98a1b0; --faint: #6c7484; }
+.shell[data-game="deadlock"] { --text-2: #c9d4d2; --muted: #98a6a3; }
+.res { transform: none; min-width: 44px; padding: 2px 9px; border-radius: 3px; font-weight: 700; letter-spacing: .04em; }
+.res.win { background: color-mix(in srgb, var(--win) 20%, transparent); color: var(--win); }
+.res.loss { background: color-mix(in srgb, var(--loss) 20%, transparent); color: var(--loss); }
+.form { transform: skewX(-6deg); }
+.nav-item { font: 500 13.5px var(--body); letter-spacing: 0; text-transform: none; color: var(--text-2); }
+.nav-item.on { font-weight: 600; }
+.game { font: 700 12.5px var(--display); letter-spacing: .04em; }
+.chip { height: 29px; font: 500 12.5px var(--body); letter-spacing: 0; text-transform: none; color: var(--text-2); }
+.chip.on { font-weight: 600; }
+.chips.seg .chip { height: 27px; }
+.tab, .page-tabs button { font: 600 13px var(--display); letter-spacing: .04em; text-transform: none; }
+.pill { font: 600 12px var(--display); letter-spacing: .04em; text-transform: none; }
+.btn { font-size: 12.5px; letter-spacing: .05em; }
+.sec-head h3, .panel h3, .set h3, .hk-section h3, .build-group h3 { font-size: 13px; letter-spacing: .07em; color: var(--text); }
+.stat-label { color: var(--text-2); letter-spacing: .08em; }
+.table th { color: var(--text-2); letter-spacing: .06em; }
+.hint { color: var(--text-2); }
+.muted.small, .small.muted { color: var(--muted); }
+.top-title p { color: var(--text-2); }
+.page { background: none; }
