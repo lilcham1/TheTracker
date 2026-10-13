@@ -58,7 +58,7 @@ func TestPubgTelemetryFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.LandedPlace != "pochinki" || f.LandedAt != 10 || f.NearbyLand != 3 {
+	if f.LandedPlace != "Pochinki" || f.LandedAt != 10 || f.NearbyLand != 3 {
 		t.Fatalf("landing: %+v", f)
 	}
 	if f.KnocksMade != 1 || f.KnocksKilled != 1 || f.BlueDamage != 55 || f.ByWeapon["M416"] != 120 {

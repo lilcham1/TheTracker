@@ -193,7 +193,7 @@ func pgFactsFrom(r io.Reader, accountID string) (PgFacts, error) {
 			d.OutSafe = true
 		}
 		if len(victim.Zone) > 0 {
-			d.Place = victim.Zone[0]
+			d.Place = pgPlaceName(victim.Zone[0])
 		}
 		f.Downs = append(f.Downs, d)
 	}
@@ -216,7 +216,7 @@ func pgFactsFrom(r io.Reader, accountID string) (PgFacts, error) {
 					if c.AccountID == accountID {
 						f.LandedAt = at(e)
 						if len(c.Zone) > 0 {
-							f.LandedPlace = c.Zone[0]
+							f.LandedPlace = pgPlaceName(c.Zone[0])
 						}
 					}
 				}
@@ -568,4 +568,26 @@ func (a *App) PubgWorkOn() (WorkOn, error) {
 		}
 	}
 	return tallyWorkOn("pubg", reviews), nil
+}
+
+// pgPlaceNames spells telemetry's place keys the way the maps do.
+var pgPlaceNames = map[string]string{
+	"yasnayapolyana": "Yasnaya Polyana", "militarybase": "Military Base", "myltapower": "Mylta Power", "novorepnoye": "Novorepnoye",
+	"shootingrange": "Shooting Range", "losleones": "Los Leones", "elpozo": "El Pozo", "sanmartin": "San Martín", "elazahar": "El Azahar",
+	"montenuevo": "Monte Nuevo", "cruzdelvalle": "Cruz del Valle", "lahacienda": "La Hacienda", "lacobreria": "La Cobrería",
+	"tierrabronca": "Tierra Bronca", "pecado": "Pecado", "chumacera": "Chumacera", "campojunction": "Campo Junction",
+	"bootcamp": "Bootcamp", "paradiseresort": "Paradise Resort", "ruins": "Ruins", "hatinh": "Ha Tinh", "tatmok": "Tat Mok",
+	"podvosto": "Podvosto", "goroka": "Goroka", "castle": "Castle", "cosmodrome": "Cosmodrome", "villa": "Villa",
+	"dinoland": "Dino Park", "dinopark": "Dino Park", "volnova": "Volnova", "milnar": "Milnar",
+}
+
+// pgPlaceName names a place; unknown keys are capitalised.
+func pgPlaceName(key string) string {
+	if n, ok := pgPlaceNames[strings.ToLower(key)]; ok {
+		return n
+	}
+	if key == "" {
+		return ""
+	}
+	return strings.ToUpper(key[:1]) + key[1:]
 }
