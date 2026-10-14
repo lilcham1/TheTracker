@@ -277,6 +277,49 @@ func (s *Store) WriteCache(name string, v any) {
 	_ = s.writeFile(filepath.Join("cache", name+".json"), env)
 }
 
+// Cache files nobody has written for this long are deleted at startup: old
+// matches' reviews and PUBG match reads, which are fetched again if opened.
+// Coach notes cost the player's Claude plan to write, so they stay longer.
+const (
+	cacheKeep      = 45 * 24 * time.Hour
+	cacheKeepCoach = 180 * 24 * time.Hour
+)
+
+// cacheRetired are names earlier versions wrote that nothing reads now.
+var cacheRetired = []string{"pubg_facts_", "pubg_match_"}
+
+// PruneCache deletes stale and retired cache files, and returns how many.
+func (s *Store) PruneCache(now time.Time) int {
+	dir := s.path("cache")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		keep := cacheKeep
+		if strings.HasPrefix(name, "coach_") {
+			keep = cacheKeepCoach
+		}
+		old := now.Sub(info.ModTime()) > keep
+		for _, p := range cacheRetired {
+			old = old || strings.HasPrefix(name, p)
+		}
+		if old && os.Remove(filepath.Join(dir, name)) == nil {
+			n++
+		}
+	}
+	return n
+}
+
 // MigrateLegacyDir copies data from the app's original folder name on first
 // run. Copied, never moved: if anything goes wrong the original is untouched.
 func (s *Store) MigrateLegacyDir() {

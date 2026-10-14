@@ -176,6 +176,8 @@ type NetworkPrefs struct {
 	// Which kinds of programs it slows: sync | launchers | windowsUpdate |
 	// browsers.
 	Categories []string `json:"categories"`
+	// The games marked as priority when it was set up (gamePriorityApps).
+	Apps []string `json:"apps,omitempty"`
 }
 
 func defaultOverlay() OverlaySettings {

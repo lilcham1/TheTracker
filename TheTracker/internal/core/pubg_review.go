@@ -91,8 +91,11 @@ type PgDeath struct {
 
 // PgFacts is a match's telemetry boiled down for the player.
 type PgFacts struct {
-	LandedAt     float64            `json:"landedAt"`
-	LandedPlace  string             `json:"landedPlace,omitempty"`
+	LandedAt    float64 `json:"landedAt"`
+	LandedPlace string  `json:"landedPlace,omitempty"`
+	// When the landing was away from named places: the first one reached.
+	FirstPlace   string             `json:"firstPlace,omitempty"`
+	FirstPlaceAt float64            `json:"firstPlaceAt,omitempty"`
 	NearbyLand   int                `json:"nearbyLand"` // enemies landing within 300 m
 	Downs        []PgDeath          `json:"downs"`
 	KnocksMade   int                `json:"knocksMade"`
@@ -276,6 +279,21 @@ func pgFactsFrom(r io.Reader, accountID string) (PgFacts, error) {
 		case "LogMatchEnd":
 			f.Duration = at(e)
 		}
+		// Real telemetry often has no place on the landing itself: take the
+		// first named place the player is seen in during the next 90 s.
+		if f.LandedPlace == "" && f.FirstPlace == "" && f.LandedAt > 0 {
+			for _, c := range []*pgChar{e.Character, e.Attacker, e.Victim} {
+				if c == nil || c.AccountID != accountID || len(c.Zone) == 0 {
+					continue
+				}
+				if t := at(e); t-f.LandedAt <= 90 {
+					f.LandedPlace = pgPlaceName(c.Zone[0])
+				} else {
+					f.FirstPlace, f.FirstPlaceAt = pgPlaceName(c.Zone[0]), t
+				}
+				break
+			}
+		}
 	}
 	if myTeam >= 0 {
 		f.TeamWiped = true
@@ -331,7 +349,7 @@ func pgClock(s float64) string { return FmtClock(s) }
 
 // pubgReviewFacts reads (once) a match's telemetry facts.
 func (p *Pubg) reviewFacts(m PubgMatch, accountID string) (PgFacts, error) {
-	key := "pubg_facts_" + safeKey(m.ID)
+	key := "pubg_facts2_" + safeKey(m.ID)
 	var f PgFacts
 	if _, ok := p.store.ReadCacheStale(key, &f); ok && f.ByWeapon != nil {
 		return f, nil
@@ -414,11 +432,14 @@ func (a *App) PubgReview(matchKey string) (MatchReview, error) {
 		r.Notes = append(r.Notes, err.Error()+" The review uses the match totals only.")
 	} else {
 		if f.LandedPlace != "" || f.LandedAt > 0 {
-			where := f.LandedPlace
-			if where == "" {
-				where = "open ground"
+			where := "Landed at " + f.LandedPlace
+			if f.LandedPlace == "" {
+				where = "Landed away from the named places"
+				if f.FirstPlace != "" {
+					where = fmt.Sprintf("Landed away from the named places (reached %s at %s)", f.FirstPlace, FmtClock(f.FirstPlaceAt))
+				}
 			}
-			r.Facts = append(r.Facts, fmt.Sprintf("Landed at %s at %s, %d enemies landed within 300 m", where, FmtClock(f.LandedAt), f.NearbyLand))
+			r.Facts = append(r.Facts, fmt.Sprintf("%s at %s, %d enemies landed within 300 m", where, FmtClock(f.LandedAt), f.NearbyLand))
 		}
 		for _, d := range f.Downs {
 			rd := ReviewDeath{Clock: FmtClock(d.At), Killer: d.By, Region: d.Place}
@@ -465,6 +486,21 @@ func (a *App) PubgReview(matchKey string) (MatchReview, error) {
 		if early && f.NearbyLand >= 3 {
 			add("hot_drop", "Died in a contested drop", fmt.Sprintf("Dead %s after landing with %d enemies around", FmtClock(last.At-f.LandedAt), f.NearbyLand),
 				"Land where you can loot a weapon in the first 20 seconds, or a little away from the crowd and take the fight on your terms.", 0.55, float64(f.NearbyLand))
+		} else if last != nil && f.LandedAt > 0 && last.At-f.LandedAt < 300 && m.Place*2 > m.Teams {
+			add("early_death", "Out in the first minutes", fmt.Sprintf("Dead %s after landing, with %.0f damage dealt", FmtClock(last.At-f.LandedAt), m.Damage),
+				"The first minutes decide whether you play the match at all: loot with a teammate in sight and cross open ground only after checking the ridges and windows around it.", 0.5, last.At-f.LandedAt)
+		}
+		// Knocked or killed by a gun from far away: caught in the open.
+		for _, d := range f.Downs {
+			if d.Distance >= 80 && d.Weapon != "" && !d.Vehicle {
+				what := "Knocked"
+				if !d.Knock {
+					what = "Killed"
+				}
+				add("range", "Picked off at range", fmt.Sprintf("%s by %s from %.0f m", what, d.Weapon, d.Distance),
+					"Rotate cover to cover: run the low ground or behind a ridge, and smoke the open stretches you can't avoid.", 0.3, d.Distance)
+				break
+			}
 		}
 		far := 0
 		for _, d := range f.Downs {

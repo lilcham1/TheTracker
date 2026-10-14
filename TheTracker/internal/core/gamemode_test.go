@@ -194,3 +194,23 @@ func TestGameModeOlderTasks(t *testing.T) {
 		}
 	}
 }
+
+// A setup from before PUBG was added keeps working and offers an update
+// naming the game it leaves out.
+func TestGameModeNewGameOffersUpdate(t *testing.T) {
+	a := newTestApp(t)
+	a.Store.UpdatePrefs(func(p *Prefs) { p.Network.GameMode, p.Network.Categories = true, []string{"sync"} })
+	f := &fakeTasks{sid: "S-1-5-21-9", exists: map[string]bool{gameModeOnTask: true, gameModeOffTask: true}}
+	g := a.GameMode
+	g.tasks = f
+	s := g.Status()
+	if s.State != "ready" || !s.UpdateAvailable || !strings.Contains(s.UpdateReason, "PUBG") || strings.Contains(s.UpdateReason, "Dota") {
+		t.Fatalf("older setup: %+v", s)
+	}
+	if err := g.Setup([]string{"sync"}); err != nil {
+		t.Fatal(err)
+	}
+	if s := g.Status(); s.UpdateAvailable || s.UpdateReason != "" {
+		t.Fatalf("after update: %+v", s)
+	}
+}

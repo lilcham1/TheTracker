@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"io"
+	"os"
 	"strings"
 	"testing"
 )
@@ -114,7 +115,7 @@ func TestPubgReviewFromTelemetry(t *testing.T) {
 	for _, p := range r.Wrong {
 		kinds[p.Kind] = true
 	}
-	for _, k := range []string{"alone", "blue_zone", "hot_drop"} {
+	for _, k := range []string{"alone", "blue_zone", "hot_drop", "range"} {
 		if !kinds[k] {
 			t.Errorf("missing %s in %+v", k, r.Wrong)
 		}
@@ -134,5 +135,77 @@ func TestPubgReviewFromTelemetry(t *testing.T) {
 	raw, _ := json.Marshal(facts)
 	if strings.Contains(string(raw), "Enemy2") {
 		t.Fatalf("a player's name reached the coach: %s", raw)
+	}
+}
+
+// With TT_TELEMETRY_FILE (a downloaded telemetry log) and TT_TELEMETRY_ACCOUNT
+// set, the real log is read and summarised; no player names are printed.
+func TestPubgRealTelemetry(t *testing.T) {
+	path, acc := os.Getenv("TT_TELEMETRY_FILE"), os.Getenv("TT_TELEMETRY_ACCOUNT")
+	if path == "" || acc == "" {
+		t.Skip()
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	f, err := pgFactsFrom(file, acc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("landed %q (first %q at %.0f) at %.0f s, %d near; knocks %d/%d; blue %.0f; taken %.0f; wiped %v", f.LandedPlace, f.FirstPlace, f.FirstPlaceAt, f.LandedAt, f.NearbyLand, f.KnocksMade, f.KnocksKilled, f.BlueDamage, f.DamageTaken, f.TeamWiped)
+	for _, d := range f.Downs {
+		t.Logf("  knock=%v at %.0f weapon=%q %.0f m mate=%.0f inBlue=%v outSafe=%v place=%q", d.Knock, d.At, d.Weapon, d.Distance, d.Mate, d.InBlue, d.OutSafe, d.Place)
+	}
+	for w, d := range f.ByWeapon {
+		t.Logf("  damage %s %.0f", w, d)
+	}
+	if f.LandedAt == 0 {
+		t.Fatal("no landing found")
+	}
+}
+
+// With two enemies near the landing instead of three, a death minutes after
+// landing still counts: as an early death, not a contested drop.
+func TestPubgReviewEarlyDeath(t *testing.T) {
+	var events []map[string]any
+	json.Unmarshal([]byte(pgTelemetry()), &events)
+	var kept []map[string]any
+	for _, e := range events {
+		if c, _ := e["character"].(map[string]any); e["_T"] == "LogParachuteLanding" && c["name"] == "Enemy3" {
+			continue
+		}
+		kept = append(kept, e)
+	}
+	raw, _ := json.Marshal(kept)
+
+	a, cloud := pgTestApp(t)
+	id := "abcdefab-1111-1111-1111-111111111111"
+	m := pgMatch(id, "2026-10-13T20:00:00Z")
+	inc := m["included"].([]any)
+	inc[len(inc)-1] = map[string]any{"type": "asset", "attributes": map[string]any{"name": "telemetry", "URL": "https://telemetry-cdn.pubg.com/x/" + id + ".json"}}
+	cloud.mu.Lock()
+	cloud.pubg = map[string]any{
+		"/shards/steam/seasons":         map[string]any{"data": []any{}},
+		"/shards/steam/matches/" + id:   m,
+		"/shards/steam/players/" + pgMe: map[string]any{"data": map[string]any{"id": pgMe, "relationships": map[string]any{"matches": map[string]any{"data": []any{map[string]any{"type": "match", "id": id}}}}}},
+	}
+	cloud.mu.Unlock()
+	a.Pubg.SetLink(PubgLink{AccountID: pgMe, Name: "Me", Shard: "steam"})
+	old := pubgTelemetryFetch
+	pubgTelemetryFetch = func(string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(string(raw))), nil }
+	t.Cleanup(func() { pubgTelemetryFetch = old })
+
+	r, err := a.PubgReview(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]bool{}
+	for _, p := range r.Wrong {
+		kinds[p.Kind] = true
+	}
+	if !kinds["early_death"] || kinds["hot_drop"] {
+		t.Fatalf("kinds: %+v", r.Wrong)
 	}
 }

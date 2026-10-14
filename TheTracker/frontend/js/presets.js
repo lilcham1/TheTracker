@@ -66,7 +66,16 @@ function presetStatusHtml(d, name) {
     : d.running ? `<span class="check-dot bad"></span><b>${esc(name)} is open</b> <span class="muted">Close it to apply: it rewrites its settings when it exits.</span>`
     : !d.canApply ? `<span class="check-dot bad"></span><b>Can't apply yet</b> <span class="muted">${esc(d.reasons.join(" "))}</span>`
     : d.changes === 0 ? `<span class="check-dot ok"></span><b>You're on the preset</b>`
-    : `<span class="check-dot ok"></span><b>Ready</b> <span class="muted">${d.changes} line${d.changes === 1 ? "" : "s"} differ from the preset.</span>`;
+    : `<span class="check-dot ok"></span><b>Ready</b> <span class="muted">${presetRowChanges(d)} setting${presetRowChanges(d) === 1 ? "" : "s"} differ from the preset.</span>`;
+}
+
+/// A setting kept in two files counts once.
+const presetRowKey = (l) => (l.group === "Hotkeys" ? l.id : `${l.label}|${l.value}|${l.id.replace(/^[^.]+.[^.]+./, "")}`);
+
+/// Changed settings, counting a setting kept in two files once.
+function presetRowChanges(d) {
+  const keys = new Set(d.lines.filter((l) => l.changed && !l.info).map((l) => (l.group === "Hotkeys" ? l.id : `${l.label}|${l.value}|${l.id.replace(/^[^.]+\.[^.]+\./, "")}`)));
+  return keys.size;
 }
 
 function presetBackupText(d) {
@@ -75,21 +84,43 @@ function presetBackupText(d) {
 
 // ---------- Rows ----------
 
-const valText = (v) => (v === "" ? "—" : v);
+// Unreal .ini switches read as on/off.
+const valText = (v) => (v === "" ? "—" : /^true$/i.test(v) ? "on" : /^false$/i.test(v) ? "off" : v);
 
 /// A video / audio / gameplay / visibility line.
+/// Lines that set the same thing in two files become one row.
+function mergeSettingLines(lines) {
+  const byKey = new Map();
+  for (const l of lines) {
+    const key = `${l.label}|${l.value}|${l.id.replace(/^[^.]+\.[^.]+\./, "")}`;
+    const row = byKey.get(key);
+    if (!row) {
+      byKey.set(key, { ...l, ids: [l.id], files: [l.file] });
+      continue;
+    }
+    row.ids.push(l.id);
+    row.files.push(l.file);
+    if (l.changed && !row.changed) Object.assign(row, { current: l.current, present: l.present });
+    row.changed = row.changed || l.changed;
+    row.present = row.present && l.present;
+  }
+  return [...byKey.values()];
+}
+
 function settingRowHtml(game, l, p) {
-  const on = !p.skip.has(l.id);
+  const ids = l.ids || [l.id];
+  const on = ids.every((id) => !p.skip.has(id));
   const current = l.present ? `<code>${esc(valText(l.current))}</code>` : `<span class="muted">not set</span>`;
   const target = l.remove ? `<span class="muted">removed</span>` : `<code>${esc(valText(l.value))}</code>`;
   return `<label class="switch hk-row ${l.changed ? "" : "same"}">
-    <input type="checkbox" data-change="preset-action" data-game="${game}" data-ids="${esc(l.id)}" ${on ? "checked" : ""} ${p.busy || !l.changed ? "disabled" : ""} />
+    <input type="checkbox" data-change="preset-action" data-game="${game}" data-ids="${esc(ids.join("|"))}" ${on ? "checked" : ""} ${p.busy || !l.changed ? "disabled" : ""} />
     <span class="hk-label">${esc(l.label)}${srcChip(l.source)}${l.present ? "" : `<span class="ptag">new</span>`}${l.note ? `<span class="muted small"> ${esc(l.note)}</span>` : ""}</span>
     <span class="hk-keys">${l.changed ? `${current} <span class="muted">→</span> ${target}` : target}</span>
   </label>`;
 }
 
-function settingGroupHtml(game, group, lines, p) {
+function settingGroupHtml(game, group, all, p) {
+  const lines = mergeSettingLines(all);
   const changing = lines.filter((l) => l.changed);
   const same = lines.length - changing.length;
   const show = p.showSame;
@@ -126,7 +157,8 @@ function hotkeyRowHtml(game, action, lines, p) {
   const on = lines.every((l) => !p.skip.has(l.id));
   const byLast = {};
   for (const l of lines) byLast[l.remove ? "Modifier-" : l.id.split("/").pop()] = l;
-  const key = byLast.Key;
+  // CS2 binds are keyed by the key itself: the one line is the binding.
+  const key = byLast.Key || (game === "cs2" ? lines[0] : undefined);
   const label = (key || lines[0]).label.replace(/ (modifier|quick cast|second key cleared)( removed)?$/, "");
   let current, target, extra = "";
   if (game === "cs2") {
@@ -196,7 +228,7 @@ function proSettingsHtml(game) {
     if (!acts.has(l.action)) acts.set(l.action, []);
     acts.get(l.action).push(l);
   }
-  const picked = presetPicked(game).length;
+  const picked = new Set(presetPicked(game).map(presetRowKey)).size;
   const cur = (d.layouts || []).find((l) => l.id === d.layout) || {};
   const picker = (d.layouts || []).length > 1
     ? `<div class="chips seg">${d.layouts.map((l) => `<button class="chip ${l.id === d.layout ? "on" : ""}" data-act="preset-layout" data-game="${game}" data-layout="${l.id}" type="button" ${p.busy ? "disabled" : ""}>${esc(l.label)}</button>`).join("")}</div>
@@ -207,7 +239,7 @@ function proSettingsHtml(game) {
     <div class="net-head">${presetStatusHtml(d, name)}</div>
     ${p.error ? `<div class="note err">${esc(p.error)}</div>` : ""}
     <div class="row wrap">
-      <button class="btn" data-act="preset-apply" data-game="${game}" type="button" ${!d.canApply || !picked || p.busy ? "disabled" : ""}>${p.busy ? "Working…" : `Apply ${picked ? picked + " " : ""}line${picked === 1 ? "" : "s"}`}</button>
+      <button class="btn" data-act="preset-apply" data-game="${game}" type="button" ${!d.canApply || !picked || p.busy ? "disabled" : ""}>${p.busy ? "Working…" : `Apply ${picked ? picked + " " : ""}setting${picked === 1 ? "" : "s"}`}</button>
       ${d.lastBackup ? `<button class="btn ghost" data-act="preset-restore" data-game="${game}" type="button" ${d.running || p.busy ? "disabled" : ""}>Restore my settings</button>` : ""}
       ${d.originalKeys ? `<button class="btn ghost" data-act="preset-reset-keys" data-game="${game}" type="button" ${d.running || p.busy ? "disabled" : ""} title="Your key file from ${esc(d.originalKeys)}, before any preset">Reset hotkeys</button>` : ""}
       <button class="btn ghost" data-act="preset-reload" data-game="${game}" type="button" ${p.busy ? "disabled" : ""}>Re-read</button>
@@ -283,10 +315,10 @@ act("preset-apply", (el) => {
   const game = el.dataset.game;
   const p = presetState(game);
   const name = PRESET_GAME[game] || game;
-  const picked = presetPicked(game).length;
+  const picked = new Set(presetPicked(game).map(presetRowKey)).size;
   confirmBox({
     title: `Apply the preset to ${name}?`,
-    body: `<p class="muted">${picked} line${picked === 1 ? "" : "s"} written to your ${esc(name)} files, backed up first. Keep the game closed. If Steam asks about a cloud conflict, choose <b>upload local</b>.</p>`,
+    body: `<p class="muted">${picked} setting${picked === 1 ? "" : "s"} written to your ${esc(name)} files, backed up first. Keep the game closed. If Steam asks about a cloud conflict, choose <b>upload local</b>.</p>`,
     ok: "Apply",
     then: async () => {
       p.busy = true;

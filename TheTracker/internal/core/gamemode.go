@@ -178,10 +178,12 @@ type GameModeStatus struct {
 	Categories []string `json:"categories"`
 	// Working, but set up by an earlier version that marks only Dota's
 	// traffic as priority: setting up again adds the other games.
-	UpdateAvailable bool   `json:"updateAvailable"`
-	Slowed          int    `json:"slowed"`
-	UpdatePaused    bool   `json:"updatePaused"`
-	Error           string `json:"error,omitempty"`
+	UpdateAvailable bool `json:"updateAvailable"`
+	// Why, in a sentence, when it isn't the older task format.
+	UpdateReason string `json:"updateReason,omitempty"`
+	Slowed       int    `json:"slowed"`
+	UpdatePaused bool   `json:"updatePaused"`
+	Error        string `json:"error,omitempty"`
 }
 
 // gameModeTaskSet is which registered tasks there are.
@@ -268,7 +270,10 @@ func (g *GameMode) Setup(cats []string) error {
 		gameModeTaskXML("TheTracker Game mode: undoes it when you stop.", off, sid)); err != nil {
 		return err
 	}
-	g.store.UpdatePrefs(func(p *Prefs) { p.Network.GameMode, p.Network.Categories = true, cats })
+	g.store.UpdatePrefs(func(p *Prefs) {
+		p.Network.GameMode, p.Network.Categories = true, cats
+		p.Network.Apps = append([]string{}, gamePriorityApps...)
+	})
 	return nil
 }
 
@@ -333,6 +338,13 @@ func (g *GameMode) Status() GameModeStatus {
 	case p.GameMode && set.unsafe:
 		s.State = "needs_update"
 	}
+	// Set up before a game was added: its traffic isn't marked yet.
+	if (s.State == "ready") && !s.UpdateAvailable {
+		if missing := missingPriorityGames(p.Apps); len(missing) > 0 {
+			s.UpdateAvailable = true
+			s.UpdateReason = "Press Update to also prioritise " + strings.Join(missing, ", ") + "; Windows asks once."
+		}
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	s.Error = g.lastErr
@@ -364,6 +376,28 @@ func GameModeCatalogue() []GameModeCategory {
 		}
 		sort.Strings(apps)
 		out = append(out, GameModeCategory{ID: id, Label: g.Label, Mbps: float64(g.Rate) / 1e6, Apps: apps})
+	}
+	return out
+}
+
+var priorityGameNames = map[string]string{"dota2.exe": "Dota 2", "project8.exe": "Deadlock", "cs2.exe": "CS2", "Overwatch.exe": "Overwatch", "TslGame.exe": "PUBG"}
+
+// missingPriorityGames names the games a setup made with apps doesn't
+// prioritise. A setup from before the list was saved counts as having the
+// four games Game mode first covered.
+func missingPriorityGames(apps []string) []string {
+	if len(apps) == 0 {
+		apps = []string{"dota2.exe", "project8.exe", "cs2.exe", "Overwatch.exe"}
+	}
+	have := map[string]bool{}
+	for _, a := range apps {
+		have[strings.ToLower(a)] = true
+	}
+	var out []string
+	for _, a := range gamePriorityApps {
+		if !have[strings.ToLower(a)] {
+			out = append(out, priorityGameNames[a])
+		}
 	}
 	return out
 }

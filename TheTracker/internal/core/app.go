@@ -167,6 +167,7 @@ func (a *App) Start(manageDota bool) {
 	}()
 	go a.backfillLoop()
 	go a.owWatch()
+	go a.Store.PruneCache(time.Now())
 }
 
 // applyGames starts or stops what each game needs. With Dota off the app
