@@ -448,7 +448,9 @@ function tabStrip(id) {
 }
 
 function renderNav() {
-  $("#nav").innerHTML = NAV[S.game]
+  // Today, Settings and the welcome belong to no game: no page row.
+  const gameless = VIEWS[S.view] && !VIEWS[S.view].game;
+  $("#nav").innerHTML = (gameless ? [] : NAV[S.game])
     .map((id) => {
       const v = VIEWS[id];
       const liveDot = VIEWS[id].liveSlot && S.live && S.live.live ? `<span class="live-dot" title="A match is running"></span>` : "";
@@ -462,9 +464,8 @@ function renderNav() {
   const games = enabledGames();
   const switcher = $("#games");
   switcher.hidden = games.length < 2;
-  switcher.style.gridTemplateColumns = `repeat(${Math.min(games.length, 2)}, 1fr)`;
   switcher.innerHTML = games
-    .map((g) => `<button class="game ${g === S.game && S.view !== "today" ? "on" : ""}" data-act="game" data-game="${g}" type="button">${GAMES[g].label}</button>`)
+    .map((g) => `<button class="game ${g === S.game && !gameless ? "on" : ""}" data-act="game" data-game="${g}" type="button">${GAMES[g].label}</button>`)
     .join("");
   const settingsBtn = $("#settingsBtn");
   if (settingsBtn) settingsBtn.classList.toggle("on", S.view === "settings");

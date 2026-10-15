@@ -53,13 +53,19 @@ function codClearInputs() {
 }
 
 act("cod-log", (el) => {
-  COD.form = codNewForm(el.dataset.session || "");
-  if (S.view !== "cod-matches") go("cod-matches");
+  if (!COD.form || COD.form.id) COD.form = codNewForm(el.dataset.session || "");
+  if (el.dataset.session) COD.form.session = el.dataset.session;
+  if (S.view !== "cod-overview" && S.view !== "cod-matches") go("cod-matches");
   else rerender();
   setTimeout(() => ($("#codKills") || {}).focus && $("#codKills").focus(), 60);
 });
+act("cod-more", () => {
+  COD.form.full = true;
+  rerender();
+});
 act("cod-form-close", () => {
   COD.form = null;
+  codClearInputs();
   rerender();
 });
 act("cod-form-game", (el) => {
@@ -82,7 +88,7 @@ act("cod-save", async (el) => {
   codGoals.clear();
   if (typeof workOnRes !== "undefined") workOnRes.cod.clear();
   // Another match from the same session: keep the form open and empty.
-  if (el.dataset.again) {
+  if (el.dataset.again || !COD.form.full) {
     COD.form = { ...codNewForm(m.session), game: m.game, mode: m.mode };
     codClearInputs();
   } else {
@@ -94,7 +100,7 @@ act("cod-save", async (el) => {
 act("cod-edit", (el) => {
   const m = (codOverview.data.matches || []).find((x) => x.id === el.dataset.id);
   if (!m) return;
-  COD.form = { id: m.id, game: m.game, mode: m.mode, result: m.result || "", session: m.session || "", edit: m };
+  COD.form = { id: m.id, game: m.game, mode: m.mode, result: m.result || "", session: m.session || "", full: true };
   rerender();
   // The inputs exist after the redraw; fill them once.
   setTimeout(() => {
@@ -141,6 +147,30 @@ act("cod-review", (el) => {
   go("cod-review");
 });
 
+/// The logger on Overview and Matches: one line (the quick logger), or the
+/// full form for more detail and for edits.
+function codLoggerHtml(d) {
+  if (!COD.form) COD.form = codNewForm(d.toLog ? d.toLog.id : "");
+  if (d.toLog && !COD.form.session && !COD.form.id) COD.form.session = d.toLog.id;
+  return COD.form.full ? codFormHtml() : codQuickHtml(d);
+}
+
+function codQuickHtml(d) {
+  const f = COD.form;
+  const placed = codPlaced(f.game);
+  const num = (id, label, ph) => `<label class="cod-q-num"><span class="muted">${label}</span><input class="input" id="${id}" type="number" min="0" inputmode="numeric" placeholder="${ph}" data-enter="cod-save" /></label>`;
+  const session = d.toLog && f.session === d.toLog.id ? `Logging for your ${codMins(Math.round((d.toLog.end - d.toLog.start) / 60))} session` : d.playing ? "Logging for the session running now" : "";
+  return `<section class="cod-quick">
+    <div class="chips seg">${COD_GAMES.map(([k, l]) => `<button class="chip ${f.game === k ? "on" : ""}" data-act="cod-form-game" data-value="${k}" type="button" title="${l}">${{ bo7: "BO7", warzone: "Warzone", mw4: "MW4" }[k]}</button>`).join("")}</div>
+    <select class="input cod-q-mode" data-change="cod-form-mode" aria-label="Mode">${codModes(f.game).map((m) => `<option ${m === f.mode ? "selected" : ""}>${esc(m)}</option>`).join("")}</select>
+    ${placed ? num("codPlace", "#", "place") : `<div class="chips seg">${[["win", "Win"], ["loss", "Loss"], ["draw", "Draw"]].map(([k, l]) => `<button class="chip ${f.result === k ? "on" : ""}" data-act="cod-form-result" data-value="${k}" type="button">${l}</button>`).join("")}</div>`}
+    ${num("codKills", "K", "0")}${num("codDeaths", "D", "0")}${num("codAssists", "A", "0")}
+    <button class="btn" data-act="cod-save" type="button">Save</button>
+    <button class="link" data-act="cod-more" type="button">More…</button>
+    ${session ? `<span class="cod-q-session muted small">${esc(session)}</span>` : ""}
+  </section>`;
+}
+
 function codFormHtml() {
   const f = COD.form;
   if (!f) return "";
@@ -186,14 +216,6 @@ function codMatchHtml(m) {
     </div>`;
 }
 
-/// The session that ended with nothing logged.
-function codToLogHtml(d) {
-  if (!d.toLog || COD.form) return "";
-  const mins = Math.round((d.toLog.end - d.toLog.start) / 60);
-  return `<button class="since" data-act="cod-log" data-session="${esc(d.toLog.id)}" type="button"><span class="since-main display">You played ${codMins(mins)}, ${ago(d.toLog.end).replace("just now", "just now")}</span>
-    <span class="muted">Nothing logged from it yet.</span><span class="grow"></span><span class="link">Log those matches</span></button>`;
-}
-
 view("cod-overview", {
   game: "cod", nav: true, icon: "overview", title: "Overview",
   sub: () => "From the matches you log, and when the game was open",
@@ -204,21 +226,19 @@ view("cod-overview", {
     const d = codOverview.data;
     const playing = d.playing ? `<div class="note"><span class="live-dot"></span> Call of Duty is open: this session is being timed. Log each match when it ends, or all of them afterwards.</div>` : "";
     if (!d.matches.length) {
-      return `${playing}${codToLogHtml(d)}${emptyState("No matches logged yet",
-        "Activision doesn't let apps read your matches, so TheTracker keeps your own log: after a match, add the mode, the result and your kills and deaths. Stats, goals, reviews and the AI coach work from it.",
-        `<button class="btn" data-act="cod-log" type="button">Log a match</button>`)}
+      return `${playing}${codLoggerHtml(d)}${emptyState("Log your first match",
+        "Activision doesn't let apps read your matches, so TheTracker keeps your own log: after a match, fill in the line above (Enter saves). Stats, goals, reviews and the AI coach work from it.")}
         ${d.weekMinutes ? `<p class="hint">Played ${codMins(d.weekMinutes)} in the last 7 days.</p>` : ""}`;
     }
     if (!COD.game || !d.stats.some((s) => s.game === COD.game)) COD.game = d.stats.find((s) => s.game === d.matches[0].game) ? d.matches[0].game : d.stats[0].game;
     const s = d.stats.find((x) => x.game === COD.game);
     const placed = codPlaced(s.game);
     const form = d.matches.filter((m) => m.game === s.game).slice(0, 30).map((m) => (placed ? (m.place === 1 ? true : m.place <= 10 ? null : false) : m.result === "win" ? true : m.result === "loss" ? false : null));
-    return `${playing}${codToLogHtml(d)}
+    return `${playing}${codLoggerHtml(d)}
       <section class="hero-head">
         <div class="grow"><h2 class="display">${esc(s.label)}</h2>
           <p class="muted">${s.matches} logged match${s.matches === 1 ? "" : "es"}${s.topMode ? ` · mostly ${esc(s.topMode)}` : ""}</p>
           ${formStrip(form, 30)}</div>
-        <div class="row"><button class="btn" data-act="cod-log" type="button">Log a match</button></div>
       </section>
       ${d.stats.length > 1 ? `<div class="chips seg">${d.stats.map((x) => `<button class="chip ${x.game === s.game ? "on" : ""}" data-act="cod-stats-game" data-value="${x.game}" type="button">${esc(x.label)}</button>`).join("")}</div>` : ""}
       ${statRow([
@@ -250,11 +270,10 @@ view("cod-matches", {
     const d = codOverview.data;
     const games = [...new Set(d.matches.map((m) => m.game))];
     const shown = d.matches.filter((m) => COD.filter === "all" || m.game === COD.filter || m.mode === COD.filter);
-    return `${codToLogHtml(d)}
-      ${COD.form ? codFormHtml() : `<div class="row"><button class="btn" data-act="cod-log" type="button">Log a match</button></div>`}
+    return `${codLoggerHtml(d)}
       ${d.matches.length ? `<div class="chips seg">${[["all", "All"], ...games.map((g) => [g, COD_NAME[g] || g])].map(([k, l]) => `<button class="chip ${COD.filter === k ? "on" : ""}" data-act="cod-filter" data-value="${esc(k)}" type="button">${esc(l)}</button>`).join("")}</div>
         <div class="lines">${shown.map(codMatchHtml).join("")}</div>`
-        : `<p class="muted">Nothing logged yet. After a match, note the result and your kills and deaths here: it takes about ten seconds.</p>`}`;
+        : `<p class="muted">Nothing logged yet. After a match, fill in the line above: it takes about ten seconds.</p>`}`;
   },
 });
 

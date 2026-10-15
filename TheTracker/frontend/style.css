@@ -104,41 +104,51 @@ img.broken { visibility: hidden; }
 
 /* ---------- Frame ---------- */
 
-.shell { display: grid; grid-template-columns: 224px minmax(0, 1fr); height: 100vh; }
-.side { display: flex; flex-direction: column; background: var(--side); border-right: 1px solid var(--line-soft); padding: 14px 12px 12px; min-height: 0; }
-.brand { position: relative; display: flex; align-items: center; gap: 10px; padding: 2px 8px 16px; font: 600 18px var(--display); }
-.brand::after { content: ""; position: absolute; left: 8px; bottom: 8px; width: 26px; height: 2px; border-radius: 2px; background: var(--accent); transition: background var(--t); }
-.brand img { width: 26px; height: 26px; border-radius: 7px; box-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
-
-.games { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 9px; margin-bottom: 14px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03); }
-.game { border: 0; border-radius: 6px; padding: 7px 0; background: transparent; color: var(--muted); font: 600 13.5px var(--display); transition: color var(--t), background var(--t), box-shadow var(--t); }
+/* The command bar: brand, the games as tabs, and the tools; under it the
+   game's pages as a row, with a running match and the sync state at the
+   right. */
+.shell { display: flex; flex-direction: column; height: 100vh; }
+.cmdbar { display: flex; align-items: center; gap: 12px; padding: 0 20px; min-height: 52px; background: var(--side); border-bottom: 1px solid var(--line-soft); }
+.brand { display: flex; align-items: center; gap: 10px; margin-right: 6px; font: 700 15px var(--display); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.brand img { width: 24px; height: 24px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.games { display: flex; align-self: stretch; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.game { position: relative; border: 0; padding: 0 12px; background: transparent; color: var(--muted); font: 700 12.5px var(--display); letter-spacing: .04em; white-space: nowrap; transition: color var(--t); }
+.game::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px; background: var(--accent); transform: scaleX(0); transition: transform var(--t) var(--ease); }
 .game:hover { color: var(--text); }
-.game.on { background: var(--accent-grad); color: var(--accent-ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .18); }
+.game.on { color: var(--text); }
+.game.on::after { transform: scaleX(1); }
+.bar-btn, .search-btn { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px; border: 1px solid var(--line-soft); border-radius: 4px; background: transparent; color: var(--text-2); font: 600 12.5px var(--display); letter-spacing: .03em; white-space: nowrap; transition: color var(--t), border-color var(--t); }
+.search-btn { background: var(--bg); color: var(--muted); font: 400 12.5px var(--body); letter-spacing: 0; }
+.bar-btn:hover, .search-btn:hover { border-color: var(--line); color: var(--text); }
+.bar-btn.on { border-color: var(--accent); color: var(--accent); }
+.bar-btn .ico, .search-btn .ico { display: grid; }
 
-.nav { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
-.nav-item { display: flex; align-items: center; gap: 11px; width: 100%; padding: 8px 10px 8px 13px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); text-align: left; position: relative; transition: background var(--t), color var(--t); }
-.nav-item::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 2px; background: var(--accent); transform: scaleY(0); transition: transform var(--t) var(--ease); }
-.nav-item:hover { background: var(--panel); color: var(--text); }
-.nav-item.on { background: var(--accent-soft); color: var(--text); }
-.nav-item.on::before { transform: scaleY(1); }
+.subbar { display: flex; align-items: center; gap: 16px; padding: 0 20px; min-height: 44px; border-bottom: 1px solid var(--line-soft); }
+.nav { display: flex; align-self: stretch; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.nav-item { position: relative; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 0; background: transparent; color: var(--text-2); font: 500 13.5px var(--body); white-space: nowrap; transition: color var(--t); }
+.nav-item::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent); transform: scaleX(0); transition: transform var(--t) var(--ease); }
+.nav-item:hover { color: var(--text); }
+.nav-item.on { color: var(--text); font-weight: 600; }
+.nav-item.on::after { transform: scaleX(1); }
 .nav-item.on .ico { color: var(--accent); }
 .nav-item .ico { display: grid; color: var(--muted); transition: color var(--t); }
-.side-foot { border-top: 1px solid var(--line-soft); padding-top: 8px; margin-top: 8px; }
-.status-line { padding: 8px 10px 0; color: var(--faint); font-size: 12px; }
+.sub-right { display: flex; align-items: center; gap: 12px; flex: none; }
+.status-line { color: var(--faint); font-size: 12px; white-space: nowrap; }
 
-/* The match running right now, at the foot of the rail. */
+/* The match running right now, as a chip at the end of the page row. */
 #sideLive:empty { display: none; }
-.side-live { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; margin: 2px 0 6px; border: 1px solid var(--line-soft); border-top: 2px solid var(--accent); border-radius: var(--radius); background: var(--panel-grad); color: var(--text); text-align: left; box-shadow: var(--shadow-1); animation: rise var(--t-slow) var(--ease); transition: transform var(--t-fast) var(--ease), box-shadow var(--t); }
-.side-live:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); }
-.side-live b { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.side-live .sub { font-size: 11.5px; }
-.side-live .clock-sm { font: 600 15px var(--display); font-variant-numeric: tabular-nums; }
+.side-live { display: flex; align-items: center; gap: 8px; max-width: 280px; padding: 3px 10px 3px 4px; border: 1px solid var(--line-soft); border-left: 3px solid var(--accent); border-radius: 4px; background: var(--panel); color: var(--text); text-align: left; animation: rise var(--t-slow) var(--ease); transition: border-color var(--t); }
+.side-live:hover { border-color: var(--line); border-left-color: var(--accent); }
+.side-live .portrait.small { width: 34px; height: 20px; }
+.side-live b { display: inline; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-live .sub { display: none; }
+.side-live .clock-sm { font: 600 13px var(--display); font-variant-numeric: tabular-nums; }
 
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--loss); display: inline-block; animation: pulse 1.6s ease-in-out infinite; }
 .nav-item .live-dot { margin-left: auto; }
 .live-dot.off { background: var(--faint); animation: none; }
 
-.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.main { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
 .top { display: flex; align-items: center; gap: 16px; padding: 16px 28px 12px; border-bottom: 1px solid var(--line-soft); }
 .top-title { flex: 1; min-width: 0; }
 .top-title h1 { font: 600 24px/1.15 var(--display); letter-spacing: -.01em; }
@@ -487,8 +497,7 @@ button.line.loss:hover { border-left-color: var(--loss); }
 .games[hidden] { display: none; }
 
 /* A page with nothing around it: the first-run question. */
-.shell.bare { grid-template-columns: 1fr; }
-.shell.bare .side, .shell.bare .top, .shell.bare .banners { display: none; }
+.shell.bare .cmdbar, .shell.bare .subbar, .shell.bare .top, .shell.bare .banners { display: none; }
 .welcome { display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 760px; margin: 6vh auto 0; text-align: center; }
 .welcome img { border-radius: 12px; box-shadow: var(--shadow-2); }
 .welcome h1 { font-size: 34px; }
@@ -566,8 +575,7 @@ button.since:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); }
 .since-main { font-size: 18px; }
 .since-heroes { display: flex; gap: 4px; }
 .avatar.tiny { width: 18px; height: 18px; border-radius: 4px; }
-.today-btn { margin-bottom: 8px; }
-.shell[data-game="today"] .nav { opacity: .75; }
+
 .today-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
 .today-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px 18px 16px; border: 1px solid var(--line-soft); border-top: 2px solid var(--card, var(--accent)); border-radius: var(--radius); background: var(--panel-grad); box-shadow: var(--shadow-1); transition: transform var(--t-fast) var(--ease), box-shadow var(--t); }
 .today-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); }
@@ -604,9 +612,6 @@ button.since:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); }
 .about p { margin-top: 6px; }
 .share-btn { margin-top: 10px; }
 
-.search-btn { display: flex; align-items: center; gap: 10px; width: 100%; margin: 0 0 12px; padding: 7px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--bg); color: var(--muted); font-size: 13px; text-align: left; transition: border-color var(--t), color var(--t); }
-.search-btn:hover { border-color: var(--line); color: var(--text-2); }
-.search-btn .ico { display: grid; }
 kbd { font: 500 11px var(--body); padding: 1px 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; color: var(--text-2); background: var(--panel); }
 
 .palette { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
@@ -813,20 +818,6 @@ button.line:hover { transform: translateX(2px); box-shadow: none; }
 .rev-habit .tag, .work-on .tag { border-radius: 2px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; font-size: 10.5px; background: var(--accent); color: var(--accent-ink); }
 .ptag, .ptag.src { border-radius: 2px; }
 
-/* The rail: tracked uppercase nav, chunky game tabs, a glowing brand mark. */
-.brand { font: 700 18px var(--display); letter-spacing: .06em; text-transform: uppercase; }
-.brand::after { width: 34px; height: 3px; box-shadow: 0 0 12px var(--accent); }
-.brand img { border-radius: 4px; }
-.games { gap: 2px; padding: 2px; border-radius: 4px; background: var(--side); border-color: var(--line); box-shadow: none; }
-.game { border-radius: 2px; padding: 8px 0; font: 700 12px var(--display); letter-spacing: .08em; text-transform: uppercase; }
-.game.on { clip-path: var(--cut-shape-sm); box-shadow: none; }
-.nav-item { border-radius: 3px; padding: 9px 10px 9px 14px; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.nav-item:hover { color: var(--text); }
-.nav-item.on { background: linear-gradient(90deg, var(--accent-soft), transparent 80%); color: var(--text); }
-.nav-item::before { top: 7px; bottom: 7px; width: 3px; border-radius: 0; }
-.search-btn { border-radius: 3px; font-size: 12.5px; }
-.side-live { position: relative; overflow: hidden; border-radius: 4px; border-top-width: 1px; background-image: linear-gradient(90deg, var(--accent-soft), transparent 60%); }
-.side-live::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 2px; background: var(--edge); }
 
 /* Inputs, notes, dialogs. */
 .input { border-radius: 4px; }
@@ -850,9 +841,6 @@ kbd { border-radius: 3px; }
 .res.win { background: color-mix(in srgb, var(--win) 20%, transparent); color: var(--win); }
 .res.loss { background: color-mix(in srgb, var(--loss) 20%, transparent); color: var(--loss); }
 .form { transform: skewX(-6deg); }
-.nav-item { font: 500 13.5px var(--body); letter-spacing: 0; text-transform: none; color: var(--text-2); }
-.nav-item.on { font-weight: 600; }
-.game { font: 700 12.5px var(--display); letter-spacing: .04em; }
 .chip { height: 29px; font: 500 12.5px var(--body); letter-spacing: 0; text-transform: none; color: var(--text-2); }
 .chip.on { font-weight: 600; }
 .chips.seg .chip { height: 27px; }
@@ -902,3 +890,24 @@ kbd { border-radius: 3px; }
 .cod-acts { display: flex; gap: 10px; white-space: nowrap; }
 .cod-acts .danger { color: var(--loss); }
 .res.draw { background: var(--panel-2); color: var(--muted); }
+
+/* The command bar at the window's narrower widths: icons for the tools,
+   and the brand mark without its name. */
+@media (max-width: 1180px) {
+  .cmdbar { gap: 8px; padding: 0 14px; }
+  .brand span, .bar-label { display: none; }
+  .search-btn kbd { display: none; }
+  .bar-btn, .search-btn { width: 32px; padding: 0; justify-content: center; }
+  .game { padding: 0 9px; }
+  .subbar { padding: 0 14px; }
+  .status-line { display: none; }
+}
+
+/* Call of Duty's quick logger: one line, Enter saves. */
+.cod-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 4px; background: var(--panel); }
+.cod-q-mode { width: 190px; height: 32px; }
+.cod-q-num { display: inline-flex; align-items: center; gap: 6px; }
+.cod-q-num span { font: 600 12px var(--display); }
+.cod-q-num .input { width: 58px; height: 32px; padding: 0 8px; font-variant-numeric: tabular-nums; }
+.cod-q-session { flex-basis: 100%; }
+.cmdbar .top-actions { flex-wrap: nowrap; }

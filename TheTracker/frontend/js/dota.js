@@ -391,7 +391,7 @@ function liveSetupHtml() {
     <div class="checks">${rows.join("")}</div>
     ${GSI.error ? `<div class="note err">${esc(GSI.error)}</div>` : ""}
     <div class="row wrap">
-      ${g.cfgDirs.length ? `<button class="btn" data-act="launch-dota" type="button">Play Dota</button>` : ""}
+      ${g.cfgDirs.length ? `<button class="btn ${g.installed ? "" : "ghost"}" data-act="launch-dota" type="button">Play Dota</button>` : ""}
       ${g.cfgDirs.length && !g.installed ? `<button class="btn" data-act="gsi-install" type="button" ${GSI.busy ? "disabled" : ""}>Set up Dota</button>` : ""}
       <button class="btn ghost" data-act="gsi-check" type="button">Check again</button>
     </div>

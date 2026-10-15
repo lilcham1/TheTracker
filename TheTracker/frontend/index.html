@@ -8,34 +8,18 @@
 </head>
 <body>
   <div class="shell" id="shell" data-game="dota">
-    <aside class="side">
+    <header class="cmdbar">
       <div class="brand">
         <img src="brand.png" alt="" />
         <span>TheTracker</span>
       </div>
-
-      <button class="nav-item today-btn" id="todayBtn" data-act="go" data-view="today" type="button">
-        <span class="ico" data-ico="today"></span><span>Today</span>
-      </button>
-      <button class="search-btn" data-act="pal-open" type="button" title="Search pages and heroes"><span class="ico" data-ico="search"></span><span class="grow">Search</span><kbd>Ctrl K</kbd></button>
-
       <div class="games" id="games" role="tablist" aria-label="Game"></div>
-
-      <nav class="nav" id="nav" aria-label="Pages"></nav>
-
-      <div class="side-foot">
-        <div id="sideLive"></div>
-        <div class="status-line" id="syncLine" title=""></div>
-      </div>
-    </aside>
-
-    <div class="main">
-      <header class="top">
-        <div class="top-title">
-          <h1 id="viewTitle"></h1>
-          <p id="viewSub"></p>
-        </div>
-        <div class="top-actions">
+      <span class="grow"></span>
+      <button class="bar-btn today-btn" id="todayBtn" data-act="go" data-view="today" type="button" title="Today">
+        <span class="ico" data-ico="today"></span><span class="bar-label">Today</span>
+      </button>
+      <button class="search-btn" data-act="pal-open" type="button" title="Search pages and heroes"><span class="ico" data-ico="search"></span><span class="bar-label">Search</span><kbd>Ctrl K</kbd></button>
+      <div class="top-actions">
           <!-- Each shows only when it has something to say: Dota running, recording paused, the overlay usable. -->
           <button class="pill" id="dotaPill" data-act="go" data-view="overview" type="button" title="" hidden>
             <span class="dot"></span><span id="dotaPillText">Dota</span>
@@ -49,6 +33,22 @@
           <button class="pill icon-only" id="settingsBtn" data-act="go" data-view="settings" type="button" title="Settings" aria-label="Settings">
             <span class="ico" data-ico="settings"></span>
           </button>
+      </div>
+    </header>
+
+    <div class="subbar">
+      <nav class="nav" id="nav" aria-label="Pages"></nav>
+      <div class="sub-right">
+        <div id="sideLive"></div>
+        <div class="status-line" id="syncLine" title=""></div>
+      </div>
+    </div>
+
+    <div class="main">
+      <header class="top">
+        <div class="top-title">
+          <h1 id="viewTitle"></h1>
+          <p id="viewSub"></p>
         </div>
       </header>
 
