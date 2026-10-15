@@ -154,15 +154,6 @@ onChange("track-toggle", async (el) => {
   const live = await attempt(() => invoke("set_tracking", { enabled: el.checked }));
   if (live) applyLive(live);
 });
-act("ov-death-test", async () => {
-  if (await attempt(() => invoke("death_test_start"))) {
-    await attempt(() => invoke("overlay_show"));
-    S.overlayVisible = true;
-    paintTop();
-    toast("Test match: your hero dies in 3 seconds with a Black King Bar and the ultimate ready. If Dota is open, switch to it to see the card.");
-    pollLive();
-  }
-});
 act("ov-test", async () => {
   if (await attempt(() => invoke("sim_start", { seconds: 90 }))) {
     await attempt(() => invoke("overlay_show"));
@@ -236,8 +227,6 @@ function overlayHtml() {
         <div class="ov-look-opts">
           <label class="switch"><input type="checkbox" data-change="ov-save" data-key="compact" ${o.compact ? "checked" : ""} /><span>Compact <span class="muted">(icon and seconds only)</span></span></label>
           <label class="switch"><input type="checkbox" data-change="ov-save" data-key="nextUp" ${o.nextUp ? "checked" : ""} /><span>Show what's next <span class="muted">(one quiet line with the next two events)</span></span></label>
-          <label class="switch"><input type="checkbox" data-change="ov-save" data-key="deathTips" ${o.deathTips !== false ? "checked" : ""} /><span>Tell me why I died <span class="muted">(while you wait to respawn: a saving item that was ready, no TP, gold unspent, dying again soon)</span></span></label>
-          <div class="row"><button class="btn ghost small" data-act="ov-death-test" type="button" ${S.live && S.live.inMatch ? "disabled title=\"Not during a real match\"" : ""}>Test the death card</button></div>
         </div>
         <div class="ov-preview"><span class="muted">Preview</span><iframe id="ovPreview" src="overlay.html?preview" title="Overlay preview" tabindex="-1"></iframe></div>
       </div>

@@ -423,7 +423,6 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *pendingSave) {
 	}
 
 	gmap, player, hero, items := sub(body, "map"), sub(body, "player"), sub(body, "hero"), sub(body, "items")
-	abilities := sub(body, "abilities")
 
 	// Watching a game, not playing it: noted, never recorded.
 	if watchingPayload(player, hero, gmap) || t.someoneElseLocked(player) {
@@ -537,16 +536,12 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *pendingSave) {
 				lost = ptr(max(*m.PrevGold-gold, 0))
 			}
 			d := Death{Clock: FmtClock(clock), GoldLost: lost, At: clock}
-			d.Reasons = deathReasons(m.lastAlive, m.Deaths, clock, m.GameType == "turbo")
 			d.Region = deathRegion(m.lastAlive)
 			m.Deaths = append(m.Deaths, d)
 			if lost != nil {
 				t.logf("Death at %s, lost %dg", d.Clock, *lost)
 			} else {
 				t.logf("Death at %s", d.Clock)
-			}
-			for _, r := range d.Reasons {
-				t.logf("  %s", r)
 			}
 		}
 		m.WasAlive = alive
@@ -643,14 +638,14 @@ func (t *Tracker) handleLocked(body jsonMap) (saved *pendingSave) {
 		}
 	}
 
-	// The state a death would be judged on: the last report while alive.
+	// Where a death happens: the last report while alive.
 	if v, ok := getInt(hero, "respawn_seconds"); ok && !m.WasAlive {
 		m.RespawnSeconds = &v
 	} else {
 		m.RespawnSeconds = nil
 	}
 	if m.WasAlive && m.InProgress && items != nil {
-		m.lastAlive = snapshotOf(clock, gmap, hero, player, items, abilities)
+		m.lastAlive = snapshotOf(clock, hero, player)
 	}
 
 	if gameState == statePostGame {

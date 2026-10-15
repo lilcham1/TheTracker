@@ -114,24 +114,21 @@ func TestDotaFactsFromParsedMatch(t *testing.T) {
 	}
 }
 
-func TestDotaDeathLogMergesLiveReasons(t *testing.T) {
+func TestDotaDeathLogMergesLiveDeaths(t *testing.T) {
 	m, players := fightsMatch()
 	heroes := map[int]DotaHero{1: {ID: 1, Name: "Anti-Mage", Slug: "antimage"}, 6: {ID: 6, Name: "Drow Ranger", Slug: "drow_ranger"}}
 	f := dotaFactsFrom(m, players, 5, heroes)
 	gold := int64(400)
-	local := &MatchSummary{Deaths: []Death{{Clock: "11:38", At: 698, Reasons: []string{"No TP scroll"}, GoldLost: &gold}, {Clock: "21:45", At: 1305, Reasons: []string{"Your ultimate was ready"}}}}
+	local := &MatchSummary{Deaths: []Death{{Clock: "11:38", At: 698, GoldLost: &gold}, {Clock: "21:45", At: 1305}}}
 	log := dotaDeathLog(f.Deaths, local)
 	if len(log) != 3 || log[0].Clock != "11:40" || log[0].Fight != "alone against 3" || log[0].Region != "their jungle" {
 		t.Fatalf("log: %+v", log)
 	}
-	if len(log[0].Reasons) != 1 || log[0].GoldLost == nil || *log[0].GoldLost != 400 {
-		t.Fatalf("live reasons not merged: %+v", log[0])
+	if log[0].GoldLost == nil || *log[0].GoldLost != 400 {
+		t.Fatalf("live gold lost not merged: %+v", log[0])
 	}
 	if log[0].Note != "bought back, team 7,000 gold down" {
 		t.Fatalf("note: %q", log[0].Note)
-	}
-	if len(log[1].Reasons) != 0 || len(log[2].Reasons) != 1 {
-		t.Fatalf("merge by clock: %+v %+v", log[1], log[2])
 	}
 }
 
@@ -161,31 +158,11 @@ func TestMapSpots(t *testing.T) {
 	}
 }
 
-func TestDeathReasonsKnowThePlace(t *testing.T) {
-	// A Radiant hero deep on the Dire side, at night, team four kills down.
-	snap := snapshotOf(900, jsonMap{"daytime": false, "radiant_score": 3.0, "dire_score": 9.0},
-		jsonMap{"xpos": 2500.0, "ypos": 1000.0, "level": 10.0},
-		jsonMap{"team_name": "radiant", "gold": 300.0},
-		jsonMap{"slot0": map[string]any{"name": "item_magic_wand", "charges": 2.0, "can_cast": true}, "teleport0": map[string]any{"name": "item_tpscroll", "charges": 1.0, "can_cast": true}}, nil)
-	if !snap.HasPos || !snap.HasSide || !snap.HasScore || snap.TeamK != 3 || snap.EnemyK != 9 {
-		t.Fatalf("snapshot: %+v", snap)
-	}
-	reasons := deathReasons(snap, nil, 900, false)
-	joined := strings.Join(reasons, " | ")
-	if !strings.Contains(joined, "Died in their jungle") && !strings.Contains(joined, "their side") {
-		t.Fatalf("no place in %q", joined)
-	}
-	if !strings.Contains(joined, "At night") {
-		t.Fatalf("no night in %q", joined)
-	}
-	if deathRegion(snap) != "their jungle" {
-		t.Fatalf("region %q", deathRegion(snap))
-	}
-	// The same spot again counts.
-	earlier := []Death{{At: 500, Region: "their jungle"}}
-	again := strings.Join(deathReasons(&aliveSnapshot{Clock: 900, HasPos: true, HasSide: true, Radiant: true, X: 2000, Y: 2000, HasScore: true, TeamK: 3, EnemyK: 9}, earlier, 900, false), " | ")
-	if !strings.Contains(again, "2nd death on their side") || !strings.Contains(again, "6 kills behind") {
-		t.Fatalf("repeat: %q", again)
+func TestDeathRegionFromTheSnapshot(t *testing.T) {
+	// A Radiant hero on the Dire side.
+	snap := snapshotOf(900, jsonMap{"xpos": 2500.0, "ypos": 1000.0, "level": 10.0}, jsonMap{"team_name": "radiant", "gold": 300.0})
+	if !snap.HasPos || !snap.HasSide || deathRegion(snap) != "their jungle" {
+		t.Fatalf("snapshot %+v region %q", snap, deathRegion(snap))
 	}
 	// Dire sees the mirror: the same world spot is their own side.
 	if r := deathRegion(&aliveSnapshot{HasPos: true, HasSide: true, Radiant: false, X: 2500, Y: 1000}); r != "your jungle" {

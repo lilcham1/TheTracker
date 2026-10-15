@@ -336,11 +336,6 @@ func (a *App) Simulating() bool {
 // under two.
 func (a *App) StartSimulation(seconds int) error { return a.startSimulation(seconds, 12, 24) }
 
-// StartDeathTest plays a short test match where the hero dies after three
-// seconds, with a Black King Bar and the ultimate ready, so the "why you
-// died" card can be seen at once.
-func (a *App) StartDeathTest() error { return a.startSimulation(30, 3, 15) }
-
 // startSimulation runs a test match of the given length whose hero is dead
 // from second deadFrom to deadTo.
 func (a *App) startSimulation(seconds, deadFrom, deadTo int) error {

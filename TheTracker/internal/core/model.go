@@ -37,8 +37,6 @@ type Death struct {
 	GoldLost *int64 `json:"goldLost"`
 	// The clock in seconds, for spacing deaths out.
 	At float64 `json:"at,omitempty"`
-	// What went wrong, from the player's state just before (deathcheck.go).
-	Reasons []string `json:"reasons,omitempty"`
 	// Where on the map, e.g. "their jungle" (deathcheck.go).
 	Region string `json:"region,omitempty"`
 }

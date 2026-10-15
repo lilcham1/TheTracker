@@ -365,9 +365,8 @@ func commands(a *core.App) map[string]command {
 		}) (any, error) {
 			return a.Cs2.Delete(p.ID)
 		}),
-		"death_test_start": none(func() (any, error) { return ok, a.StartDeathTest() }),
-		"cs2_sim_start":    none(func() (any, error) { return ok, a.Cs2.StartSimulation() }),
-		"cs2_sim_stop":     none(func() (any, error) { a.Cs2.StopSimulation(); return ok, nil }),
+		"cs2_sim_start": none(func() (any, error) { return ok, a.Cs2.StartSimulation() }),
+		"cs2_sim_stop":  none(func() (any, error) { a.Cs2.StopSimulation(); return ok, nil }),
 
 		"cs2_setup": none(func() (any, error) { return a.Cs2.Setup(a.Gsi.Port(), a.Gsi.Token()), nil }),
 		"cs2_install": none(func() (any, error) {

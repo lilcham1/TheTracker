@@ -70,22 +70,11 @@
     .ring.is-now .name { color: var(--c); }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 75%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
 
-    /* While dead: why, and when the hero is back. */
-    .death { margin-top: 6px; max-width: 320px; padding: 8px 12px 9px; border-radius: 9px; background: rgba(10, 12, 17, .88);
-      border-left: 3px solid #ff6b6b; box-shadow: 0 3px 12px rgba(0, 0, 0, .45); font-size: 14px; line-height: 1.35; }
-    .death-head { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; font-size: 15px; }
-    .death-head b { color: #ff8a8a; }
-    .death .resp { color: rgba(242, 244, 247, .75); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .death .secs { position: static; font-size: inherit; font-weight: 700; color: #f2f4f7; text-shadow: none; }
-    .death ul { margin: 6px 0 0; padding-left: 17px; }
-    .death li { margin: 3px 0; }
-    .death p { margin: 6px 0 0; color: rgba(242, 244, 247, .85); }
-    .death-foot { margin-top: 5px; font-size: 12.5px; color: rgba(242, 244, 247, .65); }
-
     /* At 10:00 and 20:00: how the goals due then went. */
     .goalcheck { margin-top: 6px; max-width: 320px; padding: 8px 12px 9px; border-radius: 9px; background: rgba(10, 12, 17, .88);
       border-left: 3px solid #f0b54a; box-shadow: 0 3px 12px rgba(0, 0, 0, .45); font-size: 14px; }
-    .goalcheck .death-head b { color: #f0c46a; }
+    .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; font-size: 15px; }
+    .goalcheck .card-head b { color: #f0c46a; }
     .goalcheck ul { margin: 6px 0 0; padding-left: 0; list-style: none; }
     .goalcheck li { margin: 3px 0; }
     .goalcheck li::before { content: "✓ "; color: #7ec46a; font-weight: 700; }

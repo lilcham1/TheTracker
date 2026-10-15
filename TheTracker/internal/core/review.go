@@ -26,9 +26,8 @@ type ReviewPoint struct {
 }
 
 type ReviewDeath struct {
-	Clock    string   `json:"clock"`
-	Reasons  []string `json:"reasons,omitempty"`
-	GoldLost *int64   `json:"goldLost,omitempty"`
+	Clock    string `json:"clock"`
+	GoldLost *int64 `json:"goldLost,omitempty"`
 	// Who killed the player; Deadlock adds how fast in Note.
 	Killer string `json:"killer,omitempty"`
 	Note   string `json:"note,omitempty"`

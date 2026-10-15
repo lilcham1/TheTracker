@@ -2,6 +2,8 @@ package core
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -27,12 +29,14 @@ func TestDotaReview(t *testing.T) {
 	a := newTestApp(t)
 	a.Dota.api = &service{Name: "OpenDota", Base: f.srv.URL, Attempts: 1}
 	a.Store.SaveLink("dota", Link{AccountID: &me})
-	// TheTracker recorded the match live, with the reasons for two deaths.
-	hero := "npc_dota_hero_antimage"
-	a.Store.SaveHistory([]MatchSummary{{MatchID: "100", HeroName: &hero, TotalGoldLost: 2600, Deaths: []Death{
-		{Clock: "12:00", Reasons: []string{"Your Black King Bar was ready: use it before the fight turns", "No TP scroll: buy one"}},
-		{Clock: "13:30", Reasons: []string{"Your Manta Style was ready: use it", "2nd death in 5 minutes: play safer"}},
-	}}})
+	// TheTracker recorded the match live; an older version also saved
+	// guessed reasons with each death, which are no longer read.
+	old := `[{"matchid":"100","heroName":"npc_dota_hero_antimage","totalGoldLost":2600,"deaths":[
+		{"clock":"12:00","goldLost":null,"reasons":["Your Black King Bar was ready: use it before the fight turns","No TP scroll: buy one"]},
+		{"clock":"13:30","goldLost":null,"reasons":["Your Manta Style was ready: use it","2nd death in 5 minutes: play safer"]}]}]`
+	if err := os.WriteFile(filepath.Join(a.Store.Dir, "history.json"), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	r, err := a.DotaReview(100)
 	if err != nil {
@@ -51,8 +55,16 @@ func TestDotaReview(t *testing.T) {
 	if len(r.Good) != 1 || r.Good[0].Kind != "hero_damage_per_min" || !strings.Contains(r.Good[0].Detail, "better than 90% of Anti-Mage players") {
 		t.Fatalf("what went well: %+v", r.Good)
 	}
-	if len(r.DeathLog) != 2 || len(r.DeathLog[0].Reasons) != 2 {
-		t.Fatalf("deaths with reasons: %+v", r.DeathLog)
+	if len(r.DeathLog) != 2 || r.DeathLog[0].Clock != "12:00" {
+		t.Fatalf("deaths: %+v", r.DeathLog)
+	}
+	for _, p := range r.Wrong {
+		if p.Kind == "saving_item" || p.Kind == "no_tp" || p.Kind == "repeat_deaths" {
+			t.Fatalf("a guessed death reason became a point: %+v", p)
+		}
+	}
+	if raw, _ := json.Marshal(r); strings.Contains(string(raw), "Black King Bar was ready") {
+		t.Fatalf("an old reason reached the review: %s", raw)
 	}
 	if !strings.HasPrefix(r.Verdict, "Lost. Biggest issue:") {
 		t.Fatalf("verdict: %q", r.Verdict)

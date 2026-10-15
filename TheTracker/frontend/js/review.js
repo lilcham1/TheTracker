@@ -128,7 +128,7 @@ function reviewHtml(game) {
               const coach = coachDeathNote(game, d.clock);
               const where = [d.fight, d.region ? `in ${d.region}` : "", d.note].filter(Boolean).join(", ");
               return `<tr><td class="num">${esc(d.clock)}</td><td>${d.killer ? `<b>${esc(d.killer)}</b>` : ""}${where ? ` <span class="muted">${esc(where)}</span>` : ""}</td>
-              <td class="num loss">${d.goldLost ? `-${fmtNum(d.goldLost)}` : ""}</td></tr>${(d.reasons || []).length || coach ? `<tr class="why"><td colspan="3">${coach ? `<span class="coach-note">${esc(coach)}</span>` : ""}${(d.reasons || []).length ? `${coach ? "<br>" : ""}${d.reasons.map(esc).join("<br>")}` : ""}</td></tr>` : ""}`;
+              <td class="num loss">${d.goldLost ? `-${fmtNum(d.goldLost)}` : ""}</td></tr>${coach ? `<tr class="why"><td colspan="3"><span class="coach-note">${esc(coach)}</span></td></tr>` : ""}`;
             }).join("")}</table>`
           : `<p class="muted">${game === "cod" ? "Call of Duty doesn't share death details with apps." : m.deaths ? "No death details for this match." : "No deaths."}</p>`}
       </section>

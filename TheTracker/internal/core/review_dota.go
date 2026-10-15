@@ -132,20 +132,6 @@ var dotaBenchmarks = []struct {
 	{"tower_damage", "Tower damage", "Little tower damage", "Pushed towers", "After a won fight, hit a tower before you go back to farming.", false},
 }
 
-// Death reasons (deathcheck.go) by kind: how to recognise them, what to call
-// them, and what to practise.
-var deathReasonKinds = []struct {
-	match, kind, title, habit string
-}{
-	{"was ready", "saving_item", "Died with a saving item ready", "Use your BKB or escape item when the fight starts, not when you're already low."},
-	{"Magic Wand", "wand", "Died with Magic Wand charges", "Press Magic Wand as soon as you drop under half health."},
-	{"ultimate was ready", "ultimate", "Died with your ultimate ready", "Use your ultimate early in a fight; holding it until you die wastes it."},
-	{"No TP scroll", "no_tp", "Died without a TP scroll", "Buy a TP scroll every time you're back at the fountain."},
-	{"unspent", "unspent_gold", "Died holding gold", "Spend gold before you fight: every death costs you some of it."},
-	{"death in 5 minutes", "repeat_deaths", "Died again soon after dying", "After a death, play safe near your team until your next item."},
-	{"No buyback", "no_buyback", "No buyback late", "After 30:00 keep enough gold to buy back before buying luxury items."},
-}
-
 // DotaReview reviews one match; 0 means the latest.
 func (a *App) DotaReview(matchID uint64) (MatchReview, error) {
 	if matchID == 0 {
@@ -234,26 +220,9 @@ func (a *App) DotaReview(matchID uint64) (MatchReview, error) {
 		}
 	}
 	if local != nil {
-		counts := map[string]int{}
 		for _, d := range local.Deaths {
 			if raw.Facts == nil || len(raw.Facts.Deaths) == 0 {
-				r.DeathLog = append(r.DeathLog, ReviewDeath{Clock: d.Clock, Reasons: d.Reasons, GoldLost: d.GoldLost, Region: d.Region})
-			}
-			seen := map[string]bool{}
-			for _, reason := range d.Reasons {
-				for _, k := range deathReasonKinds {
-					if strings.Contains(reason, k.match) && !seen[k.kind] {
-						seen[k.kind] = true
-						counts[k.kind]++
-					}
-				}
-			}
-		}
-		for _, k := range deathReasonKinds {
-			if n := counts[k.kind]; n > 0 {
-				v := float64(n)
-				wrong = append(wrong, ReviewPoint{Kind: k.kind, Title: k.title, Detail: fmt.Sprintf("%d of %d deaths", n, len(local.Deaths)),
-					Habit: k.habit, Weight: 0.2 + 0.08*float64(n), Value: &v})
+				r.DeathLog = append(r.DeathLog, ReviewDeath{Clock: d.Clock, GoldLost: d.GoldLost, Region: d.Region})
 			}
 		}
 		if local.TotalGoldLost >= 1500 {
@@ -336,7 +305,7 @@ func dotaDeathLog(deaths []dotaDeathCtx, local *MatchSummary) []ReviewDeath {
 			for i, l := range local.Deaths {
 				if !used[i] && l.At > 0 && math.Abs(l.At-d.Time) <= 10 {
 					used[i] = true
-					rd.Reasons, rd.GoldLost = l.Reasons, l.GoldLost
+					rd.GoldLost = l.GoldLost
 					if rd.Region == "" {
 						rd.Region = l.Region
 					}

@@ -313,9 +313,6 @@ func coachFacts(r MatchReview) map[string]any {
 		if d.Note != "" {
 			m["note"] = d.Note
 		}
-		if len(d.Reasons) > 0 {
-			m["playerState"] = d.Reasons
-		}
 		if d.GoldLost != nil {
 			m["goldLost"] = *d.GoldLost
 		}
