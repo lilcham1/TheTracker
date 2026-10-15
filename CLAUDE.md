@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 
 ## What this is
 
-**TheTracker** — a desktop match tracker for Dota 2, Deadlock, CS2 and
-Overwatch, in
+**TheTracker** — a desktop match tracker for Dota 2, Deadlock, CS2,
+Overwatch, PUBG and Call of Duty, in
 `TheTracker/`. Written in **Go**: the backend is plain Go, the window shell is
 Wails v3 (WebView2, no CGO), and the interface is plain HTML/CSS/JS embedded
 in the exe. See `TheTracker/README.md` for the feature list, layout, build
