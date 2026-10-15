@@ -1,37 +1,45 @@
 # TheTracker
 
-A desktop match tracker for Dota 2, Deadlock, Counter-Strike 2 and Overwatch. One Windows executable,
+A desktop match tracker for Dota 2, Deadlock, Counter-Strike 2, Overwatch, PUBG and Call of Duty. One Windows executable,
 written in Go, with its interface drawn in the system's WebView2.
 
 ## What it does
 
+Six games, each one switched on or off under Settings (a first-run screen
+asks which ones you play). Your games are tabs across the top, with each
+game's pages in a row under them and a running match shown at its end.
+
 **Dota 2**
 
-- **Live** – follows your match as you play, from Valve's own Game State
-  Integration feed: last hits at 5/10/15/20/25 minutes against your own
-  averages, each death and the gold it cost, timings of key items, and
-  progress against goals you set.
+- **Overview with the live match** – follows your match as you play, from
+  Valve's own Game State Integration feed: last hits at 5/10/15/20/25 minutes
+  against your own averages, each death and the gold it cost, timings of key
+  items, and progress against goals you set for your role and hero. Your role
+  is worked out each match.
 - **Overlay** – a small transparent window over the game that counts down to
-  rune spawns, lotuses and the stack pull, and shows nothing otherwise.
+  rune spawns, lotuses and the stack pull, follows your role, and shows only
+  while Dota is in front. While you're dead, a **Why you died** card gives the
+  reasons it saw (a saving item ready, no TP, gold unspent, a repeat death…).
+- **Match review** – each match read from OpenDota: laning against hero
+  benchmarks, every death with the fight it was part of and where it happened,
+  time dead, fight participation, vision and the farm race against your lane
+  opponent, plus a **Work on** list tallied over your last matches.
 - **Sessions** – every match recorded live, with comparisons against your
   other games of the same type, your own notes, and plain-language insights
   ("most of your deaths come between 10 and 20 minutes").
-- **Matches, Heroes, Overview** – your match history, lifetime hero records,
-  medal, and the people you play with most, from OpenDota. Recorded sessions
+- **Matches, Heroes** – your match history, lifetime hero records, medal,
+  and the people you play with most, from OpenDota. Recorded sessions
   OpenDota lacks are merged into the same list.
-- **Draft** – add the enemy's heroes as they pick and see which heroes have
-  done well against that lineup, with your own record on each.
 - **Meta** – which heroes are winning, rising and falling, by estimated role.
 - **Builds** – your saved item plans, beside what players buy most.
 - **Leaderboard** – your best recorded games, and (with an account) a shared
   board.
 
 **Deadlock** – overview, matches with scoreboards, heroes, meta (heroes and
-items) and builds, from the community Deadlock API. Deadlock has no live
-feed, so there is no live page or overlay for it.
-
-**Today** – one page across every game you have switched on: today's and
-this week's record, streaks and the last match in each.
+items), builds and a review of each match (lane last-hit efficiency, souls
+lost to deaths, trades, who killed you and how fast), from the community
+Deadlock API. Deadlock has no live feed, so there is no live page or overlay
+for it.
 
 **Deadlock Live** – the game's top live matches by hero, with the players
 on each hero who are streaming it on Twitch first (viewers, title, a link to
@@ -40,8 +48,6 @@ official API through `convex/twitch.ts`, which needs a Twitch app's client
 ID and secret set once on the deployment (`npx convex env set
 TWITCH_CLIENT_ID …` and `TWITCH_CLIENT_SECRET …`). Streams are matched to
 players by name, as nothing links a Steam account to a Twitch channel.
-
-**Dota 2 Streamers** – the same for Dota, as a tab under Live: Twitch streamers on each hero in Dota's top live games (from OpenDota), found by their in-game name, OpenDota's pro list, an exact Steam-name search run in the background, or your own links, with their medal. Dota's live list holds only the top ~100 games, so far fewer streamers can be placed than in Deadlock.
 
 **Counter-Strike 2** – live tracking of your own matches from Valve's Game
 State Integration, round by round: kills, damage (ADR), headshots, the weapon
@@ -61,6 +67,39 @@ list, only running totals, so TheTracker remembers the totals each time it
 reads your profile and shows the difference as sessions: games, wins, time
 and heroes played, plus a history of your ranks, from the day tracking began.
 
+**PUBG** – from PUBG's official API, through `convex/pubg.ts` (PUBG requires
+its key to stay on a server; set it once with `npx convex env set
+PUBG_API_KEY …`): season stats by mode, ranked tier and points, the ranked
+leaderboard per region, and your matches of the last 14 days with your squad.
+Each match is reviewed from its telemetry: where you landed and who landed
+near you, every knock and death (by whom, weapon, distance, in the blue zone
+or not, in a vehicle, nearest teammate), knocks finished and blue zone
+damage, with weapon and survival mastery, goals and a **Work on** list.
+
+**Call of Duty** – Black Ops 7, Warzone and Modern Warfare 4. Activision
+publishes no stats API, so you log each match in one line (game, mode,
+result or place, kills, deaths and assists; Enter saves). Each stretch with
+the game open becomes a session, with a reminder to log it when it ends;
+overview stats, goals from your own percentiles and reviews of your log
+(low K/D, losing streaks, late in a long session, weakest mode) work from it.
+
+**Today** – one page across every game you have switched on: today's and
+this week's record, streaks and the last match in each.
+
+**Pro settings** – presets for Dota 2, Deadlock, CS2, PUBG and Call of Duty:
+video (visibility first), audio, gameplay and hotkey layouts, built from
+pros' published settings with a source on every line. The game's own
+settings files are edited only while it's closed, every touched file is
+backed up first, and Restore puts the backup back.
+
+**Connection check and Game mode** – while a game runs (or for 20 s from
+Settings → Connection), pings the router and the nearest Valve relay once a
+second and gives a plain verdict: fine, home network, internet provider or
+line busy. It only reads. **Game mode**, if you turn it on (one Windows
+approval), registers scheduled tasks that cap background uploads (cloud sync,
+launchers, browsers) and prioritise the game during a match, and removes
+every rule it added when the match ends.
+
 **Compare** – a friend's public numbers next to yours for Dota 2, Deadlock
 and Overwatch: win rate, KDA, farm or damage, and the heroes you both play.
 Search by name, or paste a Steam profile link or account id.
@@ -68,7 +107,7 @@ Search by name, or paste a Steam profile link or account id.
 **Share cards** – save your form, a CS2 match, a comparison or your week as
 a PNG in Documents\TheTracker.
 
-**Quick search** – Ctrl+K jumps to any page or hero. Ctrl+1–4 switch games,
+**Quick search** – Ctrl+K jumps to any page or hero. Ctrl+1–6 switch games,
 Ctrl+T opens Today.
 
 **Notifications** – optionally, a Windows notification when a Dota 2 or CS2
@@ -79,9 +118,6 @@ production API key it grants per application after review, with each player
 signing in through Riot. Until this project holds such a key there is no
 legitimate way to read Valorant matches, and the app does not pretend to.
 
-Each game can be switched off under Settings; a first-run screen asks which
-ones you play.
-
 ## Signing in
 
 One method: **Sign in with Steam**. Steam's own login page opens in the
@@ -91,7 +127,8 @@ before opening a session. That one sign-in links Dota 2 and Deadlock, names
 the leaderboard profile, and never involves a password or API key. If the
 cloud service is unreachable the app verifies the statement itself and
 everything except the shared leaderboard works. Overwatch is connected
-separately by BattleTag, since it is not a Steam account.
+separately by BattleTag, and PUBG by your in-game name, since neither is a
+Steam account.
 
 After changing anything in `convex/`, deploy it with `npx convex deploy`.
 
@@ -103,9 +140,11 @@ After changing anything in `convex/`, deploy it with `npx convex deploy`.
 | [OpenDota](https://www.opendota.com) API | Dota history, heroes, meta, matchups | Public, no key. Keyed on your Steam account id. |
 | [Deadlock API](https://deadlock-api.com) | Everything Deadlock | Community-run, rate-limited by Valve; can be late or incomplete. |
 | Valve Game State Integration (CS2) | Live CS2 tracking | Same local feed as Dota; needs no launch option. |
-
 | Valve's Dota leaderboard web API | Dota top players by region | Names and ranks only. |
 | [OverFast API](https://overfast-api.tekrop.fr) | Overwatch career stats and hero meta | Community-run; reads Blizzard's public career pages. Profile must be public. |
+| [PUBG API](https://developer.pubg.com) | PUBG stats, matches, ranked leaderboard | Official. Through `convex/pubg.ts`, which holds the key and caches the rate-limited calls. Match telemetry comes from PUBG's CDN with no key. |
+| Twitch API | Deadlock Live streams | Official, through `convex/twitch.ts`. Nothing about you is sent. |
+| Your own log | Call of Duty | Activision publishes no stats API; matches are the ones you log. |
 | Convex (optional account) | Sync and the shared leaderboard | Only if you sign in. `convex/` holds the server functions. |
 
 Nothing is scraped from any other tracker's site, and nothing is shown about
