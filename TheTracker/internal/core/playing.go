@@ -15,10 +15,12 @@ var gameProcesses = []struct{ id, name, process string }{
 	{"cs2", "Counter-Strike 2", "cs2"},
 	{"overwatch", "Overwatch", "Overwatch"},
 	{"pubg", "PUBG", "TslGame"},
+	// Black Ops 7, Warzone and Modern Warfare 4 all run as Call of Duty HQ.
+	{"cod", "Call of Duty", "cod"},
 }
 
 // The programs Game mode marks as priority: every game TheTracker knows.
-var gamePriorityApps = []string{"dota2.exe", "project8.exe", "cs2.exe", "Overwatch.exe", "TslGame.exe"}
+var gamePriorityApps = []string{"dota2.exe", "project8.exe", "cs2.exe", "Overwatch.exe", "TslGame.exe", "cod.exe"}
 
 // runningPrograms is overridable in tests.
 var runningPrograms = func() map[uint32]string { return processNames() }
@@ -30,7 +32,7 @@ func (a *App) activeGame() string {
 	if games.Dota && a.Tracker.IsLive() {
 		return "Dota 2"
 	}
-	on := map[string]bool{"dota": games.Dota, "deadlock": games.Deadlock, "cs2": games.CS2, "overwatch": games.Overwatch, "pubg": games.PUBG}
+	on := map[string]bool{"dota": games.Dota, "deadlock": games.Deadlock, "cs2": games.CS2, "overwatch": games.Overwatch, "pubg": games.PUBG, "cod": games.COD}
 	var running map[uint32]string
 	for _, g := range gameProcesses {
 		if !on[g.id] {

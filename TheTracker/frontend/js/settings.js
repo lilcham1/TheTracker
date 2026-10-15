@@ -8,7 +8,7 @@ const SET = {
 // One settings page for the whole app: what applies everywhere, then a
 // section for each game that is switched on.
 const SETTINGS_TABS = [["general", "General"], ["network", "Connection"], ["account", "Account"], ["about", "About and updates"]];
-const SETTINGS_GAME_TABS = [["dota", "Dota 2"], ["deadlock", "Deadlock"], ["cs2", "Counter-Strike 2"], ["overwatch", "Overwatch"], ["pubg", "PUBG"]];
+const SETTINGS_GAME_TABS = [["dota", "Dota 2"], ["deadlock", "Deadlock"], ["cs2", "Counter-Strike 2"], ["overwatch", "Overwatch"], ["pubg", "PUBG"], ["cod", "Call of Duty"]];
 // Older links name the tab that used to hold the overlay.
 const SETTINGS_ALIASES = { overlay: "dota" };
 
@@ -89,6 +89,7 @@ function generalHtml() {
       ${gameRow("cs2", "Counter-Strike 2", "live tracking of your own matches")}
       ${gameRow("overwatch", "Overwatch", "career stats and progress from your public profile")}
       ${gameRow("pubg", "PUBG", "matches, placements and season stats from PUBG's official API")}
+      ${gameRow("cod", "Call of Duty", "Black Ops 7, Warzone and MW4: your logged matches, play time and pro settings")}
     </section>
     <section class="set">
       <h3>Running in the background</h3>
@@ -96,7 +97,7 @@ function generalHtml() {
       <label class="switch"><input type="checkbox" data-change="track-toggle" ${!S.live || S.live.trackingEnabled !== false ? "checked" : ""} /><span>Record my matches <span class="muted">(switch off to play without saving anything)</span></span></label>
       <label class="switch"><input type="checkbox" data-change="bg-start" ${bg.startWithWindows ? "checked" : ""} /><span>Start with Windows <span class="muted">(opens in the tray, not on screen)</span></span></label>
       <label class="switch"><input type="checkbox" data-change="bg-tray" ${bg.closeToTray ? "checked" : ""} ${bg.trayAvailable ? "" : "disabled"} /><span>Keep running in the tray when I close the window</span></label>
-      <label class="switch"><input type="checkbox" data-change="bg-notify" ${bg.notify ? "checked" : ""} /><span>Tell me when a match has been saved <span class="muted">(a Windows notification, for Dota 2 and CS2)</span></span></label>
+      <label class="switch"><input type="checkbox" data-change="bg-notify" ${bg.notify ? "checked" : ""} /><span>Tell me when a match has been saved <span class="muted">(a Windows notification, for Dota 2 and CS2; for Call of Duty, a reminder to log your matches)</span></span></label>
       <p class="hint"><button class="link" data-act="notify-test" type="button">Show a test notification</button></p>
       ${bg.trayAvailable
         ? `<p class="hint">To quit completely, right-click the TheTracker icon in the tray and choose Quit, or <button class="link" data-act="quit" type="button">quit now</button>.</p>`
@@ -478,7 +479,7 @@ view("settings", {
     const tab = settingsTab();
     const body = {
       general: generalHtml, network: networkHtml, account: accountHtml, about: aboutHtml,
-      dota: dotaSettingsHtml, deadlock: deadlockSettingsHtml, cs2: cs2SettingsHtml, overwatch: overwatchSettingsHtml, pubg: pgSettingsHtml,
+      dota: dotaSettingsHtml, deadlock: deadlockSettingsHtml, cs2: cs2SettingsHtml, overwatch: overwatchSettingsHtml, pubg: pgSettingsHtml, cod: codSettingsHtml,
     }[tab] || generalHtml;
     const tabBtn = ([k, l]) => `<button class="tab ${tab === k ? "on" : ""}" data-act="settings-tab" data-tab="${k}" role="tab" aria-selected="${tab === k}" type="button">${l}</button>`;
     const games = SETTINGS_GAME_TABS.filter(([k]) => S.boot.prefs.games[k]);

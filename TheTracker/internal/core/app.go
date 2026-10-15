@@ -99,6 +99,7 @@ type App struct {
 	Cs2      *Cs2
 	Ow       *Overwatch
 	Pubg     *Pubg
+	Cod      *Cod
 	Cloud    *Cloud
 	Updater  *Updater
 	// Ping, jitter and line use while a match runs.
@@ -134,6 +135,8 @@ func NewApp(dataDir string, shell Shell) *App {
 	a.Gsi.OnCs2 = a.Cs2.HandleUpdate
 	a.Cloud = NewCloud(store)
 	a.Pubg = NewPubg(store, a.Cloud)
+	a.Cod = NewCod(store)
+	a.Cod.OnSessionEnd = func(s CodSession) { a.notify(codNotification(s)) }
 	a.Updater = NewUpdater()
 	a.Net = NewNetCheck(store)
 	a.GameMode = NewGameMode(store)
@@ -167,6 +170,7 @@ func (a *App) Start(manageDota bool) {
 	}()
 	go a.backfillLoop()
 	go a.owWatch()
+	go a.codWatch()
 	go a.Store.PruneCache(time.Now())
 }
 
@@ -205,7 +209,7 @@ func (a *App) applyGames(g Games) {
 // SetGames records which games the player uses and applies it at once. At
 // least one stays on: an app with no game has nothing to show.
 func (a *App) SetGames(g Games) (Prefs, error) {
-	if !g.Dota && !g.Deadlock && !g.CS2 && !g.Overwatch && !g.PUBG {
+	if !g.Dota && !g.Deadlock && !g.CS2 && !g.Overwatch && !g.PUBG && !g.COD {
 		return a.Store.LoadPrefs(), errors.New("Keep at least one game switched on.")
 	}
 	g.Chosen = true
@@ -221,7 +225,7 @@ func (a *App) Stop() {
 }
 
 // netWatcher measures the connection, and runs Game mode, while the player
-// is in a game: Dota 2, Deadlock, CS2, Overwatch or PUBG open.
+// is in a game: Dota 2, Deadlock, CS2, Overwatch, PUBG or Call of Duty open.
 func (a *App) netWatcher() {
 	wasLive := false
 	for {
@@ -826,4 +830,27 @@ func (a *App) SetAPIBases(dota, deadlock, cloud string) {
 	a.Dota.valve.Base, a.Dota.valve.Attempts = dota, 1
 	a.Ow.api.Base, a.Ow.api.Attempts = deadlock, 1
 	a.Updater.FeedURL = cloud + "/latest.json"
+}
+
+// codWatch records Call of Duty play sessions while the game is switched on.
+func (a *App) codWatch() {
+	first := true
+	for {
+		running := false
+		if a.Store.LoadPrefs().Games.COD {
+			for _, p := range runningPrograms() {
+				if strings.EqualFold(p, "cod") {
+					running = true
+					break
+				}
+			}
+		}
+		if first {
+			// A session left open by a crash ends where it was last seen.
+			a.Cod.CloseStaleSession(running)
+			first = false
+		}
+		a.Cod.SessionTick(running)
+		time.Sleep(5 * time.Second)
+	}
 }

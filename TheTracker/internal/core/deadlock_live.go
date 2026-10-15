@@ -27,6 +27,8 @@ type LiveStream struct {
 	StartedAt string `json:"startedAt"`
 	Thumbnail string `json:"thumbnail"`
 	Language  string `json:"language"`
+	// Which category it's in, when a game spans several (Call of Duty).
+	Game string `json:"game,omitempty"`
 }
 
 type LivePlayer struct {
@@ -483,7 +485,7 @@ func (a *App) liveStreams(game string, force bool) ([]LiveStream, string) {
 		for _, s := range jList(m["streams"]) {
 			out = append(out, LiveStream{
 				Login: jStr(s, "login", ""), Name: jStr(s, "name", ""), Title: jStr(s, "title", ""),
-				Viewers: int(jI64(s, "viewers")), StartedAt: jStr(s, "startedAt", ""), Thumbnail: jStr(s, "thumbnail", ""), Language: jStr(s, "language", ""),
+				Viewers: int(jI64(s, "viewers")), StartedAt: jStr(s, "startedAt", ""), Thumbnail: jStr(s, "thumbnail", ""), Language: jStr(s, "language", ""), Game: jStr(s, "game", ""),
 			})
 		}
 		return out, nil

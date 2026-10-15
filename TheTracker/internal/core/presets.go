@@ -86,6 +86,7 @@ var presetGames = map[string]struct {
 	"deadlock": {"1422450", "Deadlock/game/citadel", "project8", "Deadlock"},
 	"cs2":      {"730", "Counter-Strike Global Offensive/game/csgo", "cs2", "Counter-Strike 2"},
 	"pubg":     {"578080", "PUBG", "TslGame", "PUBG"},
+	"cod":      {"1938090", "Call of Duty HQ", "cod", "Call of Duty"},
 }
 
 // presetDoc is a settings file the presets edit: Valve KeyValues
@@ -118,6 +119,13 @@ func (a *App) presetFiles(game string) ([]PresetFile, []string) {
 			reasons = append(reasons, "PUBG has no settings file yet (open the game once and change any setting).")
 		}
 		return []PresetFile{{Kind: "settings", Path: p, Found: err == nil}}, reasons
+	}
+	if game == "cod" {
+		files := codSettingsFiles(codPlayersDir())
+		if len(files) == 0 {
+			reasons = append(reasons, "Call of Duty has no settings files yet (open the game once and change any setting).")
+		}
+		return files, reasons
 	}
 	root := a.Gsi.steamRoot()
 	acct := steamAccount()
@@ -190,6 +198,10 @@ func (a *App) presetDocs(files []PresetFile) (map[string]presetDoc, error) {
 			docs[f.Kind] = iniParse(string(raw))
 			continue
 		}
+		if isCodSettingsFile(f.Path) {
+			docs[f.Kind] = codParse(string(raw))
+			continue
+		}
 		doc, err := kvParse(string(raw))
 		if err != nil {
 			return nil, fmt.Errorf("%s couldn't be read as a settings file: %v", filepath.Base(f.Path), err)
@@ -227,6 +239,12 @@ func (a *App) PresetPreview(game, layout string) (PresetPreview, error) {
 		}
 		if doc := docs[line.File]; doc != nil {
 			line.Current, line.Present = doc.Get(line.Path...)
+		}
+		// Call of Duty's files list every setting the game knows, with the
+		// values each takes: one it doesn't hold, or a value it wouldn't
+		// accept, belongs to another CoD and is left out.
+		if cd, ok := docs[line.File].(*codDoc); game == "cod" && (!ok || !line.Present || !cd.Allows(line.Value, line.Path...)) {
+			continue
 		}
 		if line.Remove {
 			line.Changed = line.Present

@@ -29,15 +29,17 @@ async function loadPreset(game, force = false) {
 
 const PRESET_GROUPS = ["Video", "Audio", "Gameplay", "Visibility"];
 const PRESET_GROUP_LABEL = { Video: "Video", Audio: "Audio", Gameplay: "Gameplay", Visibility: "Visibility & accessibility" };
-const PRESET_GAME = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2", pubg: "PUBG" };
-const PRESET_VIEW = { dota: "hotkeys", deadlock: "dl-hotkeys", cs2: "cs-hotkeys", pubg: "pg-pro" };
+const PRESET_GAME = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2", pubg: "PUBG", cod: "Call of Duty" };
+const PRESET_VIEW = { dota: "hotkeys", deadlock: "dl-hotkeys", cs2: "cs-hotkeys", pubg: "pg-pro", cod: "cod-pro" };
 const PRESET_INTRO = {
+  cod: "Exclusive fullscreen at 100% render resolution, FOV 115 for multiplayer or 105 for Warzone with ADS FOV affected, NVIDIA Reflex with boost, motion blur, depth of field and every effect that hides players off, bullet impacts on, raw mouse input without acceleration. A few settings only the game's menu can set are listed at the bottom.",
   pubg: "Fullscreen at render scale 100, FOV 95 (the most common pro FOV), every quality setting very low except textures (medium) and view distance (low), sharpen on, V-sync, motion blur and smoothing off, legacy gun sounds with HRTF, scope on hold, recommendations off. Pros keep PUBG's default movement keys.",
   dota: "Borderless at native resolution, effects off, textures high, camera 6000, zoom and shake off, Stop-to-cancel teleports, music off, Yatoro's minimap. Pros don't share one keyboard layout: pick one below.",
   deadlock: "Fullscreen, effects off, fog low, shadows medium, FOV 90, hold to zoom and crouch, reduced shake. Pros agree on abilities 1–4, parry F, cancel Space, self-cast Mouse 3; pick a player's items and melee below.",
   cs2: "Fullscreen, shadows high, detail low, HDR quality, the shared 68 / 2.5 / 0 / -1.5 viewmodel, donk's crosshair, the centred rotating radar every pro keeps, stingers off. Binds follow the prosettings.net guide.",
 };
 const PRESET_SOURCES = {
+  cod: "Activision publishes no pro configs for mouse and keyboard, so these are where the current Black Ops 7 and Warzone PC guides agree: Dexerto, Dot Esports, Hone, PCGamesN, GFinity. Setting names and allowed values are read from your own files.",
   pubg: "Sources: prosettings.net PUBG guide (68 pros) and player pages (TGLTN, Kickstart); vortexgaming.io pro settings round-up.",
   dota: "Sources: prosettings.net, gamingcfg.com (Yatoro, miCKe, Puppey, Topson, Miracle-), hawk.live, winio.ai, cyberscore.live, esports.gg.",
   deadlock: "Sources: prosettings.net (MikaelS, Lefaa, Hydration, Surefour, Recrent), Dexerto, BLAST, deadlocklabs.gg.",
@@ -234,7 +236,9 @@ function proSettingsHtml(game) {
     ? `<div class="chips seg">${d.layouts.map((l) => `<button class="chip ${l.id === d.layout ? "on" : ""}" data-act="preset-layout" data-game="${game}" data-layout="${l.id}" type="button" ${p.busy ? "disabled" : ""}>${esc(l.label)}</button>`).join("")}</div>
       <p class="muted small"><b>${esc(cur.label || "")}</b> <span class="muted">${esc(cur.by || "")}.</span> ${esc(cur.desc || "")}</p>`
     : `<p class="muted small">${esc(cur.desc || "")}</p>`;
-  const files = d.files.map((f) => `<span title="${esc(f.path)}">${esc(f.kind)}${f.cloud ? " <span class='muted'>(Steam cloud)</span>" : ""}${f.found ? "" : " <span class='loss'>missing</span>"}</span>`).join(", ");
+  // CoD keeps two copies of each file; name them once each.
+  const kindName = { system: "graphics", gameplay: "gameplay" };
+  const files = d.files.filter((f) => !/\d$/.test(f.kind)).map((f) => `<span title="${esc(f.path)}">${esc(kindName[f.kind] || f.kind)}${f.kind in kindName ? " <span class='muted'>(and its twin)</span>" : ""}${f.cloud ? " <span class='muted'>(Steam cloud)</span>" : ""}${f.found ? "" : " <span class='loss'>missing</span>"}</span>`).join(", ");
   return `<section class="set">${intro}
     <div class="net-head">${presetStatusHtml(d, name)}</div>
     ${p.error ? `<div class="note err">${esc(p.error)}</div>` : ""}

@@ -31,11 +31,18 @@ export const setKv = internalMutation({
   },
 });
 
-type Stream = { login: string; name: string; title: string; viewers: number; startedAt: string; thumbnail: string; language: string };
+type Stream = { login: string; name: string; title: string; viewers: number; startedAt: string; thumbnail: string; language: string; game?: string };
 type Result = { ok: true; streams: Stream[] } | { ok: false; reason: string };
 
-// The Twitch categories the app reads, by the app's own game keys.
-const CATEGORIES: Record<string, string> = { deadlock: "Deadlock", dota: "Dota 2", pubg: "PUBG: BATTLEGROUNDS" };
+// The Twitch categories the app reads, by the app's own game keys. Call of
+// Duty spans several; a name Twitch doesn't know yet (a CoD before its
+// launch) is skipped until it does.
+const CATEGORIES: Record<string, string[]> = {
+  deadlock: ["Deadlock"],
+  dota: ["Dota 2"],
+  pubg: ["PUBG: BATTLEGROUNDS"],
+  cod: ["Call of Duty: Black Ops 7", "Call of Duty: Warzone", "Call of Duty: Modern Warfare 4", "Call of Duty: Modern Warfare IV"],
+};
 
 /** Live streams in one game's Twitch category, most watched first. */
 export const streams = action({
@@ -55,7 +62,7 @@ export const deadlockStreams = action({
 export const fetchStreams = internalAction({
   args: { game: v.string() },
   handler: async (ctx, { game: gameKey }): Promise<Result> => {
-    const category = CATEGORIES[gameKey];
+    const categories = CATEGORIES[gameKey];
     const id = process.env.TWITCH_CLIENT_ID;
     const secret = process.env.TWITCH_CLIENT_SECRET;
     if (!id || !secret) return { ok: false, reason: "not_set_up" };
@@ -81,11 +88,15 @@ export const fetchStreams = internalAction({
     const gameKv = gameKey === "deadlock" ? "twitch_deadlock_game" : `twitch_game_${gameKey}`;
     let game = await ctx.runQuery(internal.twitch.getKv, { key: gameKv });
     if (!game || game.expires < now) {
-      const r = await fetch(`https://api.twitch.tv/helix/games?name=${encodeURIComponent(category)}`, { headers });
+      const q = new URLSearchParams();
+      for (const name of categories) q.append("name", name);
+      const r = await fetch(`https://api.twitch.tv/helix/games?${q}`, { headers });
       if (!r.ok) return { ok: false, reason: r.status === 401 ? "bad_credentials" : "unreachable" };
       const j = (await r.json()) as { data: { id: string }[] };
       if (!j.data.length) return { ok: false, reason: "unreachable" };
-      game = { value: j.data[0].id, expires: now + 7 * 86_400_000 };
+      // Several categories are re-checked daily, so a new CoD shows up soon.
+      const days = categories.length > 1 ? 1 : 7;
+      game = { value: j.data.map((g) => g.id).join(","), expires: now + days * 86_400_000 };
       await ctx.runMutation(internal.twitch.setKv, { key: gameKv, value: game.value, expires: game.expires });
     }
 
@@ -94,23 +105,26 @@ export const fetchStreams = internalAction({
     const streams: Stream[] = [];
     let after = "";
     for (let page = 0; page < 4; page++) {
-      const q = new URLSearchParams({ game_id: game.value, first: "100", type: "live" });
+      const q = new URLSearchParams({ first: "100", type: "live" });
+      for (const gid of game.value.split(",")) q.append("game_id", gid);
       if (after) q.set("after", after);
       const r = await fetch(`https://api.twitch.tv/helix/streams?${q}`, { headers });
       if (!r.ok) break;
       const j = (await r.json()) as {
-        data: { user_login: string; user_name: string; title: string; viewer_count: number; started_at: string; thumbnail_url: string; language: string }[];
+        data: { user_login: string; user_name: string; title: string; viewer_count: number; started_at: string; thumbnail_url: string; language: string; game_name: string }[];
         pagination: { cursor?: string };
       };
       for (const s of j.data) {
         streams.push({
           login: s.user_login, name: s.user_name, title: s.title, viewers: s.viewer_count, startedAt: s.started_at,
           thumbnail: s.thumbnail_url.replace("{width}", "320").replace("{height}", "180"), language: s.language,
+          ...(categories.length > 1 ? { game: s.game_name } : {}),
         });
       }
       if (!j.pagination.cursor || !j.data.length) break;
       after = j.pagination.cursor;
     }
+    streams.sort((a, b) => b.viewers - a.viewers);
     return { ok: true, streams };
   },
 });

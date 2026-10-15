@@ -4,7 +4,7 @@
 
 const owProgressAll = resource("owProgressAll", "ow_progress", { args: () => ({ mode: "all" }), ttl: 60000 });
 
-const GAME_NAMES = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2", overwatch: "Overwatch", pubg: "PUBG" };
+const GAME_NAMES = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2", overwatch: "Overwatch", pubg: "PUBG", cod: "Call of Duty" };
 
 function dayStart(daysAgo = 0) {
   const d = new Date();
@@ -34,6 +34,11 @@ function todayFeed(game) {
     if (!pgLinked()) return "Connect your PUBG account to see your matches.";
     if (!pgOverview.data) return pgOverview.error ? [] : null;
     return pgOverview.data.matches.filter((m) => !m.custom).map((m) => ({ t: m.startTime + m.duration, won: null, place: m.place, top10: m.place <= 10, title: `${m.map} #${m.place}/${m.teams}`, detail: `${m.kills} kills, ${Math.round(m.damage)} damage` }));
+  }
+  if (game === "cod") {
+    if (!codOverview.data) return codOverview.error ? [] : null;
+    if (!codOverview.data.matches.length) return "Log your Call of Duty matches to see them here.";
+    return codOverview.data.matches.map((m) => ({ t: m.date, won: m.place ? (m.place === 1 ? true : null) : m.result === "win" ? true : m.result === "loss" ? false : null, title: `${m.mode}${m.place ? " #" + m.place : ""}`, detail: `${m.kills}/${m.deaths}/${m.assists}` }));
   }
   if (game === "cs2") {
     return [...CS.history].reverse().map((m) => ({ t: Date.parse(m.date) / 1000, won: csWon(m), title: `${csMapName(m.map)} ${m.myScore} : ${m.theirScore}`, detail: `${m.kills}/${m.deaths}/${m.assists}` }));
@@ -125,10 +130,12 @@ view("today", {
     if (g.cs2) csLoad();
     if (g.overwatch && owLinked()) owOverview.load(force).then(() => owProgressAll.load(true));
     if (g.pubg && pgLinked()) pgOverview.load(force);
+    if (g.cod) codOverview.load(force);
     // What to work on: built from the last ten matches, cached for a while.
     if (g.dota && dotaLinked()) workOnRes.dota.load();
     if (g.deadlock && dlLinked()) workOnRes.deadlock.load();
     if (g.pubg && pgLinked()) workOnRes.pubg.load();
+    if (g.cod) workOnRes.cod.load();
   },
   render() {
     const games = enabledGames();
@@ -147,8 +154,8 @@ view("today", {
         { label: "Last 7 days", value: `${week.games} game${week.games === 1 ? "" : "s"}`, sub: `${week.won} won, ${week.lost} lost` },
         { label: "Won this week", value: pct(rate(week)), tone: toneOfRate(rate(week)) },
       ])}
-      ${["dota", "deadlock", "pubg"].filter((g) => games.includes(g) && workOnRes[g].data && workOnRes[g].data.items.length).map((g) => `<section class="today-workon">
-        <div class="sec-head"><h3>To work on in ${GAME_NAMES[g]}</h3><button class="link" data-act="go" data-view="${{ dota: "dota-review", deadlock: "dl-review", pubg: "pg-review" }[g]}" type="button">Review</button></div>
+      ${["dota", "deadlock", "pubg", "cod"].filter((g) => games.includes(g) && workOnRes[g].data && workOnRes[g].data.items.length).map((g) => `<section class="today-workon">
+        <div class="sec-head"><h3>To work on in ${GAME_NAMES[g]}</h3><button class="link" data-act="go" data-view="${{ dota: "dota-review", deadlock: "dl-review", pubg: "pg-review", cod: "cod-review" }[g]}" type="button">Review</button></div>
         ${workOnHtml(g, { compact: true })}</section>`).join("")}
       <div class="today-grid">${games.map((g) => `<section class="today-card" data-theme="${g}">
         <div class="sec-head"><h3>${GAME_NAMES[g]}</h3><button class="link" data-act="game" data-game="${g}" type="button">Open</button></div>

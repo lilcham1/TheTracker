@@ -332,13 +332,13 @@ view("welcome", {
   render() {
     if (!WELCOME.pick) {
       const g = S.boot.prefs.games;
-      WELCOME.pick = { dota: g.dota, deadlock: g.deadlock, cs2: g.cs2, overwatch: g.overwatch, pubg: g.pubg };
+      WELCOME.pick = { dota: g.dota, deadlock: g.deadlock, cs2: g.cs2, overwatch: g.overwatch, pubg: g.pubg, cod: g.cod };
     }
     const p = WELCOME.pick;
     const card = (key, name, what) => `<label class="game-card ${p[key] ? "on" : ""}" data-theme="${key}">
       <input type="checkbox" data-change="welcome-game" data-game="${key}" ${p[key] ? "checked" : ""} />
       <span class="game-card-name display">${name}</span><span class="muted">${what}</span></label>`;
-    const any = p.dota || p.deadlock || p.cs2 || p.overwatch || p.pubg;
+    const any = p.dota || p.deadlock || p.cs2 || p.overwatch || p.pubg || p.cod;
     return `<div class="welcome">
       <img src="brand.png" alt="" width="56" height="56" />
       <h1 class="display">Which games do you play?</h1>
@@ -348,6 +348,7 @@ view("welcome", {
         ${card("deadlock", "Deadlock", "Match history with scoreboards, your heroes, the meta, the ranked leaderboard, and who is streaming each hero live.")}
         ${card("cs2", "Counter-Strike 2", "Live tracking of your own matches, round by round: kills, damage, headshots, weapons, buys and sides, saved as you play.")}
         ${card("overwatch", "Overwatch", "Your career by mode, role and hero from your public profile, what changed session by session, and the hero meta by rank and map.")}
+        ${card("cod", "Call of Duty", "Black Ops 7, Warzone and Modern Warfare 4: a quick log of each match for your stats, goals and reviews, play time, pro settings and who's live on Twitch.")}
         ${card("pubg", "PUBG", "Your last 14 days of matches with placement, kills, damage and your squad, plus this season's stats and ranked tier, from PUBG's official API.")}
       </div>
       <button class="btn" data-act="welcome-done" type="button" ${any ? "" : "disabled"}>Continue</button>

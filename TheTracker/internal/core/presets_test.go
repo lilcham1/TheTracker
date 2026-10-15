@@ -30,6 +30,13 @@ func fakePresetSteam(t *testing.T, a *App, game string) map[string]string {
 	oldPubg := pubgConfigDir
 	pubgConfigDir = func() string { return pubgDir }
 	t.Cleanup(func() { pubgConfigDir = oldPubg })
+	codDir := filepath.Join(root, "Documents", "Call of Duty", "players")
+	oldCod := codPlayersDir
+	codPlayersDir = func() string { return codDir }
+	t.Cleanup(func() { codPlayersDir = oldCod })
+	if game == "cod" {
+		fakeCodFiles(t, codDir)
+	}
 	oldRun := runningPrograms
 	runningPrograms = func() map[uint32]string { return map[uint32]string{} }
 	t.Cleanup(func() { runningPrograms = oldRun })
@@ -70,7 +77,13 @@ func fakePresetSteam(t *testing.T, a *App, game string) map[string]string {
 	contents := map[string]string{}
 	for _, f := range files {
 		var data []byte
-		if p, ok := real[f.Kind]; ok {
+		if game == "cod" {
+			// fakeCodFiles wrote them already.
+			var err error
+			if data, err = os.ReadFile(f.Path); err != nil {
+				t.Fatal(err)
+			}
+		} else if p, ok := real[f.Kind]; ok {
 			var err error
 			if data, err = os.ReadFile(p); err != nil {
 				t.Fatal(err)
@@ -90,7 +103,7 @@ func fakePresetSteam(t *testing.T, a *App, game string) map[string]string {
 }
 
 func TestPresetsApplyThenRestoreExactly(t *testing.T) {
-	for _, game := range []string{"dota", "deadlock", "cs2", "pubg"} {
+	for _, game := range []string{"dota", "deadlock", "cs2", "pubg", "cod"} {
 		for _, layout := range presetLayouts[game] {
 			t.Run(game+"/"+layout.ID, func(t *testing.T) { presetRoundTrip(t, game, layout.ID) })
 		}
@@ -127,7 +140,7 @@ func presetRoundTrip(t *testing.T, game, layout string) {
 					}
 					continue
 				}
-				if !kinds[l.File] || len(l.Path) < 2 {
+				if !kinds[l.File] || len(l.Path) < 2 && game != "cod" {
 					t.Fatalf("bad line %+v", l)
 				}
 			}
@@ -158,7 +171,7 @@ func presetRoundTrip(t *testing.T, game, layout string) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := kvParse(string(now)); err != nil && !strings.HasSuffix(path, ".ini") {
+				if _, err := kvParse(string(now)); err != nil && !strings.HasSuffix(path, ".ini") && !isCodSettingsFile(path) {
 					t.Fatalf("%s after apply: %v", path, err)
 				}
 				if strings.Contains(orig, "\r\n") != strings.Contains(string(now), "\r\n") {
@@ -318,4 +331,83 @@ func TestDeadlockLayouts(t *testing.T) {
 		"KeyBindings/Keys/Item1/Key":        "Q",
 		"KeyBindings/Keys/AbilityMelee/Key": "MOUSE5",
 	})
+}
+
+// fakeCodFiles writes Call of Duty's settings files: with TT_COD_DIR set,
+// copies of the real ones; else lines for every preset setting, holding
+// other values, plus one the game would refuse and one comment.
+func fakeCodFiles(t *testing.T, dir string) {
+	t.Helper()
+	if real := os.Getenv("TT_COD_DIR"); real != "" {
+		filepath.WalkDir(real, func(p string, e os.DirEntry, err error) error {
+			if err != nil || e.IsDir() || !isCodSettingsFile(p) {
+				return nil
+			}
+			rel, _ := filepath.Rel(real, p)
+			raw, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.MkdirAll(filepath.Join(dir, filepath.Dir(rel)), 0o755)
+			os.WriteFile(filepath.Join(dir, rel), raw, 0o644)
+			return nil
+		})
+		return
+	}
+	var sys, play strings.Builder
+	sys.WriteString("1\n\n// Display\n")
+	play.WriteString("1\n\n")
+	seen := map[string]bool{}
+	for _, l := range presetLines("cod", nil, "multiplayer") {
+		if l.Info || seen[l.File+l.Path[0]] {
+			continue
+		}
+		seen[l.File+l.Path[0]] = true
+		line := l.Path[0] + ";1;2 = x\n"
+		switch l.File {
+		case "system":
+			sys.WriteString(line)
+		case "gameplay":
+			play.WriteString(line)
+		}
+	}
+	sys.WriteString("Fov@9;1;2 = 1 // 0 to 5\n")
+	for _, name := range []string{"s.1.0.cod24.txt0", "s.1.0.cod24.txt1", "s.1.0.cod21.txt0"} {
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, name), []byte(sys.String()), 0o644)
+	}
+	os.MkdirAll(filepath.Join(dir, "123"), 0o755)
+	for _, name := range []string{"g.1.0.l.txt0", "g.1.0.l.txt1"} {
+		os.WriteFile(filepath.Join(dir, "123", name), []byte(play.String()), 0o644)
+	}
+}
+
+func TestCodPresetFindsTheNewestFiles(t *testing.T) {
+	a := newTestApp(t)
+	fakePresetSteam(t, a, "cod")
+	files, reasons := a.presetFiles("cod")
+	if len(files) != 4 || len(reasons) != 0 {
+		t.Fatalf("files %+v reasons %v", files, reasons)
+	}
+	if os.Getenv("TT_COD_DIR") == "" && (filepath.Base(files[0].Path) != "s.1.0.cod24.txt0" || filepath.Base(files[1].Path) != "s.1.0.cod24.txt1" || filepath.Base(files[3].Path) != "g.1.0.l.txt1") {
+		t.Fatalf("picked %+v", files)
+	}
+	p, err := a.PresetPreview("cod", "warzone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range p.Lines {
+		if l.Info {
+			continue
+		}
+		if l.Path[0] == "Fov@1" && l.Value != "105.000000" {
+			t.Fatalf("warzone FOV %+v", l)
+		}
+		if !l.Present {
+			t.Fatalf("a setting the file doesn't hold: %+v", l)
+		}
+	}
+	if os.Getenv("TT_COD_DIR") != "" {
+		t.Logf("%d lines, %d would change", len(p.Lines), p.Changes)
+	}
 }

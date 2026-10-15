@@ -93,3 +93,12 @@ func (a *App) owWatch() {
 		}
 	}
 }
+
+func codNotification(s CodSession) Notification {
+	mins := (s.End - s.Start) / 60
+	played := fmt.Sprintf("%d min", mins)
+	if mins >= 60 {
+		played = fmt.Sprintf("%d h %02d min", mins/60, mins%60)
+	}
+	return Notification{Title: "Log your Call of Duty matches", Body: "You played " + played + ". Add each match to keep your stats, goals and reviews.", View: "cod-matches"}
+}

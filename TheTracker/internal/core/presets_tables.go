@@ -36,6 +36,10 @@ var presetLayouts = map[string][]PresetLayout{
 	"pubg": {
 		{"standard", "Standard", "TGLTN, Kickstart", "PUBG's own movement keys, which the pros keep, with scope on hold."},
 	},
+	"cod": {
+		{"multiplayer", "Multiplayer", "Black Ops 7 guides", "Wide FOV 115 for close fights, exclusive fullscreen, Reflex with boost, everything that hides players or costs frames off."},
+		{"warzone", "Warzone", "Warzone guides", "The same, with FOV 105: players at range look bigger, and Warzone fights are long."},
+	},
 	"cs2": {
 		{"standard", "Standard", "Guide-based", "Each grenade on its own key, jump on the wheel, push to talk on V, ping on Mouse 4. Pros' own binds aren't published."},
 	},
@@ -96,6 +100,8 @@ func presetLines(game string, docs map[string]presetDoc, layout string) []Preset
 		cs2Preset(b)
 	case "pubg":
 		pubgPreset(b)
+	case "cod":
+		codPreset(b, presetLayout(game, layout).ID)
 	}
 	return b.lines
 }
@@ -486,4 +492,75 @@ func pubgPreset(b *presetBuilder) {
 	// its defaults, so these are shown, not written.
 	b.info("Movement and combat", "pubg_keys", "Movement and combat keys", "Crouch C, prone Z, jump Space, walk L-Ctrl, sprint L-Shift, peek Q / E, interact F, auto-run =", pros,
 		"PUBG's own defaults, which TGLTN and Kickstart keep. If you changed one, set it back under Settings, Key Bindings in the game.")
+}
+
+// Call of Duty keeps its settings in two plain-text files, each with a twin
+// the game alternates between (codSettingsFiles); every line is written to
+// both. Activision publishes no pro configs for mouse and keyboard, so the
+// values are where the current BO7 and Warzone PC guides agree (Dexerto,
+// Dot Esports, Hone, PCGamesN, GFinity). Names and allowed values come from
+// the game's own files, which say what each setting takes; one this CoD
+// doesn't have is left out by the preview.
+func codPreset(b *presetBuilder, layout string) {
+	const guides = "Dexerto, Dot Esports, Hone"
+	both := func(group, kind, key, value, label, source, note string) {
+		b.add(group, kind, label, value, source, note, key)
+		b.add(group, kind+"2", label, value, source, note, key)
+	}
+	sys := func(group, key, value, label, source, note string) {
+		both(group, "system", key, value, label, source, note)
+	}
+	play := func(group, key, value, label, source, note string) {
+		both(group, "gameplay", key, value, label, source, note)
+	}
+	fov := "115.000000"
+	fovNote := "Guides put mouse and keyboard at 110–120; wide helps the close fights multiplayer is made of."
+	if layout == "warzone" {
+		fov, fovNote = "105.000000", "Warzone guides keep 105–110: players at range stay bigger on screen."
+	}
+	play("Video", "Fov@1", fov, "Field of view "+strings.TrimSuffix(fov, ".000000"), guides, fovNote)
+	play("Video", "ADSFovScaling@0", "true", "ADS field of view affected", guides+", PCGamesN", "Keeps aiming at the same width, so recoil looks smaller.")
+	play("Video", "ThirdPersonFov@1", "90.000000", "Third-person FOV 90", guides, "")
+	sys("Video", "DisplayMode@0", "Fullscreen", "Exclusive fullscreen", guides, "Lowest input lag; borderless adds a frame.")
+	sys("Video", "PreferredDisplayMode@0", "Fullscreen", "Exclusive fullscreen (preferred)", guides, "")
+	sys("Video", "ResolutionMultiplier@0", "100", "Render resolution 100%", guides, "")
+	sys("Video", "DynamicSceneResolution@0", "false", "Dynamic resolution", guides, "It blurs the picture when the frame rate dips.")
+	sys("Video", "VSync@0", "disabled", "V-sync in game", guides, "")
+	sys("Video", "NvidiaReflex@0", "Enabled + boost", "NVIDIA Reflex: on + boost", guides, "AMD cards ignore it.")
+	sys("Video", "EnableVelocityBasedBlur@0", "false", "Motion blur", guides, "")
+	sys("Video", "DepthOfField@0", "false", "Depth of field", guides, "It blurs everything you aren't aiming at.")
+	sys("Video", "TextureFilter@0", "aniso 16x", "Texture filtering 16x", "Hone, Evetech guide", "Sharper floors and walls at almost no cost.")
+	sys("Video", "ShaderQuality@0", "Low", "Shader quality low", guides, "")
+	sys("Video", "ShadowQuality@0", "Low", "Shadows low", guides, "Guides say low or very low; players stay as visible.")
+	sys("Video", "ParticleQuality@0", "low", "Particles low", guides, "")
+	sys("Video", "ScreenSpaceShadowQuality@0", "Off", "Screen-space shadows", guides, "")
+	sys("Video", "SSRQuality@0", "Off", "Screen-space reflections", guides, "")
+	sys("Video", "AmbientLightingQuality@0", "Off", "Ambient lighting", guides, "")
+	sys("Video", "VolumetricQuality@0", "QUALITY_LOW", "Volumetric effects low", guides, "")
+	sys("Video", "Tessellation@0", "0_Off", "Tessellation", guides, "")
+	sys("Video", "WeatherGridVolumesQuality@0", "Off", "Weather effects", guides, "")
+	sys("Video", "DxrMode@0", "Off", "Ray tracing", guides, "")
+	sys("Video", "PersistentDamageLayer@0", "false", "Persistent damage marks", guides, "")
+	sys("Visibility", "BulletImpacts@0", "true", "Bullet impacts", guides, "Shows where your shots land, so you can correct.")
+	sys("Visibility", "ShowBrass@0", "false", "Ejected shell casings", srcMyPick, "Less clutter in front of you.")
+	sys("Audio", "MusicVolume@0", "0.000000", "Music volume 0", guides, "Footsteps stay clear.")
+	play("Audio", "MusicVolume@0", "0.000000", "Music volume 0", guides, "Footsteps stay clear.")
+	play("Audio", "HitMarkersVolume@0", "1.000000", "Hit marker volume full", guides, "")
+	play("Audio", "AltShellShock@0", "true", "Muted tinnitus when stunned", guides, "You keep hearing the fight after a stun or explosion.")
+	sys("Gameplay", "MouseUsesRawInput@0", "true", "Raw mouse input", guides, "")
+	play("Gameplay", "MouseAcceleration@1", "0.000000", "Mouse acceleration off", guides, "The same hand movement always turns the same amount.")
+	play("Gameplay", "MouseFilter@1", "0.000000", "Mouse filter off", guides, "")
+	play("Gameplay", "MouseSmoothing@1", "false", "Mouse smoothing", guides, "")
+	play("Gameplay", "ADSTimingSensitivity@1", "immediately", "ADS sensitivity switches instantly", guides, "")
+	sys("Gameplay", "SkipIntro@1", "true", "Skip the intro video", srcMyPick, "")
+	sys("Gameplay", "SkipSeasonIntroVideo@0", "true", "Skip the season video", srcMyPick, "")
+	sys("Gameplay", "ConfigCloudStorageEnabled@0", "false", "Settings cloud sync", srcMyPick,
+		"Off stops Activision's cloud copy putting older settings back. Untick this row if you play CoD on several PCs.")
+	// Not in the files: the game keeps these with your account or in a
+	// binary keybind file, so they're shown to set in its menu.
+	menu := "Set in the game's menu"
+	b.info(menu, "cod_menu_video", "Graphics menu", "Weapon FOV wide, world and weapon motion blur off, film grain 0, on-demand texture streaming minimal", guides,
+		"Settings, Graphics. Your account keeps these, so they can't be written to a file.")
+	b.info(menu, "cod_menu_keys", "Keys", "Crouch/slide C or Ctrl, tactical Q, lethal Mouse 4, melee V or Mouse 5, ping Mouse 3, auto tactical sprint on", guides,
+		"Settings, Keyboard & Mouse. CoD stores keys in a binary file only its menu writes.")
 }

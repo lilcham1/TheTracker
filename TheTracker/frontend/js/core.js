@@ -351,7 +351,7 @@ function roleGoalsHtml(set, { title = true } = {}) {
       <span class="grow">${esc(label)}${g.format === "time" && g.key !== "alive" ? " by" : ""} <b>${g.key === "deaths" ? `at most ${target}${g.state === "pending" ? " so far" : ""}` : g.key === "place" ? `#${target} or better` : target}</b></span>
       <span class="num">${value}</span></div>`;
   };
-  const head = title ? `<div class="sec-head"><h3>Goals${set.role ? ` · ${esc(set.role)}` : ""}${set.hero ? `, ${esc(set.hero)}` : ""}</h3><span class="muted">${esc(set.level)} ${set.game === "pubg" ? "of your recent matches" : "of players on this hero"}</span></div>` : "";
+  const head = title ? `<div class="sec-head"><h3>Goals${set.role ? ` · ${esc(set.role)}` : ""}${set.hero ? `, ${esc(set.hero)}` : ""}</h3><span class="muted">${esc(set.level)} ${set.game === "pubg" ? "of your recent matches" : set.game === "cod" ? "of your logged matches" : "of players on this hero"}</span></div>` : "";
   return `${head}<div class="goals">${set.goals.map(row).join("")}</div>${set.note ? `<p class="hint">${esc(set.note)}</p>` : ""}`;
 }
 
@@ -419,7 +419,7 @@ function gate(r, loadingText) {
 // ---------- Views and navigation ----------
 
 const VIEWS = {};
-const NAV = { dota: [], deadlock: [], cs2: [], overwatch: [], pubg: [] };
+const NAV = { dota: [], deadlock: [], cs2: [], overwatch: [], pubg: [], cod: [] };
 
 /// Registers a page. `render` returns HTML for the current state; `load`
 /// starts whatever it needs and is called on entry and on Refresh.
@@ -480,8 +480,9 @@ const GAMES = {
   cs2: { label: "CS2", home: "cs-overview" },
   overwatch: { label: "Overwatch", home: "ow-overview" },
   pubg: { label: "PUBG", home: "pg-overview" },
+  cod: { label: "CoD", home: "cod-overview" },
 };
-const LAST_VIEW = { dota: "overview", deadlock: "dl-overview", cs2: "cs-overview", overwatch: "ow-overview", pubg: "pg-overview" };
+const LAST_VIEW = { dota: "overview", deadlock: "dl-overview", cs2: "cs-overview", overwatch: "ow-overview", pubg: "pg-overview", cod: "cod-overview" };
 
 function enabledGames() {
   const g = (S.boot && S.boot.prefs.games) || {};

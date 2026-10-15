@@ -327,6 +327,9 @@ func commands(a *core.App) map[string]command {
 		"deadlock_overview":    in(func(p forceArg) (any, error) { return a.Deadlock.Overview(p.Limit, p.Force) }),
 		"deadlock_live":        none(func() (any, error) { return a.Deadlock.Live() }),
 		"review": in(func(p reviewArg) (any, error) {
+			if p.Game == "cod" {
+				return a.CodReview(p.MatchKey)
+			}
 			if p.Game == "pubg" {
 				return a.PubgReview(p.MatchKey)
 			}
@@ -337,6 +340,9 @@ func commands(a *core.App) map[string]command {
 		}),
 		"coach": in(func(p reviewArg) (any, error) { return a.Coach(p.Game, p.MatchID, p.MatchKey, p.Force) }),
 		"work_on": in(func(p reviewArg) (any, error) {
+			if p.Game == "cod" {
+				return a.CodWorkOn()
+			}
 			if p.Game == "pubg" {
 				return a.PubgWorkOn()
 			}
@@ -410,6 +416,21 @@ func commands(a *core.App) map[string]command {
 			return a.Pubg.Leaderboard(p.Region, p.Mode)
 		}),
 		"pubg_streams": none(func() (any, error) { return a.PubgStreams(), nil }),
+
+		// ----- Call of Duty -----
+		"cod_overview": none(func() (any, error) { return a.Cod.Overview(), nil }),
+		"cod_save":     in(func(m core.CodMatch) (any, error) { return a.Cod.SaveMatch(m) }),
+		"cod_delete": in(func(p struct {
+			ID string `json:"id"`
+		}) (any, error) {
+			return a.Cod.Overview(), a.Cod.DeleteMatch(p.ID)
+		}),
+		"cod_goals": in(func(p struct {
+			Game string `json:"game"`
+		}) (any, error) {
+			return a.CodGoals(p.Game), nil
+		}),
+		"cod_streams": none(func() (any, error) { return a.CodStreams(), nil }),
 		"ow_meta": in(func(p struct {
 			Mode     string `json:"mode"`
 			Region   string `json:"region"`

@@ -886,3 +886,19 @@ kbd { border-radius: 3px; }
 .pg-detail .mini tr.me td { color: var(--accent); }
 .pg-detail p { margin-top: 8px; }
 .pg-rank .pg-of { display: inline; color: var(--muted); font-size: 13px; }
+
+/* Call of Duty: a field green. */
+.shell[data-game="cod"] { --accent: #8cc152; --accent-ink: #0d1a04; --accent-soft: rgba(140, 193, 82, .14); }
+.game-card[data-theme="cod"] { --card: #8cc152; }
+.today-card[data-theme="cod"] { --card: #8cc152; }
+.cod-form { display: flex; flex-direction: column; gap: 12px; }
+.cod-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cod-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.cod-form .field { display: flex; flex-direction: column; gap: 6px; }
+.cod-form .field > span { font-size: 12.5px; color: var(--text-2); }
+.cod-num .input { font-variant-numeric: tabular-nums; }
+.cod-res { min-width: 58px; }
+.cod-res .pg-place { font-size: 16px; }
+.cod-acts { display: flex; gap: 10px; white-space: nowrap; }
+.cod-acts .danger { color: var(--loss); }
+.res.draw { background: var(--panel-2); color: var(--muted); }
