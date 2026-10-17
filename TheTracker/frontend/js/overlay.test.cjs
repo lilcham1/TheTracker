@@ -141,6 +141,19 @@ ov.setRole(null);
 
 console.log("overlay timings ok");
 
+// ---------- Flashing while it counts down ----------
+ov.setSettings(base);
+const counting7 = ov.chipHtml({ kind: "bounty", secs: 6, lead: 7, at: 480 });
+const last3 = ov.chipHtml({ kind: "bounty", secs: 2, lead: 7, at: 480 });
+const nowChip = ov.chipHtml({ kind: "bounty", secs: 0, now: true, lead: 7, at: 480 });
+assert.ok(/class="ring flash"/.test(counting7), "a countdown flashes");
+assert.ok(/class="ring soon flash"/.test(last3), "faster in the last three seconds");
+assert.ok(!nowChip.includes("flash") && nowChip.includes("is-now"), "the moment itself pulses instead");
+ov.setSettings({ ...base, flash: false });
+assert.ok(!ov.chipHtml({ kind: "bounty", secs: 6, lead: 7, at: 480 }).includes("flash"), "switched off in Settings");
+ov.setSettings(base);
+console.log("flash ok");
+
 // ---------- Goal check at 10:00 / 20:00 ----------
 const goalSet = { goals: [
   { key: "lh10", label: "Last hits by 10:00", format: "count", target: 72, at: 600, value: 58 },

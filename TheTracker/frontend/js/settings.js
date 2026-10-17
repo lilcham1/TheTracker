@@ -227,6 +227,7 @@ function overlayHtml() {
         <div class="ov-look-opts">
           <label class="switch"><input type="checkbox" data-change="ov-save" data-key="compact" ${o.compact ? "checked" : ""} /><span>Compact <span class="muted">(icon and seconds only)</span></span></label>
           <label class="switch"><input type="checkbox" data-change="ov-save" data-key="nextUp" ${o.nextUp ? "checked" : ""} /><span>Show what's next <span class="muted">(one quiet line with the next two events)</span></span></label>
+          <label class="switch"><input type="checkbox" data-change="ov-save" data-key="flash" ${o.flash !== false ? "checked" : ""} /><span>Flash a reminder while it counts down <span class="muted">(so you notice it; faster in the last three seconds)</span></span></label>
         </div>
         <div class="ov-preview"><span class="muted">Preview</span><iframe id="ovPreview" src="overlay.html?preview" title="Overlay preview" tabindex="-1"></iframe></div>
       </div>

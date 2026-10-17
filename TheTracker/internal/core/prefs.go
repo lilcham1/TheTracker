@@ -82,8 +82,10 @@ type OverlaySettings struct {
 	// Icon and seconds only, without the words.
 	Compact bool `json:"compact"`
 	// One quiet line naming the next two events.
-	NextUp bool       `json:"nextUp"`
-	Dota   DotaPanels `json:"dota"`
+	NextUp bool `json:"nextUp"`
+	// A reminder glows on and off while it counts down, to catch the eye.
+	Flash bool       `json:"flash"`
+	Dota  DotaPanels `json:"dota"`
 }
 
 type Build struct {
@@ -183,7 +185,7 @@ type NetworkPrefs struct {
 func defaultOverlay() OverlaySettings {
 	return OverlaySettings{
 		Opacity: 0.85, Scale: 1.0, LeadSeconds: 5, Corner: "top-left",
-		ClickThrough: true, Auto: true,
+		ClickThrough: true, Auto: true, Flash: true,
 		Dota: DotaPanels{Runes: true, Bounty: true, Water: true, Power: true, Wisdom: true, Lotus: true, Stacks: true, Until: defaultUntil(), LotusLate: true},
 	}
 }

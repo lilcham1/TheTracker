@@ -79,7 +79,7 @@ const KINDS = {
   },
 };
 
-let settings = { opacity: 0.85, scale: 1, leadSeconds: 5, corner: "top-left", compact: false, nextUp: false, dota: { runes: true, lotus: true, stacks: true } };
+let settings = { opacity: 0.85, scale: 1, leadSeconds: 5, corner: "top-left", compact: false, nextUp: false, flash: true, dota: { runes: true, lotus: true, stacks: true } };
 
 async function call(cmd, args) {
   const resp = await fetch("/api/" + cmd, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(args || {}) });
@@ -200,7 +200,10 @@ const RING = 2 * Math.PI * 29;
 function chipHtml(e, frac = 0) {
   const k = KINDS[e.kind];
   const left = e.now ? 1 : Math.max(0, Math.min(1, (e.secs - frac) / e.lead));
-  const state = e.now ? " is-now" : e.secs <= 3 ? " soon" : "";
+  // Counting down, the ring flashes so it's noticed from the corner of the
+  // eye; faster in the last three seconds.
+  const flash = !e.now && settings.flash !== false ? " flash" : "";
+  const state = (e.now ? " is-now" : e.secs <= 3 ? " soon" : "") + flash;
   const label = e.kind === "stack" ? k.short : labelFor(e);
   const src = artFor(e);
   const art = src && !artFailed.has(src)
@@ -281,6 +284,20 @@ function paint(html) {
   }
   lastShape = shape;
   box.innerHTML = html;
+  syncFlash(box);
+}
+
+/// A redraw replaces the rings, which would restart their flashing every
+/// second and make it stutter. Starting each one part-way in, by the clock,
+/// keeps every flash in step however often it's redrawn.
+function syncFlash(box) {
+  // The animations' own clock, so the phase matches what they run on.
+  const now = (document.timeline && document.timeline.currentTime) || performance.now();
+  box.querySelectorAll(".ring.flash").forEach((ring) => {
+    const cycle = ring.classList.contains("soon") ? 800 : 1600; // there and back
+    const delay = `-${Math.round(now % cycle)}ms`;
+    ring.querySelectorAll(".dial, .name").forEach((el) => (el.style.animationDelay = delay));
+  });
 }
 
 function applySettings() {

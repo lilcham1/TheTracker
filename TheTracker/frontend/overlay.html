@@ -63,11 +63,22 @@
     /* It has happened: the disc fills with its colour and the picture comes
        up to full size and brightness, one pulse, then gone. */
     .ring.is-now .dial { background: radial-gradient(circle, color-mix(in srgb, var(--c) 55%, rgba(10, 12, 17, .9)) 40%, color-mix(in srgb, var(--c) 30%, rgba(10, 12, 17, .94)));
-      animation: pulse .9s ease-out 1; }
+      animation: pulse .65s ease-out 3; }
     .ring.is-now .art { width: 40px; height: 40px; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c) 80%, transparent)); }
     .ring.is-now .art.item { width: 42px; height: 42px; }
     .ring.is-now .art.icon { width: 28px; height: 28px; opacity: 1; color: #0a0c11; }
     .ring.is-now .name { color: var(--c); }
+    /* Counting down: the ring glows on and off in its colour and the name
+       lights up with it, so it's caught from the corner of the eye; twice
+       as fast in the last three seconds. */
+    .ring.flash .dial { animation: flash .8s ease-in-out infinite alternate; }
+    .ring.flash .name { animation: flash-name .8s ease-in-out infinite alternate; }
+    .ring.flash.soon .dial, .ring.flash.soon .name { animation-duration: .4s; }
+    @keyframes flash {
+      from { box-shadow: 0 3px 12px rgba(0, 0, 0, .5), 0 0 0 0 transparent; }
+      to { box-shadow: 0 3px 12px rgba(0, 0, 0, .5), 0 0 0 4px color-mix(in srgb, var(--c) 90%, transparent), 0 0 20px 6px color-mix(in srgb, var(--c) 65%, transparent); }
+    }
+    @keyframes flash-name { from { color: rgba(242, 244, 247, .88); } to { color: var(--c); } }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 75%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
 
     /* At 10:00 and 20:00: how the goals due then went. */
