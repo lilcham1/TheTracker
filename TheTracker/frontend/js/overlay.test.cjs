@@ -152,6 +152,14 @@ assert.ok(!nowChip.includes("flash") && nowChip.includes("is-now"), "the moment 
 ov.setSettings({ ...base, flash: false });
 assert.ok(!ov.chipHtml({ kind: "bounty", secs: 6, lead: 7, at: 480 }).includes("flash"), "switched off in Settings");
 ov.setSettings(base);
+// The "next up" line flashes an event in its last 20 seconds there.
+ov.setSettings({ ...base, nextUp: true });
+const far = ov.frame(t(5, 0)), near = ov.frame(t(5, 35));
+assert.ok(/<span style="--c:[^"]+"><i><\/i>Pull <b>0:52<\/b>/.test(far), "52 s out: no flash");
+assert.ok(/<span class="flash" style="--c:[^"]+"><i><\/i>Pull <b>0:17<\/b>/.test(near), "17 s out: the pull flashes");
+ov.setSettings({ ...base, nextUp: true, flash: false });
+assert.ok(!ov.frame(t(5, 35)).includes('class="flash"'), "switched off");
+ov.setSettings(base);
 console.log("flash ok");
 
 // ---------- Goal check at 10:00 / 20:00 ----------

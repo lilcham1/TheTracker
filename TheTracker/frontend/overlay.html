@@ -92,9 +92,15 @@
     .goalcheck li.missed::before { content: "✗ "; color: #ff6b6b; }
 
     /* Next up: one quiet line, not a reminder. */
-    .next { display: flex; gap: 16px; padding: 6px 12px; border-radius: 8px; background: rgba(10, 12, 17, .8); font-size: 17px; color: rgba(242, 244, 247, .85); white-space: nowrap; }
-    .next span { display: inline-flex; align-items: center; gap: 7px; }
-    .next i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+    .next { display: flex; gap: 10px; padding: 5px 8px; border-radius: 8px; background: rgba(10, 12, 17, .8); font-size: 20px; color: rgba(242, 244, 247, .85); white-space: nowrap; }
+    .next span { display: inline-flex; align-items: center; gap: 8px; padding: 2px 8px; border-radius: 6px; }
+    .next i { width: 11px; height: 11px; border-radius: 50%; background: var(--c); }
+    /* Close to its time: the entry lights up in its colour, on and off. */
+    .next span.flash { animation: next-flash .8s ease-in-out infinite alternate; }
+    @keyframes next-flash {
+      from { background: transparent; box-shadow: none; }
+      to { background: color-mix(in srgb, var(--c) 32%, transparent); box-shadow: 0 0 0 2px var(--c), 0 0 14px 2px color-mix(in srgb, var(--c) 55%, transparent); color: #fff; }
+    }
     .next b { font-weight: 600; color: #f2f4f7; font-variant-numeric: tabular-nums; }
 
     @media (prefers-reduced-motion: reduce) { .ring.is-now .dial { animation: none; } }

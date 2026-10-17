@@ -221,9 +221,14 @@ function ringsHtml(list, frac) {
   return list.length ? `<div class="rings">${list.map((e) => chipHtml(e, frac)).join("")}</div>` : "";
 }
 
+// On the "next up" line, an event this close (game seconds) flashes, until
+// its ring takes over.
+const NEXT_FLASH = 20;
+
 function nextUpHtml(list) {
   if (!list.length) return "";
-  return `<div class="next">${list.map((e) => `<span style="--c:${KINDS[e.kind].color}"><i></i>${KINDS[e.kind].short} <b>${mmss(e.secs)}</b></span>`).join("")}</div>`;
+  const flash = (e) => (settings.flash !== false && e.secs <= NEXT_FLASH ? ` class="flash"` : "");
+  return `<div class="next">${list.map((e) => `<span${flash(e)} style="--c:${KINDS[e.kind].color}"><i></i>${KINDS[e.kind].short} <b>${mmss(e.secs)}</b></span>`).join("")}</div>`;
 }
 
 /// Everything drawn for a clock reading (fractional seconds allowed).
@@ -298,6 +303,7 @@ function syncFlash(box) {
     const delay = `-${Math.round(now % cycle)}ms`;
     ring.querySelectorAll(".dial, .name").forEach((el) => (el.style.animationDelay = delay));
   });
+  box.querySelectorAll(".next span.flash").forEach((el) => (el.style.animationDelay = `-${Math.round(now % 1600)}ms`));
 }
 
 function applySettings() {
@@ -361,7 +367,7 @@ function paintPreview() {
     { kind: "power", secs: 2, lead: 5, at: 480 },
     { kind: "stack", secs: 5, lead: STACK_LEAD, at: 472 },
   ];
-  const next = [{ kind: "lotus", secs: 83 }, { kind: "wisdom", secs: 362 }];
+  const next = [{ kind: "lotus", secs: 15 }, { kind: "wisdom", secs: 362 }];
   paint(slotsHtml(settings.nextUp ? nextUpHtml(next) : "", ringsHtml(sample, 0.4), ""));
 }
 
