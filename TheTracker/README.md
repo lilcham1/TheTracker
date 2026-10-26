@@ -18,8 +18,9 @@ game's pages in a row under them and a running match shown at its end.
   is worked out each match.
 - **Overlay** – a small transparent window over the game that counts down to
   rune spawns, lotuses and the stack pull, follows your role, and shows only
-  while Dota is in front. While you're dead, a **Why you died** card gives the
-  reasons it saw (a saving item ready, no TP, gold unspent, a repeat death…).
+  while Dota is in front. Each reminder flashes in its colour as it counts
+  down, and the "next up" line lights up in its last 20 seconds (Settings,
+  Dota 2, Look can switch the flashing off).
 - **Match review** – each match read from OpenDota: laning against hero
   benchmarks, every death with the fight it was part of and where it happened,
   time dead, fight participation, vision and the farm race against your lane
