@@ -128,7 +128,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (typing(e.target) || !S.boot || !S.boot.prefs.games.chosen) return;
-  if (e.ctrlKey && /^[1-6]$/.test(e.key)) {
+  if (e.ctrlKey && /^[1-7]$/.test(e.key)) {
     const g = enabledGames()[Number(e.key) - 1];
     if (g) {
       e.preventDefault();

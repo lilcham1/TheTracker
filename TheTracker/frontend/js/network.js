@@ -31,7 +31,7 @@ function netHtml(s, { compact = false } = {}) {
     <div class="net-head"><span class="check-dot ${tone}"></span><b>${word}</b><span class="muted"> ${esc(s.detail || "")}</span>${s.game && !compact ? `<span class="muted"> · while you play ${esc(s.game)}</span>` : ""}</div>
     <div class="net-grid">
       ${pingCell("Your router", s.router, s.routerIp)}
-      ${pingCell(s.game === "Overwatch" ? "Internet (Valve server)" : "Valve", s.valve, s.valveWhere)}
+      ${pingCell(s.game === "Overwatch" || s.game === "Valorant" ? "Internet (Valve server)" : "Valve", s.valve, s.valveWhere)}
       <div class="net-cell"><div class="stat-label">Line use now</div><div class="display">${s.downMbps.toFixed(1)} <span class="muted small">down</span></div><div class="muted">${s.upMbps.toFixed(1)} Mbit/s up</div></div>
     </div>
     ${!compact && s.apps.length ? `<p class="hint">Programs online now (open connections, not how much they use): ${s.apps.map((a) => `<b>${esc(a.name)}</b> ${a.connections}`).join(", ")}.</p>` : ""}
@@ -73,7 +73,7 @@ function gameModeHtml() {
     : `<span class="check-dot idle"></span><b>Off</b>`;
   return `<section class="set">
       <h3>Game mode</h3>
-      <p class="muted">From the moment a game is open (Dota 2, Deadlock, CS2, Overwatch, PUBG or Call of Duty), slows other programs' <b>uploads</b> so the game's packets don't wait behind them, and marks your games' traffic as priority. Undone when you stop playing (or, kept on all the time, when you close TheTracker), and Windows clears it at every restart anyway. Windows can't slow downloads from your PC (Steam already pauses its own while you play), and the priority mark only helps if your router honours it. Discord and voice apps are never touched.</p>
+      <p class="muted">From the moment a game is open (Dota 2, Deadlock, CS2, Overwatch, PUBG, Call of Duty or Valorant), slows other programs' <b>uploads</b> so the game's packets don't wait behind them, and marks your games' traffic as priority. Undone when you stop playing (or, kept on all the time, when you close TheTracker), and Windows clears it at every restart anyway. Windows can't slow downloads from your PC (Steam already pauses its own while you play), and the priority mark only helps if your router honours it. Discord and voice apps are never touched.</p>
       <div class="net-head">${stateLine}</div>
       ${set ? `<label class="switch"><input type="checkbox" data-change="gm-always" ${st.always ? "checked" : ""} ${GM.busy ? "disabled" : ""} /><span>Keep it on all the time <span class="muted">(off: only while a game is open. On, the programs below stay slowed, browser uploads included, until you close TheTracker)</span></span></label>` : ""}
       <div class="gm-cats">${GM.data.catalogue.map((c) => `<label class="switch"><input type="checkbox" data-change="gm-cat" data-cat="${c.id}" ${GM.picked.has(c.id) ? "checked" : ""} ${GM.busy ? "disabled" : ""} />

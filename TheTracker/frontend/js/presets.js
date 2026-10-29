@@ -29,9 +29,10 @@ async function loadPreset(game, force = false) {
 
 const PRESET_GROUPS = ["Video", "Audio", "Gameplay", "Visibility"];
 const PRESET_GROUP_LABEL = { Video: "Video", Audio: "Audio", Gameplay: "Gameplay", Visibility: "Visibility & accessibility" };
-const PRESET_GAME = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2", pubg: "PUBG", cod: "Call of Duty" };
-const PRESET_VIEW = { dota: "hotkeys", deadlock: "dl-hotkeys", cs2: "cs-hotkeys", pubg: "pg-pro", cod: "cod-pro" };
+const PRESET_GAME = { dota: "Dota 2", deadlock: "Deadlock", cs2: "Counter-Strike 2", pubg: "PUBG", cod: "Call of Duty", valorant: "Valorant" };
+const PRESET_VIEW = { dota: "hotkeys", deadlock: "dl-hotkeys", cs2: "cs-hotkeys", pubg: "pg-pro", cod: "cod-pro", valorant: "val-pro" };
 const PRESET_INTRO = {
+  valorant: "Riot keeps your sensitivity, crosshair, graphics and keys on your account, so only the display settings are written here: fullscreen, V-sync and dynamic resolution off, no frame limit. Each pro's crosshair code is below to copy, with their sensitivity and graphics to set in the game.",
   cod: "Exclusive fullscreen at 100% render resolution, FOV 115 for multiplayer or 105 for Warzone with ADS FOV affected, NVIDIA Reflex with boost, motion blur, depth of field and every effect that hides players off, bullet impacts on, raw mouse input without acceleration. A few settings only the game's menu can set are listed at the bottom.",
   pubg: "Fullscreen at render scale 100, FOV 95 (the most common pro FOV), every quality setting very low except textures (medium) and view distance (low), sharpen on, V-sync, motion blur and smoothing off, legacy gun sounds with HRTF, scope on hold, recommendations off. Pros keep PUBG's default movement keys.",
   dota: "Borderless at native resolution, effects off, textures high, camera 6000, zoom and shake off, Stop-to-cancel teleports, music off, Yatoro's minimap. Pros don't share one keyboard layout: pick one below.",
@@ -39,6 +40,7 @@ const PRESET_INTRO = {
   cs2: "Fullscreen, shadows high, detail low, HDR quality, the shared 68 / 2.5 / 0 / -1.5 viewmodel, donk's crosshair, the centred rotating radar every pro keeps, stingers off. Binds follow the prosettings.net guide.",
 };
 const PRESET_SOURCES = {
+  valorant: "Sources: prosettings.net player pages for TenZ (T1), aspas (MIBR) and Demon1 (Team Envy), and its Valorant pro list.",
   cod: "Activision publishes no pro configs for mouse and keyboard, so these are where the current Black Ops 7 and Warzone PC guides agree: Dexerto, Dot Esports, Hone, PCGamesN, GFinity. Setting names and allowed values are read from your own files.",
   pubg: "Sources: prosettings.net PUBG guide (68 pros) and player pages (TGLTN, Kickstart); vortexgaming.io pro settings round-up.",
   dota: "Sources: prosettings.net, gamingcfg.com (Yatoro, miCKe, Puppey, Topson, Miracle-), hawk.live, winio.ai, cyberscore.live, esports.gg.",
@@ -153,7 +155,10 @@ const modeWord = (v) => (v === "1" ? "quick cast" : v === "0" ? "normal cast" : 
 function hotkeyRowHtml(game, action, lines, p) {
   if (lines[0].info) {
     const l = lines[0];
-    return `<div class="hk-row info"><span class="hk-label">${esc(l.label)}${srcChip(l.source)}<span class="muted small"> ${esc(l.note || "")}</span></span><span class="hk-keys">${esc(l.value)}</span></div>`;
+    const copy = l.copy ? ` <button class="btn ghost small" data-act="copy-text" data-text="${esc(l.copy)}" type="button">Copy code</button>` : "";
+    // A long value (a crosshair, a list of settings) sits under its label.
+    const long = (l.value || "").length > 40 ? " long" : "";
+    return `<div class="hk-row info${long}"><span class="hk-label">${esc(l.label)}${srcChip(l.source)}<span class="muted small"> ${esc(l.note || "")}</span></span><span class="hk-keys">${esc(l.value)}${copy}</span></div>`;
   }
   const changed = lines.some((l) => l.changed);
   const on = lines.every((l) => !p.skip.has(l.id));
@@ -384,4 +389,20 @@ act("preset-restore", (el) => {
       rerender();
     },
   });
+});
+
+/// Copies text (a crosshair code) to the clipboard.
+act("copy-text", async (el) => {
+  const text = el.dataset.text || "";
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const t = document.createElement("textarea");
+    t.value = text;
+    document.body.appendChild(t);
+    t.select();
+    document.execCommand("copy");
+    t.remove();
+  }
+  toast("Copied. In Valorant: Settings, Crosshair, the import button, then paste.");
 });

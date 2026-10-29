@@ -30,6 +30,10 @@ func fakePresetSteam(t *testing.T, a *App, game string) map[string]string {
 	oldPubg := pubgConfigDir
 	pubgConfigDir = func() string { return pubgDir }
 	t.Cleanup(func() { pubgConfigDir = oldPubg })
+	valDir := filepath.Join(root, "LocalAppData", "VALORANT", "Saved", "Config")
+	oldVal := valConfigDir
+	valConfigDir = func() string { return valDir }
+	t.Cleanup(func() { valConfigDir = oldVal })
 	codDir := filepath.Join(root, "Documents", "Call of Duty", "players")
 	oldCod := codPlayersDir
 	codPlayersDir = func() string { return codDir }
@@ -52,6 +56,9 @@ func fakePresetSteam(t *testing.T, a *App, game string) map[string]string {
 			"convars":      "\"config\"\r\n{\r\n\t\"convars\"\r\n\t{\r\n\t\t\"citadel_camera_hero_fov\"\t\t\"90\"\r\n\t}\r\n}\r\n",
 			"cloudconvars": "\"config\"\r\n{\r\n\t\"convars\"\r\n\t{\r\n\t\t\"citadel_camera_hero_fov\"\t\t\"80\"\r\n\t}\r\n}\r\n",
 			"keys":         "\"KeyBindings\"\r\n{\r\n\t\"Keys\"\r\n\t{\r\n\t\t\"Item1\"\r\n\t\t{\r\n\t\t\t\"Key\"\t\t\"MOUSE5\"\r\n\t\t\t\"Key2\"\t\t\"NONE\"\r\n\t\t}\r\n\t}\r\n}\r\n",
+		},
+		"valorant": {
+			"settings": "[/Script/ShooterGame.ShooterGameUserSettings]\r\nDefaultMonitorIndex=0\r\nbUseVSync=True\r\nbUseDynamicResolution=False\r\nLastConfirmedFullscreenMode=1\r\nPreferredFullscreenMode=1\r\nFrameRateLimit=144.000000\r\nFullscreenMode=1\r\n\r\n[/Script/Engine.GameUserSettings]\r\nbUseDesiredScreenHeight=False\r\n",
 		},
 		"pubg": {
 			"settings": "[/Script/Engine.GameUserSettings]\r\nbUseDesiredScreenHeight=False\r\n\r\n[ScalabilityGroups]\r\nsg.ShadowQuality=2\r\nsg.TextureQuality=1\r\n\r\n[/Script/TslGame.TslGameUserSettings]\r\nFpsCameraFov=103.000000\r\nbSharpen=False\r\nOutgameUserDatas=(Key=\"X\",Value=\"stays\")\r\nFullscreenMode=1\r\n",
@@ -103,7 +110,7 @@ func fakePresetSteam(t *testing.T, a *App, game string) map[string]string {
 }
 
 func TestPresetsApplyThenRestoreExactly(t *testing.T) {
-	for _, game := range []string{"dota", "deadlock", "cs2", "pubg", "cod"} {
+	for _, game := range []string{"dota", "deadlock", "cs2", "pubg", "cod", "valorant"} {
 		for _, layout := range presetLayouts[game] {
 			t.Run(game+"/"+layout.ID, func(t *testing.T) { presetRoundTrip(t, game, layout.ID) })
 		}
@@ -119,7 +126,12 @@ func presetRoundTrip(t *testing.T, game, layout string) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !p.Installed || p.Running || !p.CanApply || p.Changes == 0 || len(p.Lines) < 25 {
+			// Valorant keeps most settings on the Riot account: fewer lines.
+			minLines := 25
+			if game == "valorant" {
+				minLines = 8
+			}
+			if !p.Installed || p.Running || !p.CanApply || p.Changes == 0 || len(p.Lines) < minLines {
 				t.Fatalf("preview: installed %v running %v canApply %v changes %d lines %d reasons %v", p.Installed, p.Running, p.CanApply, p.Changes, len(p.Lines), p.Reasons)
 			}
 			// Every line names a group and a file that exists.

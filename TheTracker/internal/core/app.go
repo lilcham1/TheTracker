@@ -100,6 +100,7 @@ type App struct {
 	Ow       *Overwatch
 	Pubg     *Pubg
 	Cod      *Cod
+	Valorant *Valorant
 	Cloud    *Cloud
 	Updater  *Updater
 	// Ping, jitter and line use while a match runs.
@@ -136,6 +137,7 @@ func NewApp(dataDir string, shell Shell) *App {
 	a.Cloud = NewCloud(store)
 	a.Pubg = NewPubg(store, a.Cloud)
 	a.Cod = NewCod(store)
+	a.Valorant = NewValorant(store, a.Cloud)
 	a.Cod.OnSessionEnd = func(s CodSession) { a.notify(codNotification(s)) }
 	a.Updater = NewUpdater()
 	a.Net = NewNetCheck(store)
@@ -209,7 +211,7 @@ func (a *App) applyGames(g Games) {
 // SetGames records which games the player uses and applies it at once. At
 // least one stays on: an app with no game has nothing to show.
 func (a *App) SetGames(g Games) (Prefs, error) {
-	if !g.Dota && !g.Deadlock && !g.CS2 && !g.Overwatch && !g.PUBG && !g.COD {
+	if !g.Dota && !g.Deadlock && !g.CS2 && !g.Overwatch && !g.PUBG && !g.COD && !g.Valorant {
 		return a.Store.LoadPrefs(), errors.New("Keep at least one game switched on.")
 	}
 	g.Chosen = true
@@ -225,7 +227,7 @@ func (a *App) Stop() {
 }
 
 // netWatcher measures the connection, and runs Game mode, while the player
-// is in a game: Dota 2, Deadlock, CS2, Overwatch, PUBG or Call of Duty open.
+// is in a game: Dota 2, Deadlock, CS2, Overwatch, PUBG, Call of Duty or Valorant open.
 // With "always check" on, the connection is measured the whole time.
 func (a *App) netWatcher() {
 	wasLive, gmOn := false, false

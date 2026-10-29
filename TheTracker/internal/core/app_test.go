@@ -202,7 +202,9 @@ type fakeConvex struct {
 	twitch map[string]any
 	// What pubg:get answers, by path; nil means the deployment predates it.
 	pubg map[string]any
-	srv  *httptest.Server
+	// What valorant:get answers, by path.
+	valorant map[string]any
+	srv      *httptest.Server
 }
 
 func newFakeConvex(t *testing.T) *fakeConvex {
@@ -214,7 +216,7 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 		f.mu.Lock()
 		f.calls = append(f.calls, body)
 		f.tokens = append(f.tokens, r.Header.Get("Authorization"))
-		expire, steamMode, twitch, pubg := f.expireJWT, f.steamMode, f.twitch, f.pubg
+		expire, steamMode, twitch, pubg, valorant := f.expireJWT, f.steamMode, f.twitch, f.pubg, f.valorant
 		f.mu.Unlock()
 
 		reply := func(v any) { json.NewEncoder(w).Encode(map[string]any{"status": "success", "value": v}) }
@@ -255,6 +257,17 @@ func newFakeConvex(t *testing.T) *fakeConvex {
 			}
 			path, _ := args["path"].(string)
 			if v, ok := pubg[path]; ok {
+				reply(map[string]any{"ok": true, "data": v})
+				return
+			}
+			reply(map[string]any{"ok": false, "reason": "not_found"})
+		case "valorant:get":
+			if valorant == nil {
+				fail("[Request ID: 1] Server Error")
+				return
+			}
+			path, _ := args["path"].(string)
+			if v, ok := valorant[path]; ok {
 				reply(map[string]any{"ok": true, "data": v})
 				return
 			}

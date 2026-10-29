@@ -911,3 +911,17 @@ kbd { border-radius: 3px; }
 .cod-q-num .input { width: 58px; height: 32px; padding: 0 8px; font-variant-numeric: tabular-nums; }
 .cod-q-session { flex-basis: 100%; }
 .cmdbar .top-actions { flex-wrap: nowrap; }
+
+/* Valorant: its own red. */
+.shell[data-game="valorant"] { --accent: #ff4655; --accent-ink: #1f0306; --accent-soft: rgba(255, 70, 85, .14); }
+.game-card[data-theme="valorant"] { --card: #ff4655; }
+.today-card[data-theme="valorant"] { --card: #ff4655; }
+.val-agent { width: 34px; height: 34px; border-radius: 4px; object-fit: cover; vertical-align: middle; background: var(--panel-2); }
+.val-agent.small { width: 22px; height: 22px; }
+.val-res { min-width: 40px; }
+.val-rank { display: flex; align-items: center; gap: 12px; text-align: left; }
+.val-rank img { width: 56px; height: 56px; }
+
+/* A pro setting written out in full sits under its name, full width. */
+.hk-row.info.long { flex-direction: column; gap: 4px; }
+.hk-row.info.long .hk-keys { max-width: none; text-align: left; color: var(--text); flex-wrap: wrap; }

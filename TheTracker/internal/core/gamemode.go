@@ -389,7 +389,7 @@ func GameModeCatalogue() []GameModeCategory {
 	return out
 }
 
-var priorityGameNames = map[string]string{"dota2.exe": "Dota 2", "project8.exe": "Deadlock", "cs2.exe": "CS2", "Overwatch.exe": "Overwatch", "TslGame.exe": "PUBG", "cod.exe": "Call of Duty"}
+var priorityGameNames = map[string]string{"dota2.exe": "Dota 2", "project8.exe": "Deadlock", "cs2.exe": "CS2", "Overwatch.exe": "Overwatch", "TslGame.exe": "PUBG", "cod.exe": "Call of Duty", "VALORANT-Win64-Shipping.exe": "Valorant"}
 
 // missingPriorityGames names the games a setup made with apps doesn't
 // prioritise. A setup from before the list was saved counts as having the

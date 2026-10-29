@@ -41,6 +41,7 @@ const CATEGORIES: Record<string, string[]> = {
   deadlock: ["Deadlock"],
   dota: ["Dota 2"],
   pubg: ["PUBG: BATTLEGROUNDS"],
+  valorant: ["VALORANT"],
   cod: ["Call of Duty: Black Ops 7", "Call of Duty: Warzone", "Call of Duty: Modern Warfare 4", "Call of Duty: Modern Warfare IV"],
 };
 

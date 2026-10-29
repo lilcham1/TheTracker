@@ -130,6 +130,7 @@ type Games struct {
 	Overwatch bool `json:"overwatch"`
 	PUBG      bool `json:"pubg"`
 	COD       bool `json:"cod"`
+	Valorant  bool `json:"valorant"`
 	// False until the player has answered the first-run question.
 	Chosen bool `json:"chosen"`
 }
@@ -164,6 +165,7 @@ type CoachPrefs struct {
 	DeadlockLevel string `json:"deadlockLevel"`
 	PubgLevel     string `json:"pubgLevel"`
 	CodLevel      string `json:"codLevel"`
+	ValLevel      string `json:"valLevel"`
 	// A short goal check on the overlay at 10:00 and 20:00.
 	GoalCheck bool `json:"goalCheck"`
 	// The AI coach write-up after each reviewed match (needs the key on the
@@ -321,7 +323,7 @@ func (s *Store) SaveCoach(c CoachPrefs) Prefs {
 	if c.DotaMode != "own" {
 		c.DotaMode = "role"
 	}
-	for _, l := range []*string{&c.DotaLevel, &c.DeadlockLevel, &c.PubgLevel, &c.CodLevel} {
+	for _, l := range []*string{&c.DotaLevel, &c.DeadlockLevel, &c.PubgLevel, &c.CodLevel, &c.ValLevel} {
 		if _, ok := goalLevels[*l]; !ok {
 			*l = "push"
 		}

@@ -36,6 +36,11 @@ var presetLayouts = map[string][]PresetLayout{
 	"pubg": {
 		{"standard", "Standard", "TGLTN, Kickstart", "PUBG's own movement keys, which the pros keep, with scope on hold."},
 	},
+	"valorant": {
+		{"tenz", "TenZ", "T1", "Windowed fullscreen like TenZ, with his cyan two-pixel cross. Sensitivity 0.14 at 1600 DPI (eDPI 224)."},
+		{"aspas", "aspas", "MIBR", "Exclusive fullscreen, aspas's white four-pixel cross. Sensitivity 0.4 at 800 DPI (eDPI 320)."},
+		{"demon1", "Demon1", "Team Envy", "Exclusive fullscreen, Demon1's small cross with outlines. Sensitivity 0.1 at 1600 DPI (eDPI 160)."},
+	},
 	"cod": {
 		{"multiplayer", "Multiplayer", "Black Ops 7 guides", "Wide FOV 115 for close fights, exclusive fullscreen, Reflex with boost, everything that hides players or costs frames off."},
 		{"warzone", "Warzone", "Warzone guides", "The same, with FOV 105: players at range look bigger, and Warzone fights are long."},
@@ -85,6 +90,12 @@ func (b *presetBuilder) info(section, action, label, value, source, note string)
 	b.lines = append(b.lines, PresetLine{ID: b.game + ".info." + action, Group: "Hotkeys", Label: label, Value: value, Action: action, Section: section, Source: source, Note: note, Info: true})
 }
 
+// infoCopy is an info row with text to copy, such as a crosshair code.
+func (b *presetBuilder) infoCopy(section, action, label, value, source, note, copyText string) {
+	b.info(section, action, label, value, source, note)
+	b.lines[len(b.lines)-1].Copy = copyText
+}
+
 // presetLines builds the lines for a game and hotkey layout; docs (by file
 // kind) let a few lines follow what the player's file holds (Dota's
 // per-item cast modes).
@@ -102,6 +113,8 @@ func presetLines(game string, docs map[string]presetDoc, layout string) []Preset
 		pubgPreset(b)
 	case "cod":
 		codPreset(b, presetLayout(game, layout).ID)
+	case "valorant":
+		valorantPreset(b, presetLayout(game, layout).ID)
 	}
 	return b.lines
 }
@@ -558,9 +571,54 @@ func codPreset(b *presetBuilder, layout string) {
 		"Off stops Activision's cloud copy putting older settings back. Untick this row if you play CoD on several PCs.")
 	// Not in the files: the game keeps these with your account or in a
 	// binary keybind file, so they're shown to set in its menu.
-	menu := "Set in the game's menu"
+	menu := "Graphics and keys"
 	b.info(menu, "cod_menu_video", "Graphics menu", "Weapon FOV wide, world and weapon motion blur off, film grain 0, on-demand texture streaming minimal", guides,
 		"Settings, Graphics. Your account keeps these, so they can't be written to a file.")
 	b.info(menu, "cod_menu_keys", "Keys", "Crouch/slide C or Ctrl, tactical Q, lethal Mouse 4, melee V or Mouse 5, ping Mouse 3, auto tactical sprint on", guides,
 		"Settings, Keyboard & Mouse. CoD stores keys in a binary file only its menu writes.")
+}
+
+// Valorant keeps sensitivity, crosshair, graphics and keys on the Riot
+// account; only display settings are in a local file
+// (Saved\Config\WindowsClient\GameUserSettings.ini). Those are written; the
+// rest is shown to set in the game, with each pro's crosshair code to paste
+// (Settings, Crosshair, Import). Sources: prosettings.net player pages for
+// TenZ (T1), aspas (MIBR) and Demon1 (Team Envy), and its pro list (most
+// play 800 DPI, scoped sensitivity 1, everything on low).
+func valorantPreset(b *presetBuilder, layout string) {
+	const ini = "/Script/ShooterGame.ShooterGameUserSettings"
+	set := func(key, value, label, source, note string) {
+		b.add("Video", "settings", label, value, source, note, ini, key)
+	}
+	pro := map[string]string{"tenz": "TenZ", "aspas": "aspas", "demon1": "Demon1"}[layout]
+	mode, modeLabel, modeNote := "0", "Fullscreen", "Lowest input lag; aspas and Demon1 play it."
+	if layout == "tenz" {
+		mode, modeLabel, modeNote = "1", "Windowed fullscreen", "TenZ plays windowed fullscreen; switching apps is instant."
+	}
+	set("FullscreenMode", mode, modeLabel, pro, modeNote)
+	set("PreferredFullscreenMode", mode, modeLabel+" (preferred)", pro, "")
+	set("LastConfirmedFullscreenMode", mode, modeLabel+" (confirmed)", pro, "")
+	set("bUseVSync", "False", "V-sync", "TenZ, aspas, Demon1", "")
+	set("bUseDynamicResolution", "False", "Dynamic resolution", "prosettings.net guide", "It blurs the picture when the frame rate dips.")
+	set("FrameRateLimit", "0.000000", "No frame rate limit", "prosettings.net guide", "Set a menu limit in the game if your GPU runs hot.")
+
+	const section = "Crosshair, sensitivity and graphics"
+	crosshair := map[string][2]string{
+		"tenz":   {"0;s;1;P;c;5;o;0;f;0;0l;2;0v;2;0g;1;0o;1;0a;1;0f;0;1b;0", "Cyan, inner lines 2 long, 2 thick, offset 1, no dot, no outer lines"},
+		"aspas":  {"0;P;h;0;0l;4;0o;0;0a;1;0f;0;1b;0", "White, inner lines 4 long, 2 thick, offset 0, no outlines, no dot"},
+		"demon1": {"0;p;0;s;1;P;o;1;f;0;0t;1;0l;3;0o;2;0a;1;0f;0;1b;0;A;o;1;0t;1;0l;3;0o;2;0a;1;0f;0;1b;0;S;c;1;o;1", "Outlined, inner lines 3 long, 1 thick, offset 2, no dot"},
+	}[layout]
+	b.infoCopy(section, "val_crosshair", pro+"'s crosshair", crosshair[1], pro+" (prosettings.net)",
+		"In Valorant: Settings, Crosshair, the import button, then paste the code.", crosshair[0])
+	sens := map[string]string{
+		"tenz":   "1600 DPI, 0.14 in game (eDPI 224), scoped 1, raw input buffer on",
+		"aspas":  "800 DPI, 0.4 in game (eDPI 320), scoped 1, raw input buffer on",
+		"demon1": "1600 DPI, 0.1 in game (eDPI 160), scoped 1, raw input buffer on",
+	}[layout]
+	b.info(section, "val_sens", "Sensitivity", sens, pro+" (prosettings.net)",
+		"Most pros sit between 160 and 320 eDPI (DPI × in-game sensitivity). Keep your own if it already feels right.")
+	b.info(section, "val_graphics", "Graphics", "Multithreaded rendering on; material, texture, detail and UI quality low; vignette, improve clarity, distortion and cast shadows off; anti-aliasing MSAA 2x; anisotropic filtering 2x–4x; NVIDIA Reflex on + boost", "TenZ, aspas, Demon1",
+		"Settings, Video, Graphics Quality. Riot keeps these with your account.")
+	b.info(section, "val_keys", "Keys", "Valorant's defaults: abilities C Q E X, walk Shift, crouch Ctrl, jump Space (most pros also bind jump to the wheel)", "prosettings.net guide",
+		"Settings, Controls. Riot keeps your keys with your account.")
 }

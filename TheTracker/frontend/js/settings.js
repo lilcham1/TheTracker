@@ -8,7 +8,7 @@ const SET = {
 // One settings page for the whole app: what applies everywhere, then a
 // section for each game that is switched on.
 const SETTINGS_TABS = [["general", "General"], ["network", "Connection"], ["account", "Account"], ["about", "About and updates"]];
-const SETTINGS_GAME_TABS = [["dota", "Dota 2"], ["deadlock", "Deadlock"], ["cs2", "Counter-Strike 2"], ["overwatch", "Overwatch"], ["pubg", "PUBG"], ["cod", "Call of Duty"]];
+const SETTINGS_GAME_TABS = [["dota", "Dota 2"], ["deadlock", "Deadlock"], ["cs2", "Counter-Strike 2"], ["overwatch", "Overwatch"], ["pubg", "PUBG"], ["cod", "Call of Duty"], ["valorant", "Valorant"]];
 // Older links name the tab that used to hold the overlay.
 const SETTINGS_ALIASES = { overlay: "dota" };
 
@@ -89,6 +89,7 @@ function generalHtml() {
       ${gameRow("cs2", "Counter-Strike 2", "live tracking of your own matches")}
       ${gameRow("overwatch", "Overwatch", "career stats and progress from your public profile")}
       ${gameRow("pubg", "PUBG", "matches, placements and season stats from PUBG's official API")}
+      ${gameRow("valorant", "Valorant", "matches with full scoreboards, rank and reviews through HenrikDev's API")}
       ${gameRow("cod", "Call of Duty", "Black Ops 7, Warzone and MW4: your logged matches, play time and pro settings")}
     </section>
     <section class="set">
@@ -469,7 +470,7 @@ view("settings", {
     const tab = settingsTab();
     const body = {
       general: generalHtml, network: networkHtml, account: accountHtml, about: aboutHtml,
-      dota: dotaSettingsHtml, deadlock: deadlockSettingsHtml, cs2: cs2SettingsHtml, overwatch: overwatchSettingsHtml, pubg: pgSettingsHtml, cod: codSettingsHtml,
+      dota: dotaSettingsHtml, deadlock: deadlockSettingsHtml, cs2: cs2SettingsHtml, overwatch: overwatchSettingsHtml, pubg: pgSettingsHtml, cod: codSettingsHtml, valorant: valSettingsHtml,
     }[tab] || generalHtml;
     const tabBtn = ([k, l]) => `<button class="tab ${tab === k ? "on" : ""}" data-act="settings-tab" data-tab="${k}" role="tab" aria-selected="${tab === k}" type="button">${l}</button>`;
     const games = SETTINGS_GAME_TABS.filter(([k]) => S.boot.prefs.games[k]);

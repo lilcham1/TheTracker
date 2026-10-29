@@ -74,7 +74,7 @@ type CoachResult struct {
 	Error  string     `json:"error,omitempty"`
 }
 
-const coachSystem = `You are a coach for a player of Dota 2, Deadlock, PUBG: Battlegrounds and Call of Duty, reading one of their matches between games.
+const coachSystem = `You are a coach for a player of Dota 2, Deadlock, PUBG: Battlegrounds, Call of Duty and VALORANT, reading one of their matches between games.
 You get the facts an analyzer established from the public match data and from what the player's own client reported: the review points, each death with who killed them, where, the fight it was part of and how the game stood, the role goals, net worth curves, time dead, wards.
 For Call of Duty there is no match data: the facts are what the player logged themselves (mode, result, kills, deaths, an optional note) compared with their own log and play sessions, so coach their habits and decisions from those figures and their note, and give no death notes.
 Rules:
@@ -108,7 +108,7 @@ var coachSchema = map[string]any{
 // coachAsk sends one review to the model; swapped in tests.
 var coachAsk = func(ctx context.Context, game string, facts map[string]any) (CoachNote, error) {
 	raw, _ := json.Marshal(facts)
-	name := map[string]string{"dota": "Dota 2", "deadlock": "Deadlock", "pubg": "PUBG: Battlegrounds", "cod": "Call of Duty"}[game]
+	name := map[string]string{"dota": "Dota 2", "deadlock": "Deadlock", "pubg": "PUBG: Battlegrounds", "cod": "Call of Duty", "valorant": "VALORANT"}[game]
 	bin := claudeCodePath()
 	if bin == "" {
 		return CoachNote{}, errNoClaudeCode
@@ -248,6 +248,8 @@ func (a *App) Coach(game string, matchID uint64, matchKey string, force bool) (C
 		review, err = a.PubgReview(matchKey)
 	case "cod":
 		review, err = a.CodReview(matchKey)
+	case "valorant":
+		review, err = a.ValorantReview(matchKey)
 	case "deadlock":
 		review, err = a.DeadlockReview(matchID)
 	default:
@@ -301,7 +303,7 @@ func coachFacts(r MatchReview) map[string]any {
 	deaths := []map[string]any{}
 	for _, d := range r.DeathLog {
 		m := map[string]any{"clock": d.Clock}
-		if d.Killer != "" && r.Game != "pubg" {
+		if d.Killer != "" && r.Game != "pubg" && r.Game != "valorant" {
 			m["killer"] = d.Killer
 		}
 		if d.Region != "" {

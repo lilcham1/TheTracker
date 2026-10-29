@@ -59,6 +59,7 @@ type Boot struct {
 	DlLink     core.Link               `json:"deadlockLink"`
 	OwLink     core.OwLink             `json:"overwatchLink"`
 	PubgLink   core.PubgLink           `json:"pubgLink"`
+	ValLink    core.ValLink            `json:"valLink"`
 	Auth       core.AuthState          `json:"auth"`
 	Background core.BackgroundSettings `json:"background"`
 	Gsi        core.GsiStatus          `json:"gsi"`
@@ -129,7 +130,7 @@ func commands(a *core.App) map[string]command {
 		"boot": none(func() (any, error) {
 			return Boot{
 				Version: core.Version, Prefs: s.LoadPrefs(), Profile: s.LoadProfile(),
-				DotaLink: s.LoadLink("dota"), DlLink: s.LoadLink("deadlock"), OwLink: a.Ow.Link(), PubgLink: a.Pubg.Link(), Auth: a.Cloud.Auth(),
+				DotaLink: s.LoadLink("dota"), DlLink: s.LoadLink("deadlock"), OwLink: a.Ow.Link(), PubgLink: a.Pubg.Link(), ValLink: a.Valorant.Link(), Auth: a.Cloud.Auth(),
 				Background: a.Background(), Gsi: a.Gsi.Status(), Overlay: a.Shell.OverlayVisible(),
 				DataDir: s.Dir, ExportDir: core.ExportDir(), Coach: a.CoachUnlocked(),
 			}, nil
@@ -330,6 +331,9 @@ func commands(a *core.App) map[string]command {
 			if p.Game == "cod" {
 				return a.CodReview(p.MatchKey)
 			}
+			if p.Game == "valorant" {
+				return a.ValorantReview(p.MatchKey)
+			}
 			if p.Game == "pubg" {
 				return a.PubgReview(p.MatchKey)
 			}
@@ -342,6 +346,9 @@ func commands(a *core.App) map[string]command {
 		"work_on": in(func(p reviewArg) (any, error) {
 			if p.Game == "cod" {
 				return a.CodWorkOn()
+			}
+			if p.Game == "valorant" {
+				return a.ValorantWorkOn()
 			}
 			if p.Game == "pubg" {
 				return a.PubgWorkOn()
@@ -430,6 +437,32 @@ func commands(a *core.App) map[string]command {
 			return a.CodGoals(p.Game), nil
 		}),
 		"cod_streams": none(func() (any, error) { return a.CodStreams(), nil }),
+
+		// ----- Valorant -----
+		"val_find": in(func(p struct {
+			RiotID string `json:"riotId"`
+		}) (any, error) {
+			return a.Valorant.Find(p.RiotID)
+		}),
+		"val_link": in(func(l core.ValLink) (any, error) {
+			if l.Puuid == "" {
+				return nil, errors.New("Pick an account first.")
+			}
+			return l, a.Valorant.SetLink(l)
+		}),
+		"val_unlink":   none(func() (any, error) { return core.ValLink{}, a.Valorant.SetLink(core.ValLink{}) }),
+		"val_overview": in(func(p forceArg) (any, error) { return a.Valorant.Overview(p.Force) }),
+		"val_goals": in(func(p struct {
+			Ranked bool `json:"ranked"`
+		}) (any, error) {
+			return a.ValorantGoals(p.Ranked), nil
+		}),
+		"val_leaderboard": in(func(p struct {
+			Region string `json:"region"`
+		}) (any, error) {
+			return a.Valorant.Leaderboard(p.Region)
+		}),
+		"val_streams": none(func() (any, error) { return a.ValorantStreams(), nil }),
 		"ow_meta": in(func(p struct {
 			Mode     string `json:"mode"`
 			Region   string `json:"region"`
@@ -601,7 +634,7 @@ const csp = "default-src 'self'; " +
 	"img-src 'self' data: https://cdn.cloudflare.steamstatic.com https://assets-bucket.deadlock-api.com https://api.deadlock-api.com https://www.opendota.com " +
 	"https://avatars.steamstatic.com https://avatars.akamai.steamstatic.com https://avatars.cloudflare.steamstatic.com " +
 	"https://d15f34w2p8l1cc.cloudfront.net https://static.playoverwatch.com https://blz-contentstack-images.akamaized.net " +
-	"https://static-cdn.jtvnw.net; " +
+	"https://static-cdn.jtvnw.net https://media.valorant-api.com; " +
 	"style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
 
 // New returns the handler the window loads: /api/* for commands, everything

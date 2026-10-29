@@ -186,8 +186,9 @@ func TestCodOverviewGoalsAndReview(t *testing.T) {
 	}
 }
 
-func TestCodGameModeOffersUpdate(t *testing.T) {
-	if m := missingPriorityGames([]string{"dota2.exe", "project8.exe", "cs2.exe", "Overwatch.exe", "TslGame.exe"}); len(m) != 1 || m[0] != "Call of Duty" {
+// A setup from before Call of Duty and Valorant offers an update naming both.
+func TestNewGamesOfferGameModeUpdate(t *testing.T) {
+	if m := missingPriorityGames([]string{"dota2.exe", "project8.exe", "cs2.exe", "Overwatch.exe", "TslGame.exe"}); strings.Join(m, ", ") != "Call of Duty, Valorant" {
 		t.Fatalf("missing %v", m)
 	}
 }

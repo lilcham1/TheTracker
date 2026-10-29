@@ -3,29 +3,32 @@
 // match data and what TheTracker recorded live.
 
 // The match picked on each game's Review tab (0: the latest).
-const REV = { dota: 0, deadlock: 0, pubg: "", cod: "" };
+const REV = { dota: 0, deadlock: 0, pubg: "", cod: "", valorant: "" };
 
 const reviewRes = {
   dota: resource("dotaReview", "review", { args: () => ({ game: "dota", matchId: REV.dota }), ttl: 10 * 60000 }),
   deadlock: resource("dlReview", "review", { args: () => ({ game: "deadlock", matchId: REV.deadlock }), ttl: 10 * 60000 }),
   pubg: resource("pgReview", "review", { args: () => ({ game: "pubg", matchKey: REV.pubg }), ttl: 10 * 60000 }),
   cod: resource("codReview", "review", { args: () => ({ game: "cod", matchKey: REV.cod }), ttl: 60000 }),
+  valorant: resource("valReview", "review", { args: () => ({ game: "valorant", matchKey: REV.valorant }), ttl: 5 * 60000 }),
 };
 const coachRes = {
   dota: resource("dotaCoach", "coach", { args: () => ({ game: "dota", matchId: REV.dota }), ttl: 6 * 3600000 }),
   deadlock: resource("dlCoach", "coach", { args: () => ({ game: "deadlock", matchId: REV.deadlock }), ttl: 6 * 3600000 }),
   pubg: resource("pgCoach", "coach", { args: () => ({ game: "pubg", matchKey: REV.pubg }), ttl: 6 * 3600000 }),
   cod: resource("codCoach", "coach", { args: () => ({ game: "cod", matchKey: REV.cod }), ttl: 6 * 3600000 }),
+  valorant: resource("valCoach", "coach", { args: () => ({ game: "valorant", matchKey: REV.valorant }), ttl: 6 * 3600000 }),
 };
 const workOnRes = {
   dota: resource("dotaWorkOn", "work_on", { args: () => ({ game: "dota" }), ttl: 30 * 60000 }),
   deadlock: resource("dlWorkOn", "work_on", { args: () => ({ game: "deadlock" }), ttl: 30 * 60000 }),
   pubg: resource("pgWorkOn", "work_on", { args: () => ({ game: "pubg" }), ttl: 30 * 60000 }),
   cod: resource("codWorkOn", "work_on", { args: () => ({ game: "cod" }), ttl: 60000 }),
+  valorant: resource("valWorkOn", "work_on", { args: () => ({ game: "valorant" }), ttl: 30 * 60000 }),
 };
 
 onChange("rev-match", (el) => {
-  REV[el.dataset.game] = el.dataset.game === "pubg" || el.dataset.game === "cod" ? (el.value === "0" ? "" : el.value) : Number(el.value);
+  REV[el.dataset.game] = el.dataset.game === "pubg" || el.dataset.game === "cod" || el.dataset.game === "valorant" ? (el.value === "0" ? "" : el.value) : Number(el.value);
   reviewRes[el.dataset.game].load();
   if (S.boot.coach) coachRes[el.dataset.game].load();
   rerender();
@@ -65,6 +68,10 @@ function coachDeathNote(game, clock) {
 
 /// The matches to choose from: the game's own match list.
 function reviewChoices(game) {
+  if (game === "valorant") {
+    return ((valOverview.data && valOverview.data.matches) || []).filter((m) => m.rounds >= 8).slice(0, 40)
+      .map((m) => ({ id: m.id, label: `${m.agent} · ${m.map} · ${m.won === true ? "won" : m.won === false ? "lost" : "draw"} ${m.teamRounds}–${m.enemyRounds} · ${ago(m.startTime)}` }));
+  }
   if (game === "cod") {
     return ((codOverview.data && codOverview.data.matches) || []).slice(0, 40)
       .map((m) => ({ id: m.id, label: `${m.mode} · ${m.place ? "#" + m.place : m.result} · ${m.kills}/${m.deaths} · ${ago(m.date)}` }));
@@ -191,6 +198,23 @@ view("pg-review", {
     if (wait) return wait;
     return `${reviewHtml("pubg")}
       <p class="hint">PUBG has no live feed for apps: this review is built from the match's telemetry, PUBG's event log of every match, which arrives a few minutes after it ends.</p>`;
+  },
+});
+
+view("val-review", {
+  game: "valorant", nav: true, tabOf: "val-matches", icon: "matches", title: "Review",
+  sub: () => "What went wrong, what went well, and what to work on",
+  load(force) {
+    if (!valLinked()) return Promise.resolve();
+    workOnRes.valorant.load(force);
+    if (S.boot.coach) coachRes.valorant.load(force);
+    return valOverview.load().then(() => reviewRes.valorant.load(force));
+  },
+  render() {
+    const wait = valGate();
+    if (wait) return wait;
+    return `${reviewHtml("valorant")}
+      <p class="hint">Built from the match's full data after it ends: every kill with where everyone stood, round by round. Valorant has no live feed for apps.</p>`;
   },
 });
 

@@ -41,6 +41,8 @@ type PresetLine struct {
 	Remove bool `json:"remove,omitempty"`
 	// Shown but never written: a setting only the game's own menu takes.
 	Info bool `json:"info,omitempty"`
+	// Text the page offers to copy (a crosshair code to paste in the game).
+	Copy string `json:"copy,omitempty"`
 	// Filled by the preview.
 	Current string `json:"current"`
 	Present bool   `json:"present"`
@@ -87,6 +89,8 @@ var presetGames = map[string]struct {
 	"cs2":      {"730", "Counter-Strike Global Offensive/game/csgo", "cs2", "Counter-Strike 2"},
 	"pubg":     {"578080", "PUBG", "TslGame", "PUBG"},
 	"cod":      {"1938090", "Call of Duty HQ", "cod", "Call of Duty"},
+	// Not a Steam game: installed and found through Riot's own folders.
+	"valorant": {"", "", "VALORANT-Win64-Shipping", "Valorant"},
 }
 
 // presetDoc is a settings file the presets edit: Valve KeyValues
@@ -96,6 +100,11 @@ type presetDoc interface {
 	Set(value string, path ...string)
 	Delete(path ...string) bool
 	String() string
+}
+
+// valConfigDir is where Valorant keeps its local settings; a test swaps it.
+var valConfigDir = func() string {
+	return filepath.Join(os.Getenv("LOCALAPPDATA"), "VALORANT", "Saved", "Config")
 }
 
 // pubgConfigDir is where PUBG keeps its settings; a test swaps it.
@@ -117,6 +126,14 @@ func (a *App) presetFiles(game string) ([]PresetFile, []string) {
 		_, err := os.Stat(p)
 		if err != nil {
 			reasons = append(reasons, "PUBG has no settings file yet (open the game once and change any setting).")
+		}
+		return []PresetFile{{Kind: "settings", Path: p, Found: err == nil}}, reasons
+	}
+	if game == "valorant" {
+		p := filepath.Join(valConfigDir(), "WindowsClient", "GameUserSettings.ini")
+		_, err := os.Stat(p)
+		if err != nil {
+			reasons = append(reasons, "Valorant has no settings file yet (open the game once).")
 		}
 		return []PresetFile{{Kind: "settings", Path: p, Found: err == nil}}, reasons
 	}
@@ -163,6 +180,10 @@ func (a *App) presetFiles(game string) ([]PresetFile, []string) {
 }
 
 func (a *App) presetInstalled(game string) bool {
+	if game == "valorant" {
+		_, err := os.Stat(valConfigDir())
+		return err == nil
+	}
 	g := presetGames[game]
 	for _, lib := range a.Gsi.steamLibraries() {
 		if _, err := os.Stat(filepath.Join(lib, "steamapps", "appmanifest_"+g.appID+".acf")); err == nil {
