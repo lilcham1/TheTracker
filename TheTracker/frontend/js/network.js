@@ -1,5 +1,6 @@
 // Connection: ping to the router and to Valve, line use and programs online,
-// measured while a game is open or during a short test from Settings. It only
+// measured while a game is open (or all the time, when switched on) or during
+// a short test from Settings. It only
 // measures; nothing on the PC is changed.
 
 S.net = null;
@@ -37,7 +38,7 @@ function netHtml(s, { compact = false } = {}) {
   </div>`;
 }
 
-/// On the live match panel, and on Today while any game is being played.
+/// On the live match panel, and on Today while it's measuring.
 function netBlockHtml() {
   if (!S.net || !S.net.active) return "";
   return `<div class="sec-head"><h3>Connection${S.net.game ? ` <span class="muted">· ${esc(S.net.game)}</span>` : ""}</h3></div>${netHtml(S.net, { compact: true })}`;
@@ -137,7 +138,8 @@ function netBoxHtml() {
 function networkHtml() {
   return `<section class="set">
       <h3>Connection</h3>
-      <p class="muted">From the moment a game is open (Dota 2, Deadlock, CS2, Overwatch, PUBG or Call of Duty), TheTracker pings your router and Valve's nearest server once a second and watches how busy your line is, then says where any lag comes from: your Wi-Fi or home network, your internet provider, or other programs using the line. It only measures; nothing on your PC is changed. It shows on Today while you play, and on Dota's Overview during a match.</p>
+      <p class="muted">TheTracker pings your router and Valve's nearest server once a second and watches how busy your line is, then says where any lag comes from: your Wi-Fi or home network, your internet provider, or other programs using the line. It only measures; nothing on your PC is changed. It shows on Today, and on Dota's Overview during a match.</p>
+      <label class="switch"><input type="checkbox" data-change="net-always" ${S.boot.prefs.network && S.boot.prefs.network.checkAlways !== false ? "checked" : ""} /><span>Always check my connection <span class="muted">(off: only while a game is open — Dota 2, Deadlock, CS2, Overwatch, PUBG or Call of Duty)</span></span></label>
       <div id="netBox">${netBoxHtml()}</div>
     </section>
     <section class="set">
@@ -169,6 +171,14 @@ async function pollNet() {
     setHtml($("#netSlot"), netBlockHtml());
   } else if (S.view === "settings" && S.params.tab === "network") setHtml($("#netBox"), netBoxHtml());
 }
+
+onChange("net-always", async (el) => {
+  const r = await attempt(() => invoke("net_always", { on: el.checked }));
+  if (!r) return;
+  S.boot.prefs = r.prefs;
+  S.net = r.net;
+  rerender();
+});
 
 act("net-test", async () => {
   const s = await attempt(() => invoke("net_test"));

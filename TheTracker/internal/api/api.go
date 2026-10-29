@@ -555,6 +555,13 @@ func commands(a *core.App) map[string]command {
 			}
 			return a.GameMode.Status(), nil
 		}),
+		"net_always": in(func(p struct {
+			On bool `json:"on"`
+		}) (any, error) {
+			prefs := a.Store.UpdatePrefs(func(pr *core.Prefs) { pr.Network.CheckAlways = p.On })
+			a.Net.SetAlways(p.On)
+			return map[string]any{"prefs": prefs, "net": a.Net.Status()}, nil
+		}),
 		"net_test": none(func() (any, error) {
 			a.Net.Test(20 * time.Second)
 			return a.Net.Status(), nil

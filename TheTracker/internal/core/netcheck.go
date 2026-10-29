@@ -1,7 +1,7 @@
 package core
 
-// The connection check: while a Dota match runs (or for a short test from
-// Settings), ping the router and the nearest Valve relay once a second and
+// The connection check: while a game is open, all the time when the player
+// switched that on, or for a short test from Settings, ping the router and the nearest Valve relay once a second and
 // watch how busy the line is, then say in plain words where any lag comes
 // from. Nothing here changes anything; it only measures.
 
@@ -80,8 +80,9 @@ type NetCheck struct {
 	lastIn     uint64
 	lastOut    uint64
 	lastAt     time.Time
-	// Measuring is on while live is set or until testUntil.
+	// Measuring is on while live or always is set, or until testUntil.
 	live      bool
+	always    bool
 	game      string
 	testUntil time.Time
 	running   bool
@@ -98,7 +99,18 @@ func NewNetCheck(store *Store) *NetCheck {
 }
 
 func (n *NetCheck) wanted() bool {
-	return n.live || time.Now().Before(n.testUntil)
+	return n.live || n.always || time.Now().Before(n.testUntil)
+}
+
+// SetAlways keeps measuring whether or not a game is open.
+func (n *NetCheck) SetAlways(on bool) {
+	n.mu.Lock()
+	changed := n.always != on
+	n.always = on
+	n.mu.Unlock()
+	if on && changed {
+		n.start()
+	}
 }
 
 // SetLive starts or stops measuring with the match.

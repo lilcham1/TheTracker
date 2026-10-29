@@ -100,3 +100,32 @@ func TestNetCheckMeasures(t *testing.T) {
 		t.Fatalf("programs online, Windows and the game left out: %+v", s.Apps)
 	}
 }
+
+// Switched to always, it measures with no game open; switched back, it stops.
+func TestNetCheckAlways(t *testing.T) {
+	a := newTestApp(t)
+	n := a.Net
+	n.probe = &fakeProbe{rtt: map[string]time.Duration{"192.168.1.1": 2 * time.Millisecond}}
+	n.steam = &service{Name: "Steam", Base: "http://127.0.0.1:1", Attempts: 1}
+	if n.Status().Active {
+		t.Fatal("measuring with nothing asking for it")
+	}
+	n.SetAlways(true)
+	if !n.Status().Active {
+		t.Fatal("always on: not measuring")
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for n.Status().Router == nil && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if s := n.Status(); s.Router == nil || s.Game != "" {
+		t.Fatalf("no samples with no game open: %+v", s)
+	}
+	n.SetAlways(false)
+	if n.Status().Active {
+		t.Fatal("switched off: still measuring")
+	}
+	if !a.Store.LoadPrefs().Network.CheckAlways {
+		t.Fatal("the default is on")
+	}
+}

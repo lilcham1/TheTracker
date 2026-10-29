@@ -180,6 +180,8 @@ type NetworkPrefs struct {
 	Categories []string `json:"categories"`
 	// The games marked as priority when it was set up (gamePriorityApps).
 	Apps []string `json:"apps,omitempty"`
+	// The connection check runs all the time, not only while a game is open.
+	CheckAlways bool `json:"checkAlways"`
 }
 
 func defaultOverlay() OverlaySettings {
@@ -196,7 +198,7 @@ func defaultPrefs() Prefs {
 		Overlay: defaultOverlay(),
 		General: GeneralPrefs{CloseToTray: true},
 		Games:   Games{Dota: true, Deadlock: true},
-		Network: NetworkPrefs{Categories: []string{"sync", "launchers", "windowsUpdate", "browsers"}},
+		Network: NetworkPrefs{Categories: []string{"sync", "launchers", "windowsUpdate", "browsers"}, CheckAlways: true},
 		Coach:   CoachPrefs{DotaMode: "role", DotaLevel: "push", DeadlockLevel: "push", GoalCheck: true},
 	}
 }
