@@ -182,6 +182,8 @@ type NetworkPrefs struct {
 	Apps []string `json:"apps,omitempty"`
 	// The connection check runs all the time, not only while a game is open.
 	CheckAlways bool `json:"checkAlways"`
+	// Game mode, once set up, stays on all the time, not only in a game.
+	GameModeAlways bool `json:"gameModeAlways"`
 }
 
 func defaultOverlay() OverlaySettings {
@@ -198,7 +200,7 @@ func defaultPrefs() Prefs {
 		Overlay: defaultOverlay(),
 		General: GeneralPrefs{CloseToTray: true},
 		Games:   Games{Dota: true, Deadlock: true},
-		Network: NetworkPrefs{Categories: []string{"sync", "launchers", "windowsUpdate", "browsers"}, CheckAlways: true},
+		Network: NetworkPrefs{Categories: []string{"sync", "launchers", "windowsUpdate", "browsers"}, CheckAlways: true, GameModeAlways: true},
 		Coach:   CoachPrefs{DotaMode: "role", DotaLevel: "push", DeadlockLevel: "push", GoalCheck: true},
 	}
 }

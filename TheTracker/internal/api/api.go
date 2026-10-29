@@ -544,9 +544,17 @@ func commands(a *core.App) map[string]command {
 			if err := a.GameMode.Setup(p.Categories); err != nil {
 				return nil, err
 			}
-			if a.Tracker.IsLive() {
+			if a.GameMode.Wanted(a.Tracker.IsLive()) {
 				_ = a.GameMode.On()
 			}
+			return a.GameMode.Status(), nil
+		}),
+		"game_mode_always": in(func(p struct {
+			On bool `json:"on"`
+		}) (any, error) {
+			a.Store.UpdatePrefs(func(pr *core.Prefs) { pr.Network.GameModeAlways = p.On })
+			// The background watcher applies it within two seconds; the
+			// status says what it will be.
 			return a.GameMode.Status(), nil
 		}),
 		"game_mode_remove": none(func() (any, error) {

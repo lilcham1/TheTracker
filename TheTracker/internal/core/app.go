@@ -228,22 +228,27 @@ func (a *App) Stop() {
 // is in a game: Dota 2, Deadlock, CS2, Overwatch, PUBG or Call of Duty open.
 // With "always check" on, the connection is measured the whole time.
 func (a *App) netWatcher() {
-	wasLive := false
+	wasLive, gmOn := false, false
 	for {
 		a.Net.SetAlways(a.Store.LoadPrefs().Network.CheckAlways)
-		time.Sleep(2 * time.Second)
 		game := a.activeGame()
 		live := game != ""
 		a.Net.SetGame(game)
 		if live != wasLive {
 			wasLive = live
 			a.Net.SetLive(live)
-			if live {
+		}
+		// Game mode follows the game, or stays on when the player keeps it
+		// on all the time; switched only when that changes.
+		if want := a.GameMode.Wanted(live); want != gmOn {
+			gmOn = want
+			if want {
 				_ = a.GameMode.On()
 			} else {
 				_ = a.GameMode.Off()
 			}
 		}
+		time.Sleep(2 * time.Second)
 	}
 }
 

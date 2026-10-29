@@ -214,3 +214,21 @@ func TestGameModeNewGameOffersUpdate(t *testing.T) {
 		t.Fatalf("after update: %+v", s)
 	}
 }
+
+// Kept on all the time, Game mode is wanted with no game open; switched to
+// games only, just in a game; never before it's set up.
+func TestGameModeAlways(t *testing.T) {
+	a := newTestApp(t)
+	g := a.GameMode
+	if g.Wanted(true) || g.Wanted(false) {
+		t.Fatal("not set up: never wanted")
+	}
+	a.Store.UpdatePrefs(func(p *Prefs) { p.Network.GameMode = true })
+	if !g.Wanted(false) || !g.Status().Always {
+		t.Fatal("on all the time by default")
+	}
+	a.Store.UpdatePrefs(func(p *Prefs) { p.Network.GameModeAlways = false })
+	if g.Wanted(false) || !g.Wanted(true) {
+		t.Fatal("games only: wanted just in a game")
+	}
+}

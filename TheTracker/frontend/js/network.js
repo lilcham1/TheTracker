@@ -66,15 +66,16 @@ function gameModeHtml() {
   const needsUpdate = st.state === "needs_update" || st.updateAvailable;
   const changed = set && (GM.picked.size !== saved.size || [...GM.picked].some((c) => !saved.has(c)));
   const stateLine = st.state === "on"
-    ? `<span class="check-dot ok"></span><b>On while you play</b> <span class="muted">${st.slowed} programs slowed, your game marked priority${st.updatePaused ? ", Windows Update sharing paused" : ""}.</span>`
+    ? `<span class="check-dot ok"></span><b>${st.always ? "On" : "On while you play"}</b> <span class="muted">${st.slowed} programs slowed, your games marked priority${st.updatePaused ? ", Windows Update sharing paused" : ""}.</span>`
     : st.state === "needs_update" ? `<span class="check-dot bad"></span><b>Needs a one-time update</b> <span class="muted">This version sets Game mode up a safer way. Press Update below; Windows asks once.</span>`
     : st.state === "ready" && st.updateAvailable ? `<span class="check-dot ok"></span><b>Ready</b> <span class="muted">${esc(st.updateReason || "Working for Dota. Press Update to also prioritise Deadlock, CS2, Overwatch, PUBG and Call of Duty; Windows asks once.")}</span>`
-    : set ? `<span class="check-dot idle"></span><b>Ready</b> <span class="muted">Switches on when you start playing and off when you stop.</span>`
+    : set ? `<span class="check-dot idle"></span><b>Ready</b> <span class="muted">${st.always ? "Switching on…" : "Switches on when you start playing and off when you stop."}</span>`
     : `<span class="check-dot idle"></span><b>Off</b>`;
   return `<section class="set">
       <h3>Game mode</h3>
-      <p class="muted">From the moment a game is open (Dota 2, Deadlock, CS2, Overwatch, PUBG or Call of Duty), slows other programs' <b>uploads</b> so the game's packets don't wait behind them, and marks your games' traffic as priority. Undone when you stop playing, and Windows clears it at every restart anyway. Windows can't slow downloads from your PC (Steam already pauses its own while you play), and the priority mark only helps if your router honours it. Discord and voice apps are never touched.</p>
+      <p class="muted">From the moment a game is open (Dota 2, Deadlock, CS2, Overwatch, PUBG or Call of Duty), slows other programs' <b>uploads</b> so the game's packets don't wait behind them, and marks your games' traffic as priority. Undone when you stop playing (or, kept on all the time, when you close TheTracker), and Windows clears it at every restart anyway. Windows can't slow downloads from your PC (Steam already pauses its own while you play), and the priority mark only helps if your router honours it. Discord and voice apps are never touched.</p>
       <div class="net-head">${stateLine}</div>
+      ${set ? `<label class="switch"><input type="checkbox" data-change="gm-always" ${st.always ? "checked" : ""} ${GM.busy ? "disabled" : ""} /><span>Keep it on all the time <span class="muted">(off: only while a game is open. On, the programs below stay slowed, browser uploads included, until you close TheTracker)</span></span></label>` : ""}
       <div class="gm-cats">${GM.data.catalogue.map((c) => `<label class="switch"><input type="checkbox" data-change="gm-cat" data-cat="${c.id}" ${GM.picked.has(c.id) ? "checked" : ""} ${GM.busy ? "disabled" : ""} />
         <span>${esc(c.label)} <span class="muted">${c.mbps ? `(uploads capped at ${c.mbps} Mbit/s: ${esc(c.apps.join(", "))})` : "(paused for the match)"}</span></span></label>`).join("")}</div>
       ${GM.error ? `<div class="note err">${esc(GM.error)}</div>` : ""}
@@ -91,6 +92,14 @@ onChange("gm-cat", (el) => {
   if (el.checked) GM.picked.add(el.dataset.cat);
   else GM.picked.delete(el.dataset.cat);
   rerender();
+});
+onChange("gm-always", async (el) => {
+  const status = await attempt(() => invoke("game_mode_always", { on: el.checked }));
+  if (!status) return;
+  GM.data.status = status;
+  rerender();
+  // The switch takes effect within two seconds; read the result then.
+  setTimeout(loadGameMode, 2500);
 });
 act("gm-reload", () => {
   GM.error = null;

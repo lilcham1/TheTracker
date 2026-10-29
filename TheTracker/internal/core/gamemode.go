@@ -184,6 +184,8 @@ type GameModeStatus struct {
 	Slowed       int    `json:"slowed"`
 	UpdatePaused bool   `json:"updatePaused"`
 	Error        string `json:"error,omitempty"`
+	// On all the time, not only while a game is open.
+	Always bool `json:"always"`
 }
 
 // gameModeTaskSet is which registered tasks there are.
@@ -224,6 +226,13 @@ func NewGameMode(store *Store) *GameMode {
 }
 
 func (g *GameMode) prefs() NetworkPrefs { return g.store.LoadPrefs().Network }
+
+// Wanted says whether Game mode should be on now: while a game is open, or
+// all the time when the player keeps it on.
+func (g *GameMode) Wanted(inGame bool) bool {
+	p := g.prefs()
+	return p.GameMode && (inGame || p.GameModeAlways)
+}
 
 func (g *GameMode) taskState() gameModeTaskSet {
 	g.mu.Lock()
@@ -328,7 +337,7 @@ func (g *GameMode) Off() error { return g.run(false) }
 
 func (g *GameMode) Status() GameModeStatus {
 	p := g.prefs()
-	s := GameModeStatus{State: "not_set_up", Categories: validGameModeCategories(p.Categories)}
+	s := GameModeStatus{State: "not_set_up", Categories: validGameModeCategories(p.Categories), Always: p.GameModeAlways}
 	set := g.taskState()
 	_, _, usable := set.usable()
 	switch {
